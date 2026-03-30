@@ -92,30 +92,30 @@ impl SolverState<6> {
     // CANT_BE_OUTSIDE[t] == CANT_BE_INSIDE[10 - t] by symmetry (inside and
     // outside always partition the same four digits, summing to 10 in total).
     const CANT_BE_INSIDE: [u64; 11] = [
-        (1<<1)|(1<<2)|(1<<3)|(1<<4), // t=0:  no digit can be inside
-        (1<<2)|(1<<3)|(1<<4),        // t=1:  only digit 1 can be inside
-        (1<<1)|(1<<3)|(1<<4),        // t=2:  only digit 2 can be inside
-        (1<<4),                      // t=3:  digits 1–3 can be inside; 4 cannot
-        (1<<2),                      // t=4:  digits 1,3,4 can be inside; 2 cannot
-        0,                           // t=5:  all digits can be inside
-        0,                           // t=6:  all digits can be inside
-        0,                           // t=7:  all digits can be inside
-        (1<<2),                      // t=8:  digits 1,3,4 can be inside; 2 cannot
-        (1<<1),                      // t=9:  digits 2,3,4 can be inside; 1 cannot
-        0,                           // t=10: all digits can be inside
+        (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // t=0:  no digit can be inside
+        (1 << 2) | (1 << 3) | (1 << 4),            // t=1:  only digit 1 can be inside
+        (1 << 1) | (1 << 3) | (1 << 4),            // t=2:  only digit 2 can be inside
+        (1 << 4),                                  // t=3:  digits 1–3 can be inside; 4 cannot
+        (1 << 2),                                  // t=4:  digits 1,3,4 can be inside; 2 cannot
+        0,                                         // t=5:  all digits can be inside
+        0,                                         // t=6:  all digits can be inside
+        0,                                         // t=7:  all digits can be inside
+        (1 << 2),                                  // t=8:  digits 1,3,4 can be inside; 2 cannot
+        (1 << 1),                                  // t=9:  digits 2,3,4 can be inside; 1 cannot
+        0,                                         // t=10: all digits can be inside
     ];
     const CANT_BE_OUTSIDE: [u64; 11] = [
-        0,                           // t=0:  all digits can be outside
-        (1<<1),                      // t=1:  digits 2–4 can be outside; 1 cannot
-        (1<<2),                      // t=2:  digits 1,3,4 can be outside; 2 cannot
-        0,                           // t=3:  all digits can be outside
-        0,                           // t=4:  all digits can be outside
-        0,                           // t=5:  all digits can be outside
-        (1<<2),                      // t=6:  digits 1,3,4 can be outside; 2 cannot
-        (1<<4),                      // t=7:  digits 1–3 can be outside; 4 cannot
-        (1<<1)|(1<<3)|(1<<4),        // t=8:  only digit 2 can be outside
-        (1<<2)|(1<<3)|(1<<4),        // t=9:  only digit 1 can be outside
-        (1<<1)|(1<<2)|(1<<3)|(1<<4), // t=10: no digit can be outside
+        0,                                         // t=0:  all digits can be outside
+        (1 << 1),                                  // t=1:  digits 2–4 can be outside; 1 cannot
+        (1 << 2),                                  // t=2:  digits 1,3,4 can be outside; 2 cannot
+        0,                                         // t=3:  all digits can be outside
+        0,                                         // t=4:  all digits can be outside
+        0,                                         // t=5:  all digits can be outside
+        (1 << 2),                                  // t=6:  digits 1,3,4 can be outside; 2 cannot
+        (1 << 4),                                  // t=7:  digits 1–3 can be outside; 4 cannot
+        (1 << 1) | (1 << 3) | (1 << 4),            // t=8:  only digit 2 can be outside
+        (1 << 2) | (1 << 3) | (1 << 4),            // t=9:  only digit 1 can be outside
+        (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // t=10: no digit can be outside
     ];
     const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
     const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
@@ -281,14 +281,14 @@ impl SolverState<6> {
 
         for r in 0..6 {
             let t = self.puzzle.row_targets[r] as usize;
-            let cant_inside  = Self::CANT_BE_INSIDE[t];
+            let cant_inside = Self::CANT_BE_INSIDE[t];
             let cant_outside = Self::CANT_BE_OUTSIDE[t];
 
             for p in 0..6 {
                 let b1_before = (0..p).any(|q| self.cell_domains[r][q] & Self::BLACK1_ROW != 0);
                 let b2_before = (0..p).any(|q| self.cell_domains[r][q] & Self::BLACK2_ROW != 0);
-                let b1_after  = (p+1..6).any(|q| self.cell_domains[r][q] & Self::BLACK1_ROW != 0);
-                let b2_after  = (p+1..6).any(|q| self.cell_domains[r][q] & Self::BLACK2_ROW != 0);
+                let b1_after = (p + 1..6).any(|q| self.cell_domains[r][q] & Self::BLACK1_ROW != 0);
+                let b2_after = (p + 1..6).any(|q| self.cell_domains[r][q] & Self::BLACK2_ROW != 0);
 
                 if !b1_before || !b2_after {
                     changed |= self.clear_mask(r, p, cant_outside);
@@ -301,14 +301,14 @@ impl SolverState<6> {
 
         for c in 0..6 {
             let t = self.puzzle.col_targets[c] as usize;
-            let cant_inside  = Self::CANT_BE_INSIDE[t];
+            let cant_inside = Self::CANT_BE_INSIDE[t];
             let cant_outside = Self::CANT_BE_OUTSIDE[t];
 
             for p in 0..6 {
                 let b1_before = (0..p).any(|q| self.cell_domains[q][c] & Self::BLACK1_COL != 0);
                 let b2_before = (0..p).any(|q| self.cell_domains[q][c] & Self::BLACK2_COL != 0);
-                let b1_after  = (p+1..6).any(|q| self.cell_domains[q][c] & Self::BLACK1_COL != 0);
-                let b2_after  = (p+1..6).any(|q| self.cell_domains[q][c] & Self::BLACK2_COL != 0);
+                let b1_after = (p + 1..6).any(|q| self.cell_domains[q][c] & Self::BLACK1_COL != 0);
+                let b2_after = (p + 1..6).any(|q| self.cell_domains[q][c] & Self::BLACK2_COL != 0);
 
                 if !b1_before || !b2_after {
                     changed |= self.clear_mask(p, c, cant_outside);
@@ -427,6 +427,83 @@ impl SolverState<6> {
         changed
     }
 
+    // ── Low-level helper ─────────────────────────────────────────────────────
+
+    /// Return the unique position in row `r` where `bit` appears in the domain,
+    /// or `None` if no such position exists or more than one does.
+    fn singleton_in_row(&self, r: usize, bit: u64) -> Option<usize> {
+        let mut found = None;
+        for c in 0..6 {
+            if self.cell_domains[r][c] & bit != 0 {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(c);
+            }
+        }
+        found
+    }
+
+    /// Return the unique position in column `c` where `bit` appears in the domain,
+    /// or `None` if no such position exists or more than one does.
+    fn singleton_in_col(&self, c: usize, bit: u64) -> Option<usize> {
+        let mut found = None;
+        for r in 0..6 {
+            if self.cell_domains[r][c] & bit != 0 {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(r);
+            }
+        }
+        found
+    }
+
+    /// Rule: when both black squares in a row or column are pinned to exactly
+    /// one position each and they are exactly two apart, the single inside cell
+    /// must hold the target digit.
+    ///
+    /// Once `BLACK1` and `BLACK2` each have a unique candidate position and
+    /// `p2 == p1 + 2`, the cell at `p1 + 1` is the only inside cell, so its
+    /// value is fully determined by the target.
+    fn apply_single_inside_rule(&mut self) -> bool {
+        let mut changed = false;
+
+        for r in 0..6 {
+            let t = self.puzzle.row_targets[r] as usize;
+            let Some(p1) = self.singleton_in_row(r, Self::BLACK1_ROW) else {
+                continue;
+            };
+            let Some(p2) = self.singleton_in_row(r, Self::BLACK2_ROW) else {
+                continue;
+            };
+            if p2 == p1 + 2 {
+                let target_bit = 1u64 << t;
+                if self.cell_domains[r][p1 + 1] & target_bit != 0 {
+                    changed |= self.set_cell(r, p1 + 1, target_bit);
+                }
+            }
+        }
+
+        for c in 0..6 {
+            let t = self.puzzle.col_targets[c] as usize;
+            let Some(p1) = self.singleton_in_col(c, Self::BLACK1_COL) else {
+                continue;
+            };
+            let Some(p2) = self.singleton_in_col(c, Self::BLACK2_COL) else {
+                continue;
+            };
+            if p2 == p1 + 2 {
+                let target_bit = 1u64 << t;
+                if self.cell_domains[p1 + 1][c] & target_bit != 0 {
+                    changed |= self.set_cell(p1 + 1, c, target_bit);
+                }
+            }
+        }
+
+        changed
+    }
+
     // ── Propagation loop ─────────────────────────────────────────────────────
 
     /// Run all rules in a loop until no domain shrinks further (a fixpoint).
@@ -442,7 +519,8 @@ impl SolverState<6> {
                 | self.apply_inside_outside_rule()
                 | self.apply_black_consistency_rule()
                 | self.apply_singleton_rule()
-                | self.apply_hidden_single_rule();
+                | self.apply_hidden_single_rule()
+                | self.apply_single_inside_rule();
             if !changed {
                 break;
             }
@@ -837,70 +915,76 @@ mod tests {
         );
     }
 
+    #[test]
+    fn single_inside_rule_assigns_target_digit() {
+        // Row 0 has target 3. Pin BLACK1_ROW to col 1 and BLACK2_ROW to col 3
+        // by stripping those bits from every other column in that row.
+        // The only inside cell is col 2, which must be assigned digit 3.
+        let mut state = SolverState::new(Puzzle::new([3, 0, 0, 0, 0, 0], [0; 6]));
+        state.set_cell(0, 1, SolverState::<6>::BLACK1_ROW);
+        state.set_cell(0, 3, SolverState::<6>::BLACK2_ROW);
+        state.apply_single_inside_rule();
+
+        assert_eq!(state.puzzle.board[0][2], Cell::Number(3));
+        assert_eq!(
+            state.cell_domains[0][2],
+            1 << 3,
+            "inside cell should hold only digit 3"
+        );
+    }
+
     // ── Newspaper puzzles ─────────────────────────────────────────────────────
     //
-    // These tests assert only the cells that propagation fully determines.
-    // Domain sizes for unsolved cells are intentionally not checked: they will
-    // shrink as more rules are added, so asserting them would make the tests
-    // brittle.
+    // Integration tests: propagate a full puzzle and assert the exact Display
+    // output.  Update the expected strings whenever the solver rules change.
 
     #[test]
     fn newspaper_puzzle_1() {
-        // rows 8 2 3 8 9 0 / cols 0 0 5 9 0 4
-        //
-        //       0  0  5  9  0  4
-        //    +---+---+---+---+---+---+
-        //  8 |   |   |   | 1 |   |   |
-        //  2 |   |   |   | # |   |   |
-        //  3 |   |   |   |   |   |   |
-        //  8 |   |   |   |   |   |   |
-        //  9 |   |   |   |   |   |   |
-        //  0 |   |   | # | # |   |   |
         let mut state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
         state.propagate();
-
-        //       0  0  5  9  0  4
-        //    +---+---+---+---+---+---+
-        //  8 | 2 | # |   | 1 |   | # |
-        //  2 |   |   |   | # |   |   |
-        //  3 |   |   | # |   |   |   |
-        //  8 | # |   |   |   | # | 2 |
-        //  9 |   |   |   |   |   |   |
-        //  0 |   |   | # | # |   |   |
-        assert_eq!(state.puzzle.board[0][0], Cell::Number(2));
-        assert_eq!(state.puzzle.board[0][1], Cell::Black);
-        assert_eq!(state.puzzle.board[0][3], Cell::Number(1));
-        assert_eq!(state.puzzle.board[0][5], Cell::Black);
-        assert_eq!(state.puzzle.board[1][3], Cell::Black);
-        assert_eq!(state.puzzle.board[2][2], Cell::Black);
-        assert_eq!(state.puzzle.board[3][0], Cell::Black);
-        assert_eq!(state.puzzle.board[3][4], Cell::Black);
-        assert_eq!(state.puzzle.board[3][5], Cell::Number(2));
-        assert_eq!(state.puzzle.board[5][2], Cell::Black);
-        assert_eq!(state.puzzle.board[5][3], Cell::Black);
+        assert_eq!(
+            state.to_string(),
+            concat!(
+                "     0   0   5   9   0   4\n",
+                "   +---+---+---+---+---+---+\n",
+                " 8 | 2 | # | ⠃ | 1 | ⠃ | # |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 2 | ⠃ | # | 2 | # | ⠃ | 4 |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 3 | ⠇ | ⡇ | # | ⠃ | ⠇ | # |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 8 | # | ⠃ | 1 | ⠃ | # | 2 |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 9 | # | ⠇ | ⠃ | ⠇ | # | 1 |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 0 | ⠃ | ⠇ | # | # | ⠇ | 3 |\n",
+                "   +---+---+---+---+---+---+\n",
+            )
+        );
     }
 
     #[test]
     fn newspaper_puzzle_2() {
-        // rows 3 3 5 0 7 0 / cols 5 0 2 6 5 10
-        //
-        //       5  0  2  6  5 10
-        //    +---+---+---+---+---+---+
-        //  3 |   |   |   |   |   | # |
-        //  3 |   |   |   |   |   |   |
-        //  5 |   |   |   |   |   |   |
-        //  0 |   |   |   |   |   |   |
-        //  7 |   |   |   |   |   |   |
-        //  0 |   |   |   |   |   | # |
-        //
-        // Column 5 has target 10: the only way to sum 1+2+3+4=10 is with all
-        // four digits between the blacks, forcing black at both endpoints.
-        // Row 5 target 0 requires adjacent blacks, but the column constraints
-        // don't yet uniquely determine which pair — backtracking is needed.
         let mut state = SolverState::new(Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]));
         state.propagate();
-
-        assert_eq!(state.puzzle.board[0][5], Cell::Black);
-        assert_eq!(state.puzzle.board[5][5], Cell::Black);
+        assert_eq!(
+            state.to_string(),
+            concat!(
+                "     5   0   2   6   5  10\n",
+                "   +---+---+---+---+---+---+\n",
+                " 3 | ⠇ | ⠇ | ⠃ | # | 3 | # |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 3 | # | 3 | # | ⠇ | ⠇ | ⠇ |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 5 | ⠇ | # | 2 | ⠇ | # | ⠇ |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 0 | ⡇ | # | # | ⡇ | ⠇ | ⡇ |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 7 | # | ⠇ | ⠇ | # | ⠃ | ⠇ |\n",
+                "   +---+---+---+---+---+---+\n",
+                " 0 | ⡇ | ⠇ | ⠇ | ⠇ | # | # |\n",
+                "   +---+---+---+---+---+---+\n",
+            )
+        );
     }
 }
