@@ -268,7 +268,7 @@ impl SolverState<6> {
 
         for r in 0..6 {
             let t = self.puzzle.row_targets[r] as usize;
-            let cant_inside  = Self::CANT_BE_INSIDE[t];
+            let cant_inside = Self::CANT_BE_INSIDE[t];
             let cant_outside = Self::CANT_BE_INSIDE[10 - t];
 
             for p in 0..6 {
@@ -288,7 +288,7 @@ impl SolverState<6> {
 
         for c in 0..6 {
             let t = self.puzzle.col_targets[c] as usize;
-            let cant_inside  = Self::CANT_BE_INSIDE[t];
+            let cant_inside = Self::CANT_BE_INSIDE[t];
             let cant_outside = Self::CANT_BE_INSIDE[10 - t];
 
             for p in 0..6 {
@@ -474,9 +474,7 @@ impl SolverState<6> {
                 continue;
             }
             let target_bit = 1u64 << digit;
-            if self.cell_domains[r][e] & target_bit != 0 {
-                changed |= self.set_cell(r, e, target_bit);
-            }
+            changed |= self.set_cell(r, e, target_bit);
         }
 
         for c in 0..6 {
@@ -517,9 +515,7 @@ impl SolverState<6> {
                 continue;
             }
             let target_bit = 1u64 << digit;
-            if self.cell_domains[e][c] & target_bit != 0 {
-                changed |= self.set_cell(e, c, target_bit);
-            }
+            changed |= self.set_cell(e, c, target_bit);
         }
 
         changed
