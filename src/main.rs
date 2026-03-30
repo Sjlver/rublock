@@ -104,19 +104,6 @@ impl SolverState<6> {
         (1 << 1),                                  // t=9:  digits 2,3,4 can be inside; 1 cannot
         0,                                         // t=10: all digits can be inside
     ];
-    const CANT_BE_OUTSIDE: [u64; 11] = [
-        0,                                         // t=0:  all digits can be outside
-        (1 << 1),                                  // t=1:  digits 2–4 can be outside; 1 cannot
-        (1 << 2),                                  // t=2:  digits 1,3,4 can be outside; 2 cannot
-        0,                                         // t=3:  all digits can be outside
-        0,                                         // t=4:  all digits can be outside
-        0,                                         // t=5:  all digits can be outside
-        (1 << 2),                                  // t=6:  digits 1,3,4 can be outside; 2 cannot
-        (1 << 4),                                  // t=7:  digits 1–3 can be outside; 4 cannot
-        (1 << 1) | (1 << 3) | (1 << 4),            // t=8:  only digit 2 can be outside
-        (1 << 2) | (1 << 3) | (1 << 4),            // t=9:  only digit 1 can be outside
-        (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // t=10: no digit can be outside
-    ];
     const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
     const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
     const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
@@ -281,8 +268,8 @@ impl SolverState<6> {
 
         for r in 0..6 {
             let t = self.puzzle.row_targets[r] as usize;
-            let cant_inside = Self::CANT_BE_INSIDE[t];
-            let cant_outside = Self::CANT_BE_OUTSIDE[t];
+            let cant_inside  = Self::CANT_BE_INSIDE[t];
+            let cant_outside = Self::CANT_BE_INSIDE[10 - t];
 
             for p in 0..6 {
                 let b1_before = (0..p).any(|q| self.cell_domains[r][q] & Self::BLACK1_ROW != 0);
@@ -301,8 +288,8 @@ impl SolverState<6> {
 
         for c in 0..6 {
             let t = self.puzzle.col_targets[c] as usize;
-            let cant_inside = Self::CANT_BE_INSIDE[t];
-            let cant_outside = Self::CANT_BE_OUTSIDE[t];
+            let cant_inside  = Self::CANT_BE_INSIDE[t];
+            let cant_outside = Self::CANT_BE_INSIDE[10 - t];
 
             for p in 0..6 {
                 let b1_before = (0..p).any(|q| self.cell_domains[q][c] & Self::BLACK1_COL != 0);
@@ -353,14 +340,10 @@ impl SolverState<6> {
     /// Rule: if a value can only go in one cell in a row or column, place it
     /// there.
     ///
-    /// For each row we scan the four digit bits and the two row-black bits.  If
-    /// exactly one cell in the row has a given bit set in its domain, that cell
-    /// is the only candidate — assign it via `set_cell`.  Column scanning is
-    /// identical but uses the col-black bits instead of the row-black bits.
-    ///
-    /// We do not pre-compute or cache per-row/column availability: the O(6)
-    /// scan is cheap, and storing a summary would be redundant state that needs
-    /// to be kept in sync.
+    /// For each row we check the four digit bits and the two row-black bits via
+    /// `singleton_in_row`; if exactly one cell carries a given bit, that cell is
+    /// the only candidate and is assigned via `set_cell`.  Column scanning is
+    /// identical but uses `singleton_in_col` with the col-black bits.
     fn apply_hidden_single_rule(&mut self) -> bool {
         let mut changed = false;
 
@@ -368,15 +351,7 @@ impl SolverState<6> {
             // Bits 1–4 are digits; bits 5–6 are the two row-black variants.
             for bit_pos in 1u32..=6 {
                 let bit = 1u64 << bit_pos;
-                let mut count = 0;
-                let mut only_col = 0;
-                for c in 0..6 {
-                    if self.cell_domains[r][c] & bit != 0 {
-                        count += 1;
-                        only_col = c;
-                    }
-                }
-                if count == 1 {
+                if let Some(only_col) = self.singleton_in_row(r, bit) {
                     changed |= self.set_cell(r, only_col, bit);
                 }
             }
@@ -386,15 +361,7 @@ impl SolverState<6> {
             // Bits 1–4 are digits; bits 7–8 are the two col-black variants.
             for bit_pos in [1u32, 2, 3, 4, 7, 8] {
                 let bit = 1u64 << bit_pos;
-                let mut count = 0;
-                let mut only_row = 0;
-                for r in 0..6 {
-                    if self.cell_domains[r][c] & bit != 0 {
-                        count += 1;
-                        only_row = r;
-                    }
-                }
-                if count == 1 {
+                if let Some(only_row) = self.singleton_in_col(c, bit) {
                     changed |= self.set_cell(only_row, c, bit);
                 }
             }
@@ -460,12 +427,12 @@ impl SolverState<6> {
     }
 
     /// Rule: when both black squares in a row or column are pinned to exactly
-    /// one position each and they are exactly two apart, the single inside cell
-    /// must hold the target digit.
+    /// one position each, and the cells between them contain exactly one
+    /// unassigned cell, that cell's digit is fully determined.
     ///
-    /// Once `BLACK1` and `BLACK2` each have a unique candidate position and
-    /// `p2 == p1 + 2`, the cell at `p1 + 1` is the only inside cell, so its
-    /// value is fully determined by the target.
+    /// Once `BLACK1` and `BLACK2` each have a unique candidate position, the
+    /// inside region is fixed.  If all but one inside cell already hold a digit,
+    /// the remaining cell must be `target − sum(assigned inside digits)`.
     fn apply_single_inside_rule(&mut self) -> bool {
         let mut changed = false;
 
@@ -477,11 +444,38 @@ impl SolverState<6> {
             let Some(p2) = self.singleton_in_row(r, Self::BLACK2_ROW) else {
                 continue;
             };
-            if p2 == p1 + 2 {
-                let target_bit = 1u64 << t;
-                if self.cell_domains[r][p1 + 1] & target_bit != 0 {
-                    changed |= self.set_cell(r, p1 + 1, target_bit);
+            let mut empty_col = None;
+            let mut assigned_sum = 0usize;
+            let mut valid = true;
+            for c in p1 + 1..p2 {
+                match self.puzzle.board[r][c] {
+                    Cell::Number(n) => assigned_sum += n as usize,
+                    Cell::Empty => {
+                        if empty_col.is_some() {
+                            valid = false;
+                            break;
+                        }
+                        empty_col = Some(c);
+                    }
+                    Cell::Black => {
+                        valid = false;
+                        break;
+                    }
                 }
+            }
+            if !valid {
+                continue;
+            }
+            let Some(e) = empty_col else { continue };
+            let Some(digit) = t.checked_sub(assigned_sum) else {
+                continue;
+            };
+            if digit < 1 || digit > 4 {
+                continue;
+            }
+            let target_bit = 1u64 << digit;
+            if self.cell_domains[r][e] & target_bit != 0 {
+                changed |= self.set_cell(r, e, target_bit);
             }
         }
 
@@ -493,11 +487,38 @@ impl SolverState<6> {
             let Some(p2) = self.singleton_in_col(c, Self::BLACK2_COL) else {
                 continue;
             };
-            if p2 == p1 + 2 {
-                let target_bit = 1u64 << t;
-                if self.cell_domains[p1 + 1][c] & target_bit != 0 {
-                    changed |= self.set_cell(p1 + 1, c, target_bit);
+            let mut empty_row = None;
+            let mut assigned_sum = 0usize;
+            let mut valid = true;
+            for r in p1 + 1..p2 {
+                match self.puzzle.board[r][c] {
+                    Cell::Number(n) => assigned_sum += n as usize,
+                    Cell::Empty => {
+                        if empty_row.is_some() {
+                            valid = false;
+                            break;
+                        }
+                        empty_row = Some(r);
+                    }
+                    Cell::Black => {
+                        valid = false;
+                        break;
+                    }
                 }
+            }
+            if !valid {
+                continue;
+            }
+            let Some(e) = empty_row else { continue };
+            let Some(digit) = t.checked_sub(assigned_sum) else {
+                continue;
+            };
+            if digit < 1 || digit > 4 {
+                continue;
+            }
+            let target_bit = 1u64 << digit;
+            if self.cell_domains[e][c] & target_bit != 0 {
+                changed |= self.set_cell(e, c, target_bit);
             }
         }
 
@@ -933,6 +954,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn single_inside_rule_partial_assignment() {
+        // Row 0, target 6. BLACK1_ROW at col 0, BLACK2_ROW at col 4.
+        // Inside: cols 1, 2, 3.  Col 1 = digit 2, col 3 = digit 1, col 2 = empty.
+        // Expected: col 2 = 6 − 2 − 1 = 3.
+        let mut state = SolverState::new(Puzzle::new([6, 0, 0, 0, 0, 0], [0; 6]));
+        state.set_cell(0, 0, SolverState::<6>::BLACK1_ROW);
+        state.set_cell(0, 4, SolverState::<6>::BLACK2_ROW);
+        state.set_cell(0, 1, 1 << 2); // digit 2
+        state.set_cell(0, 3, 1 << 1); // digit 1
+        state.apply_single_inside_rule();
+
+        assert_eq!(state.puzzle.board[0][2], Cell::Number(3));
+        assert_eq!(
+            state.cell_domains[0][2],
+            1 << 3,
+            "empty inside cell should be digit 3"
+        );
+    }
+
     // ── Newspaper puzzles ─────────────────────────────────────────────────────
     //
     // Integration tests: propagate a full puzzle and assert the exact Display
@@ -947,17 +988,17 @@ mod tests {
             concat!(
                 "     0   0   5   9   0   4\n",
                 "   +---+---+---+---+---+---+\n",
-                " 8 | 2 | # | ⠃ | 1 | ⠃ | # |\n",
+                " 8 | 2 | # | 3 | 1 | 4 | # |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 2 | ⠃ | # | 2 | # | ⠃ | 4 |\n",
+                " 2 | 1 | # | 2 | # | 3 | 4 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 3 | ⠇ | ⡇ | # | ⠃ | ⠇ | # |\n",
+                " 3 | 3 | 4 | # | 2 | 1 | # |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 8 | # | ⠃ | 1 | ⠃ | # | 2 |\n",
+                " 8 | # | 3 | 1 | 4 | # | 2 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 9 | # | ⠇ | ⠃ | ⠇ | # | 1 |\n",
+                " 9 | # | 2 | 4 | 3 | # | 1 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 0 | ⠃ | ⠇ | # | # | ⠇ | 3 |\n",
+                " 0 | 4 | 1 | # | # | 2 | 3 |\n",
                 "   +---+---+---+---+---+---+\n",
             )
         );
@@ -976,13 +1017,13 @@ mod tests {
                 "   +---+---+---+---+---+---+\n",
                 " 3 | # | 3 | # | ⠇ | ⠇ | ⠇ |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 5 | ⠇ | # | 2 | ⠇ | # | ⠇ |\n",
+                " 5 | ⠃ | # | 2 | 3 | # | ⠃ |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 0 | ⡇ | # | # | ⡇ | ⠇ | ⡇ |\n",
+                " 0 | ⡇ | # | # | ⠇ | ⠇ | ⡇ |\n",
                 "   +---+---+---+---+---+---+\n",
                 " 7 | # | ⠇ | ⠇ | # | ⠃ | ⠇ |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 0 | ⡇ | ⠇ | ⠇ | ⠇ | # | # |\n",
+                " 0 | ⡇ | ⠇ | ⠇ | ⠃ | # | # |\n",
                 "   +---+---+---+---+---+---+\n",
             )
         );
