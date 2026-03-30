@@ -594,7 +594,7 @@ impl fmt::Display for SolverState<6> {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 fn main() {
-    let puzzle = Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]);
+    let puzzle = Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]);
     let mut state = SolverState::new(puzzle);
 
     state.propagate();
