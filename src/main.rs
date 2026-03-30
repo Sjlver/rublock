@@ -82,8 +82,9 @@ impl SolverState<6> {
 
     // Composite masks for common groups of bits.
     const ALL_DIGITS: u64 = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
-    const ROW_BLACKS: u64 = (1 << 5) | (1 << 6); // BLACK1_ROW | BLACK2_ROW
-    const COL_BLACKS: u64 = (1 << 7) | (1 << 8); // BLACK1_COL | BLACK2_COL
+    const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
+    const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
+    const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
 
     // Valid distance d = p2 - p1 between the two blacks, indexed by target.
     //
@@ -97,13 +98,6 @@ impl SolverState<6> {
     const D_MAX: [usize; 11] = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5];
 
     // ── Low-level helper ─────────────────────────────────────────────────────
-
-    /// Clear one domain bit.  Returns `true` iff the domain actually shrank.
-    fn clear_bit(&mut self, row: usize, col: usize, bit: u64) -> bool {
-        let before = self.cell_domains[row][col];
-        self.cell_domains[row][col] = before & !bit;
-        self.cell_domains[row][col] != before
-    }
 
     /// Clear all bits in `mask` from a cell's domain.  Returns `true` iff any
     /// bit was actually set before (i.e. the domain shrank).
@@ -122,20 +116,11 @@ impl SolverState<6> {
     /// the bit is removed from every other cell in both.  The cell's domain is
     /// reduced to just this bit.
     ///
-    /// **Row-black bit** (BLACK1_ROW / BLACK2_ROW) — each row-black variant
-    /// appears exactly once per row, so the bit is cleared from every other
-    /// cell in the row.  The cell's other row-black variant and all digit bits
-    /// are cleared (it's black).  The two *column*-black bits are left open:
-    /// being the first black in a row doesn't yet tell us whether this cell is
-    /// the first or second black in its column.
-    ///
-    /// Additionally, the blacks must appear in order (black-1 before black-2).
-    /// Placing black-1 at `col` means black-2 is impossible anywhere to its
-    /// left, and vice versa.  Those cells lose the corresponding bit.
-    ///
-    /// **Col-black bit** — symmetric to row-black but scoped to the column.
+    /// **Black bit** - Clear the bit from its row (if it's a row black) or
+    /// column. Clear BLACK 1 from cells to the left and above, and BLACK 2
+    /// from cells to the right.
     fn set_cell(&mut self, row: usize, col: usize, bit: u64) -> bool {
-        debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
+        assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
         let mut changed = false;
 
         if bit & Self::ALL_DIGITS != 0 {
@@ -143,52 +128,50 @@ impl SolverState<6> {
             self.puzzle.board[row][col] = Cell::Number(k);
             // Remove this digit from every other cell in the row and column.
             for c in (0..6).filter(|&c| c != col) {
-                changed |= self.clear_bit(row, c, bit);
+                changed |= self.clear_mask(row, c, bit);
             }
             for r in (0..6).filter(|&r| r != row) {
-                changed |= self.clear_bit(r, col, bit);
+                changed |= self.clear_mask(r, col, bit);
             }
             // Fix this cell: keep only this digit.
             changed |= self.clear_mask(row, col, !bit);
         } else if bit & Self::ROW_BLACKS != 0 {
-            // TODO: Let's make sure that when setting a cell to black, we remove BLACK 2 COL from the preceding columns, and BLACK 2 ROW from the preceding rows, and vice versa. We seem to not remove enough possibilities here.          
             self.puzzle.board[row][col] = Cell::Black;
+
             // Each row-black variant appears once per row.
             for c in (0..6).filter(|&c| c != col) {
-                changed |= self.clear_bit(row, c, bit);
+                changed |= self.clear_mask(row, c, bit);
             }
-            // Ordering: the two blacks appear left-to-right as black-1 then black-2.
-            // Placing black-1 at `col` means black-2 cannot be anywhere to its left,
-            // and placing black-2 at `col` means black-1 cannot be anywhere to its right.
-            if bit == Self::BLACK1_ROW {
-                for c in 0..col {
-                    changed |= self.clear_bit(row, c, Self::BLACK2_ROW);
-                }
-            } else {
-                for c in (col + 1)..6 {
-                    changed |= self.clear_bit(row, c, Self::BLACK1_ROW);
-                }
-            }
+
             // Cell is black: drop digits and the other row-black variant.
             changed |= self.clear_mask(row, col, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit));
         } else if bit & Self::COL_BLACKS != 0 {
             self.puzzle.board[row][col] = Cell::Black;
+
             // Each col-black variant appears once per column.
             for r in (0..6).filter(|&r| r != row) {
-                changed |= self.clear_bit(r, col, bit);
+                changed |= self.clear_mask(r, col, bit);
             }
-            // Ordering: black-1 is above black-2 in the column.
-            if bit == Self::BLACK1_COL {
-                for r in 0..row {
-                    changed |= self.clear_bit(r, col, Self::BLACK2_COL);
-                }
-            } else {
-                for r in (row + 1)..6 {
-                    changed |= self.clear_bit(r, col, Self::BLACK1_COL);
-                }
-            }
+
             // Cell is black: drop digits and the other col-black variant.
             changed |= self.clear_mask(row, col, Self::ALL_DIGITS | (Self::COL_BLACKS & !bit));
+        }
+
+        if bit & Self::ALL_BLACKS != 0 {
+            // Enforce ordering: clear all BLACK1 from cells above and to the
+            // left, and clear BLACK2 from cells below and to the right.
+            for left in 0..col {
+                changed |= self.clear_mask(row, left, Self::BLACK1_ROW)
+            }
+            for right in col + 1..6 {
+                changed |= self.clear_mask(row, right, Self::BLACK2_ROW)
+            }
+            for above in 0..row {
+                changed |= self.clear_mask(above, col, Self::BLACK1_COL)
+            }
+            for below in row + 1..6 {
+                changed |= self.clear_mask(below, col, Self::BLACK2_COL)
+            }
         }
 
         changed
@@ -203,11 +186,6 @@ impl SolverState<6> {
     /// For black-1 at position `p`, remove it if no cell in
     /// `[p + D_MIN, p + D_MAX]` still has BLACK2 in its domain.  Black-2 is
     /// symmetric: for black-2 at `p`, look for BLACK1 in `[p - D_MAX, p - D_MIN]`.
-    ///
-    /// This subsumes the earlier positional bound rule: on a fresh board (all
-    /// bits set) checking the range reduces to exactly the old positional check.
-    /// But once other rules narrow the BLACK2 candidates, this rule fires again
-    /// with more force.
     fn apply_black_range_rules(&mut self) -> bool {
         let mut changed = false;
 
@@ -218,19 +196,15 @@ impl SolverState<6> {
             for p in 0..6 {
                 // BLACK1_ROW at p: need BLACK2_ROW somewhere in [p+d_min, p+d_max].
                 let lo = p + d_min;
-                let hi = (p + d_max).min(5);
-                if lo > 5 || (lo..=hi).all(|q| self.cell_domains[r][q] & Self::BLACK2_ROW == 0) {
-                    changed |= self.clear_bit(r, p, Self::BLACK1_ROW);
+                let hi = (p + d_max + 1).min(6);
+                if (lo..hi).all(|q| self.cell_domains[r][q] & Self::BLACK2_ROW == 0) {
+                    changed |= self.clear_mask(r, p, Self::BLACK1_ROW);
                 }
                 // BLACK2_ROW at p: need BLACK1_ROW somewhere in [p-d_max, p-d_min].
-                if p < d_min {
-                    changed |= self.clear_bit(r, p, Self::BLACK2_ROW);
-                } else {
-                    let hi2 = p - d_min;
-                    let lo2 = p.saturating_sub(d_max);
-                    if (lo2..=hi2).all(|q| self.cell_domains[r][q] & Self::BLACK1_ROW == 0) {
-                        changed |= self.clear_bit(r, p, Self::BLACK2_ROW);
-                    }
+                let hi2 = (p + 1).saturating_sub(d_min);
+                let lo2 = p.saturating_sub(d_max);
+                if (lo2..hi2).all(|q| self.cell_domains[r][q] & Self::BLACK1_ROW == 0) {
+                    changed |= self.clear_mask(r, p, Self::BLACK2_ROW);
                 }
             }
         }
@@ -241,18 +215,14 @@ impl SolverState<6> {
             let d_max = Self::D_MAX[t];
             for p in 0..6 {
                 let lo = p + d_min;
-                let hi = (p + d_max).min(5);
-                if lo > 5 || (lo..=hi).all(|q| self.cell_domains[q][c] & Self::BLACK2_COL == 0) {
-                    changed |= self.clear_bit(p, c, Self::BLACK1_COL);
+                let hi = (p + d_max + 1).min(6);
+                if (lo..hi).all(|q| self.cell_domains[q][c] & Self::BLACK2_COL == 0) {
+                    changed |= self.clear_mask(p, c, Self::BLACK1_COL);
                 }
-                if p < d_min {
-                    changed |= self.clear_bit(p, c, Self::BLACK2_COL);
-                } else {
-                    let hi2 = p - d_min;
-                    let lo2 = p.saturating_sub(d_max);
-                    if (lo2..=hi2).all(|q| self.cell_domains[q][c] & Self::BLACK1_COL == 0) {
-                        changed |= self.clear_bit(p, c, Self::BLACK2_COL);
-                    }
+                let hi2 = (p + 1).saturating_sub(d_min);
+                let lo2 = p.saturating_sub(d_max);
+                if (lo2..hi2).all(|q| self.cell_domains[q][c] & Self::BLACK1_COL == 0) {
+                    changed |= self.clear_mask(p, c, Self::BLACK2_COL);
                 }
             }
         }
@@ -285,22 +255,26 @@ impl SolverState<6> {
                 9 => {
                     // Digit 1 is outside the blacks → remove from middle cells.
                     for c in 1..5 {
-                        changed |= self.clear_bit(r, c, 1 << 1);
+                        changed |= self.clear_mask(r, c, 1 << 1);
                     }
                     // Position 0: digit 1 or black-1.  Clear digits 2–4 and black-2.
-                    changed |= self.clear_mask(r, 0, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK2_ROW);
+                    changed |=
+                        self.clear_mask(r, 0, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK2_ROW);
                     // Position 5: digit 1 or black-2.  Clear digits 2–4 and black-1.
-                    changed |= self.clear_mask(r, 5, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK1_ROW);
+                    changed |=
+                        self.clear_mask(r, 5, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK1_ROW);
                 }
                 8 => {
                     // Digit 2 is outside the blacks → remove from middle cells.
                     for c in 1..5 {
-                        changed |= self.clear_bit(r, c, 1 << 2);
+                        changed |= self.clear_mask(r, c, 1 << 2);
                     }
                     // Position 0: digit 2 or black-1.  Clear digits 1, 3–4 and black-2.
-                    changed |= self.clear_mask(r, 0, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK2_ROW);
+                    changed |=
+                        self.clear_mask(r, 0, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK2_ROW);
                     // Position 5: digit 2 or black-2.  Clear digits 1, 3–4 and black-1.
-                    changed |= self.clear_mask(r, 5, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK1_ROW);
+                    changed |=
+                        self.clear_mask(r, 5, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK1_ROW);
                 }
                 _ => {}
             }
@@ -310,17 +284,21 @@ impl SolverState<6> {
             match self.puzzle.col_targets[c] {
                 9 => {
                     for r in 1..5 {
-                        changed |= self.clear_bit(r, c, 1 << 1);
+                        changed |= self.clear_mask(r, c, 1 << 1);
                     }
-                    changed |= self.clear_mask(0, c, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK2_COL);
-                    changed |= self.clear_mask(5, c, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK1_COL);
+                    changed |=
+                        self.clear_mask(0, c, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK2_COL);
+                    changed |=
+                        self.clear_mask(5, c, (1 << 2) | (1 << 3) | (1 << 4) | Self::BLACK1_COL);
                 }
                 8 => {
                     for r in 1..5 {
-                        changed |= self.clear_bit(r, c, 1 << 2);
+                        changed |= self.clear_mask(r, c, 1 << 2);
                     }
-                    changed |= self.clear_mask(0, c, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK2_COL);
-                    changed |= self.clear_mask(5, c, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK1_COL);
+                    changed |=
+                        self.clear_mask(0, c, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK2_COL);
+                    changed |=
+                        self.clear_mask(5, c, (1 << 1) | (1 << 3) | (1 << 4) | Self::BLACK1_COL);
                 }
                 _ => {}
             }
@@ -463,7 +441,15 @@ impl SolverState<6> {
     /// Print the board and, for unsolved cells, the remaining domain bits.
     fn display(&self) {
         let col_targets = &self.puzzle.col_targets;
-        println!("     {:2} {:2} {:2} {:2} {:2} {:2}", col_targets[0], col_targets[1], col_targets[2], col_targets[3], col_targets[4], col_targets[5]);
+        println!(
+            "    {:2}  {:2}  {:2}  {:2}  {:2}  {:2}",
+            col_targets[0],
+            col_targets[1],
+            col_targets[2],
+            col_targets[3],
+            col_targets[4],
+            col_targets[5]
+        );
         println!("   +---+---+---+---+---+---+");
         for r in 0..6 {
             let t = self.puzzle.row_targets[r];
@@ -471,14 +457,21 @@ impl SolverState<6> {
             for c in 0..6 {
                 let sym = match self.puzzle.board[r][c] {
                     Cell::Black => " # ".to_string(),
-                    Cell::Number(n) => format!(" {} ", n),
+                    Cell::Number(n) => format!("{:2} ", n),
                     Cell::Empty => {
                         let d = self.cell_domains[r][c];
                         let bits = d.count_ones();
-                        if bits == 0 {
-                            " ! ".to_string() // contradiction
-                        } else {
-                            format!("{:2}.", bits)
+                        match bits {
+                            0 => " X ".to_string(), // contradiction
+                            1 => " ⠁ ".to_string(),
+                            2 => " ⠃ ".to_string(),
+                            3 => " ⠇ ".to_string(),
+                            4 => " ⡇ ".to_string(),
+                            5 => " ⡏ ".to_string(),
+                            6 => " ⡟ ".to_string(),
+                            7 => " ⡿ ".to_string(),
+                            8 => " ⣿ ".to_string(),
+                            _ => panic!("invalid bit count at row {r} col {c}: {bits}"),
                         }
                     }
                 };
@@ -493,14 +486,11 @@ impl SolverState<6> {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 fn main() {
-    let puzzle = Puzzle::new(
-        [3, 0, 6, 5, 4, 7], // row targets
-        [2, 1, 9, 4, 6, 3], // col targets
-    );
-    let state = SolverState::new(puzzle);
+    let puzzle = Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]);
+    let mut state = SolverState::new(puzzle);
 
-    println!("puzzle: {:?}", state.puzzle);
-    println!("cell[0][0] domain:      {:05b}", state.cell_domains[0][0]);
+    state.propagate();
+    state.display();
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -589,26 +579,36 @@ mod tests {
             );
         }
         // Position 0: only digit 1 or black-1 remain (row bits).
-        assert_ne!(state.cell_domains[0][0] & (1 << 1), 0, "col=0 should keep digit 1");
+        assert_ne!(
+            state.cell_domains[0][0] & (1 << 1),
+            0,
+            "col=0 should keep digit 1"
+        );
         assert_ne!(
             state.cell_domains[0][0] & SolverState::<6>::BLACK1_ROW,
             0,
             "col=0 should keep black-1"
         );
         assert_eq!(
-            state.cell_domains[0][0] & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_ROW),
+            state.cell_domains[0][0]
+                & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_ROW),
             0,
             "col=0 should have digits 2-4 and black-2 cleared"
         );
         // Position 5: only digit 1 or black-2 remain (row bits).
-        assert_ne!(state.cell_domains[0][5] & (1 << 1), 0, "col=5 should keep digit 1");
+        assert_ne!(
+            state.cell_domains[0][5] & (1 << 1),
+            0,
+            "col=5 should keep digit 1"
+        );
         assert_ne!(
             state.cell_domains[0][5] & SolverState::<6>::BLACK2_ROW,
             0,
             "col=5 should keep black-2"
         );
         assert_eq!(
-            state.cell_domains[0][5] & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_ROW),
+            state.cell_domains[0][5]
+                & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_ROW),
             0,
             "col=5 should have digits 2-4 and black-1 cleared"
         );
@@ -631,26 +631,36 @@ mod tests {
             );
         }
         // Row 0: only digit 2 or black-1-col remain (col bits).
-        assert_ne!(state.cell_domains[0][2] & (1 << 2), 0, "row=0 should keep digit 2");
+        assert_ne!(
+            state.cell_domains[0][2] & (1 << 2),
+            0,
+            "row=0 should keep digit 2"
+        );
         assert_ne!(
             state.cell_domains[0][2] & SolverState::<6>::BLACK1_COL,
             0,
             "row=0 should keep black-1-col"
         );
         assert_eq!(
-            state.cell_domains[0][2] & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_COL),
+            state.cell_domains[0][2]
+                & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_COL),
             0,
             "row=0 should have digits 1,3,4 and black-2-col cleared"
         );
         // Row 5: only digit 2 or black-2-col remain (col bits).
-        assert_ne!(state.cell_domains[5][2] & (1 << 2), 0, "row=5 should keep digit 2");
+        assert_ne!(
+            state.cell_domains[5][2] & (1 << 2),
+            0,
+            "row=5 should keep digit 2"
+        );
         assert_ne!(
             state.cell_domains[5][2] & SolverState::<6>::BLACK2_COL,
             0,
             "row=5 should keep black-2-col"
         );
         assert_eq!(
-            state.cell_domains[5][2] & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_COL),
+            state.cell_domains[5][2]
+                & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_COL),
             0,
             "row=5 should have digits 1,3,4 and black-1-col cleared"
         );
@@ -830,10 +840,7 @@ mod tests {
         //  8 |   |   |   |   |   |   |
         //  9 |   |   |   |   |   |   |
         //  0 |   |   | # | # |   |   |
-        let mut state = SolverState::new(Puzzle::new(
-            [8, 2, 3, 8, 9, 0],
-            [0, 0, 5, 9, 0, 4],
-        ));
+        let mut state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
         state.propagate();
 
         //       0  0  5  9  0  4
@@ -874,10 +881,7 @@ mod tests {
         // four digits between the blacks, forcing black at both endpoints.
         // Row 5 target 0 requires adjacent blacks, but the column constraints
         // don't yet uniquely determine which pair — backtracking is needed.
-        let mut state = SolverState::new(Puzzle::new(
-            [3, 3, 5, 0, 7, 0],
-            [5, 0, 2, 6, 5, 10],
-        ));
+        let mut state = SolverState::new(Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]));
         state.propagate();
 
         assert_eq!(state.puzzle.board[0][5], Cell::Black);
