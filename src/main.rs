@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::OnceLock;
 
 // ── Cell ──────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,43 @@ impl<const N: usize> SolverState<N> {
             cell_domains: [[full_cell; N]; N],
         }
     }
+}
+
+// ── Precomputed cage tuples ───────────────────────────────────────────────────
+
+/// For each (target, size) pair, the list of valid digit-set bitmasks.
+///
+/// A valid digit-set for cage target `t` and size `k` is any k-element subset
+/// of {1,2,3,4} whose elements sum to `t`.  Each set is encoded as a `u64`
+/// with bit `d` set (i.e. `1 << d`) if digit `d` belongs to the set — the
+/// same layout used for cell domains.
+///
+/// Indexed as `VALID_TUPLES[target][size]`.
+static VALID_TUPLES: OnceLock<[[Vec<u64>; 5]; 11]> = OnceLock::new();
+
+fn build_valid_tuples() -> [[Vec<u64>; 5]; 11] {
+    let mut table: [[Vec<u64>; 5]; 11] = Default::default();
+    for target in 0usize..=10 {
+        for size in 0usize..=4 {
+            // Each value of `subset` (bits 0–3) represents a subset of {1,2,3,4}
+            // where bit b corresponds to digit b+1.
+            for subset in 0u32..16 {
+                if subset.count_ones() as usize != size {
+                    continue;
+                }
+                let sum: usize = (0..4)
+                    .filter(|&b| subset & (1 << b) != 0)
+                    .map(|b| b + 1)
+                    .sum();
+                if sum != target {
+                    continue;
+                }
+                // Shift left by 1: bit b (digit b+1) becomes bit b+1 in the domain mask.
+                table[target][size].push((subset as u64) << 1);
+            }
+        }
+    }
+    table
 }
 
 // ── Solver rules (N = 6) ─────────────────────────────────────────────────────
@@ -426,96 +464,81 @@ impl SolverState<6> {
         found
     }
 
-    /// Rule: when both black squares in a row or column are pinned to exactly
-    /// one position each, and the cells between them contain exactly one
-    /// unassigned cell, that cell's digit is fully determined.
+    // ── Cage helpers ─────────────────────────────────────────────────────────
+
+    /// Apply cage filtering to a set of cells given as `(row, col)` pairs.
     ///
-    /// Once `BLACK1` and `BLACK2` each have a unique candidate position, the
-    /// inside region is fixed.  If all but one inside cell already hold a digit,
-    /// the remaining cell must be `target − sum(assigned inside digits)`.
-    fn apply_single_inside_rule(&mut self) -> bool {
+    /// Looks up all valid digit-sets for (target, k) in `VALID_TUPLES`, keeps
+    /// only those where every cage cell's domain intersects the set, then
+    /// removes from every cage cell any digit absent from the union.
+    fn apply_cage(
+        &mut self,
+        cells: &[(usize, usize)],
+        target: usize,
+        tuples: &[[Vec<u64>; 5]; 11],
+    ) -> bool {
+        let k = cells.len();
+        if k == 0 {
+            return false;
+        }
+        let domains: Vec<u64> = cells
+            .iter()
+            .map(|&(r, c)| self.cell_domains[r][c] & Self::ALL_DIGITS)
+            .collect();
+        let union: u64 = tuples[target][k]
+            .iter()
+            .filter(|&&tup| domains.iter().all(|&d| d & tup != 0))
+            .fold(0, |a, &tup| a | tup);
+        let mut changed = false;
+        for &(r, c) in cells {
+            changed |= self.clear_mask(r, c, Self::ALL_DIGITS & !union);
+        }
+        changed
+    }
+
+    /// Rule: once both black squares in a row/column are pinned, apply cage-
+    /// based arc consistency to the inside cage (sum = target) and the outside
+    /// cage (sum = 10 − target).
+    ///
+    /// For each cage, all valid digit-sets of the right size and sum are
+    /// looked up from `VALID_TUPLES`.  A set is *feasible* if every cage cell
+    /// has at least one digit from that set available.  The union of all
+    /// feasible sets bounds the digits that can appear in the cage; any digit
+    /// outside the union is removed from every cage cell's domain.
+    ///
+    /// This subsumes `apply_single_inside_rule`: when only one inside cell is
+    /// unassigned, exactly one digit-set is feasible and the union pins the
+    /// remaining digit.
+    fn apply_inside_outside_cage_rule(&mut self) -> bool {
+        let tuples = VALID_TUPLES.get_or_init(build_valid_tuples);
         let mut changed = false;
 
         for r in 0..6 {
             let t = self.puzzle.row_targets[r] as usize;
-            let Some(p1) = self.singleton_in_row(r, Self::BLACK1_ROW) else {
+            let Some(b1) = self.singleton_in_row(r, Self::BLACK1_ROW) else {
                 continue;
             };
-            let Some(p2) = self.singleton_in_row(r, Self::BLACK2_ROW) else {
+            let Some(b2) = self.singleton_in_row(r, Self::BLACK2_ROW) else {
                 continue;
             };
-            let mut empty_col = None;
-            let mut assigned_sum = 0usize;
-            let mut valid = true;
-            for c in p1 + 1..p2 {
-                match self.puzzle.board[r][c] {
-                    Cell::Number(n) => assigned_sum += n as usize,
-                    Cell::Empty => {
-                        if empty_col.is_some() {
-                            valid = false;
-                            break;
-                        }
-                        empty_col = Some(c);
-                    }
-                    Cell::Black => {
-                        valid = false;
-                        break;
-                    }
-                }
-            }
-            if !valid {
-                continue;
-            }
-            let Some(e) = empty_col else { continue };
-            let Some(digit) = t.checked_sub(assigned_sum) else {
-                continue;
-            };
-            if digit < 1 || digit > 4 {
-                continue;
-            }
-            let target_bit = 1u64 << digit;
-            changed |= self.set_cell(r, e, target_bit);
+            let inside: Vec<(usize, usize)> = (b1 + 1..b2).map(|c| (r, c)).collect();
+            let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..6).map(|c| (r, c)).collect();
+            changed |= self.apply_cage(&inside, t, tuples);
+            changed |= self.apply_cage(&outside, 10 - t, tuples);
         }
 
         for c in 0..6 {
             let t = self.puzzle.col_targets[c] as usize;
-            let Some(p1) = self.singleton_in_col(c, Self::BLACK1_COL) else {
+            let Some(b1) = self.singleton_in_col(c, Self::BLACK1_COL) else {
                 continue;
             };
-            let Some(p2) = self.singleton_in_col(c, Self::BLACK2_COL) else {
+            let Some(b2) = self.singleton_in_col(c, Self::BLACK2_COL) else {
                 continue;
             };
-            let mut empty_row = None;
-            let mut assigned_sum = 0usize;
-            let mut valid = true;
-            for r in p1 + 1..p2 {
-                match self.puzzle.board[r][c] {
-                    Cell::Number(n) => assigned_sum += n as usize,
-                    Cell::Empty => {
-                        if empty_row.is_some() {
-                            valid = false;
-                            break;
-                        }
-                        empty_row = Some(r);
-                    }
-                    Cell::Black => {
-                        valid = false;
-                        break;
-                    }
-                }
-            }
-            if !valid {
-                continue;
-            }
-            let Some(e) = empty_row else { continue };
-            let Some(digit) = t.checked_sub(assigned_sum) else {
-                continue;
-            };
-            if digit < 1 || digit > 4 {
-                continue;
-            }
-            let target_bit = 1u64 << digit;
-            changed |= self.set_cell(e, c, target_bit);
+            let inside: Vec<(usize, usize)> = (b1 + 1..b2).map(|r| (r, c)).collect();
+            let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..6).map(|r| (r, c)).collect();
+            changed |= self.apply_cage(&inside, t, tuples);
+            changed |= self.apply_cage(&outside, 10 - t, tuples);
         }
 
         changed
@@ -537,7 +560,7 @@ impl SolverState<6> {
                 | self.apply_black_consistency_rule()
                 | self.apply_singleton_rule()
                 | self.apply_hidden_single_rule()
-                | self.apply_single_inside_rule();
+                | self.apply_inside_outside_cage_rule();
             if !changed {
                 break;
             }
@@ -933,40 +956,38 @@ mod tests {
     }
 
     #[test]
-    fn single_inside_rule_assigns_target_digit() {
-        // Row 0 has target 3. Pin BLACK1_ROW to col 1 and BLACK2_ROW to col 3
-        // by stripping those bits from every other column in that row.
-        // The only inside cell is col 2, which must be assigned digit 3.
+    fn cage_rule_sole_inside_cell_narrows_to_target_digit() {
+        // Row 0 has target 3. Pin BLACK1_ROW to col 1 and BLACK2_ROW to col 3.
+        // The only inside cell is col 2; the only feasible tuple is {3}, so
+        // the cage rule must narrow that cell's digit domain to just digit 3.
         let mut state = SolverState::new(Puzzle::new([3, 0, 0, 0, 0, 0], [0; 6]));
         state.set_cell(0, 1, SolverState::<6>::BLACK1_ROW);
         state.set_cell(0, 3, SolverState::<6>::BLACK2_ROW);
-        state.apply_single_inside_rule();
+        state.apply_inside_outside_cage_rule();
 
-        assert_eq!(state.puzzle.board[0][2], Cell::Number(3));
         assert_eq!(
-            state.cell_domains[0][2],
+            state.cell_domains[0][2] & SolverState::<6>::ALL_DIGITS,
             1 << 3,
-            "inside cell should hold only digit 3"
+            "inside cell's digit domain should be reduced to just digit 3"
         );
     }
 
     #[test]
-    fn single_inside_rule_partial_assignment() {
+    fn cage_rule_partial_assignment_narrows_remaining_digit() {
         // Row 0, target 6. BLACK1_ROW at col 0, BLACK2_ROW at col 4.
-        // Inside: cols 1, 2, 3.  Col 1 = digit 2, col 3 = digit 1, col 2 = empty.
-        // Expected: col 2 = 6 − 2 − 1 = 3.
+        // Inside: cols 1, 2, 3.  Col 1 = digit 2, col 3 = digit 1.
+        // Only feasible inside tuple: {1, 2, 3}, so col 2 must be digit 3.
         let mut state = SolverState::new(Puzzle::new([6, 0, 0, 0, 0, 0], [0; 6]));
         state.set_cell(0, 0, SolverState::<6>::BLACK1_ROW);
         state.set_cell(0, 4, SolverState::<6>::BLACK2_ROW);
         state.set_cell(0, 1, 1 << 2); // digit 2
         state.set_cell(0, 3, 1 << 1); // digit 1
-        state.apply_single_inside_rule();
+        state.apply_inside_outside_cage_rule();
 
-        assert_eq!(state.puzzle.board[0][2], Cell::Number(3));
         assert_eq!(
-            state.cell_domains[0][2],
+            state.cell_domains[0][2] & SolverState::<6>::ALL_DIGITS,
             1 << 3,
-            "empty inside cell should be digit 3"
+            "empty inside cell's digit domain should be reduced to just digit 3"
         );
     }
 
@@ -1009,17 +1030,17 @@ mod tests {
             concat!(
                 "     5   0   2   6   5  10\n",
                 "   +---+---+---+---+---+---+\n",
-                " 3 | ⠇ | ⠇ | ⠃ | # | 3 | # |\n",
+                " 3 | 2 | 1 | 4 | # | 3 | # |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 3 | # | 3 | # | ⠇ | ⠇ | ⠇ |\n",
+                " 3 | # | 3 | # | 1 | 2 | 4 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 5 | ⠃ | # | 2 | 3 | # | ⠃ |\n",
+                " 5 | 4 | # | 2 | 3 | # | 1 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 0 | ⡇ | # | # | ⠇ | ⠇ | ⡇ |\n",
+                " 0 | 1 | # | # | 2 | 4 | 3 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 7 | # | ⠇ | ⠇ | # | ⠃ | ⠇ |\n",
+                " 7 | # | 4 | 3 | # | 1 | 2 |\n",
                 "   +---+---+---+---+---+---+\n",
-                " 0 | ⡇ | ⠇ | ⠇ | ⠃ | # | # |\n",
+                " 0 | 3 | 2 | 1 | 4 | # | # |\n",
                 "   +---+---+---+---+---+---+\n",
             )
         );
