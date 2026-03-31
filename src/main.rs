@@ -55,7 +55,7 @@ type CellDomain = u64;
 #[derive(Debug, Clone)]
 struct SolverState<const N: usize> {
     puzzle: Puzzle<N>,
-    cell_domains: [[CellDomain; N]; N],
+    domains: [[CellDomain; N]; N],
 }
 
 impl<const N: usize> SolverState<N> {
@@ -64,7 +64,7 @@ impl<const N: usize> SolverState<N> {
         let full_cell: CellDomain = ((1u64 << (N + 2)) - 1) << 1;
         Self {
             puzzle,
-            cell_domains: [[full_cell; N]; N],
+            domains: [[full_cell; N]; N],
         }
     }
 }
@@ -160,9 +160,9 @@ impl SolverState<6> {
     /// Clear all bits in `mask` from a cell's domain.  Returns `true` iff any
     /// bit was actually set before (i.e. the domain shrank).
     fn clear_mask(&mut self, row: usize, col: usize, mask: u64) -> bool {
-        let before = self.cell_domains[row][col];
-        self.cell_domains[row][col] = before & !mask;
-        self.cell_domains[row][col] != before
+        let before = self.domains[row][col];
+        self.domains[row][col] = before & !mask;
+        self.domains[row][col] != before
     }
 
     /// Assign `bit` to cell (row, col) and propagate the constraint.
@@ -255,13 +255,13 @@ impl SolverState<6> {
                 // BLACK1_ROW at p: need BLACK2_ROW somewhere in [p+d_min, p+d_max].
                 let lo = p + d_min;
                 let hi = (p + d_max + 1).min(6);
-                if (lo..hi).all(|q| self.cell_domains[r][q] & Self::BLACK2_ROW == 0) {
+                if (lo..hi).all(|q| self.domains[r][q] & Self::BLACK2_ROW == 0) {
                     changed |= self.clear_mask(r, p, Self::BLACK1_ROW);
                 }
                 // BLACK2_ROW at p: need BLACK1_ROW somewhere in [p-d_max, p-d_min].
                 let hi2 = (p + 1).saturating_sub(d_min);
                 let lo2 = p.saturating_sub(d_max);
-                if (lo2..hi2).all(|q| self.cell_domains[r][q] & Self::BLACK1_ROW == 0) {
+                if (lo2..hi2).all(|q| self.domains[r][q] & Self::BLACK1_ROW == 0) {
                     changed |= self.clear_mask(r, p, Self::BLACK2_ROW);
                 }
             }
@@ -274,12 +274,12 @@ impl SolverState<6> {
             for p in 0..6 {
                 let lo = p + d_min;
                 let hi = (p + d_max + 1).min(6);
-                if (lo..hi).all(|q| self.cell_domains[q][c] & Self::BLACK2_COL == 0) {
+                if (lo..hi).all(|q| self.domains[q][c] & Self::BLACK2_COL == 0) {
                     changed |= self.clear_mask(p, c, Self::BLACK1_COL);
                 }
                 let hi2 = (p + 1).saturating_sub(d_min);
                 let lo2 = p.saturating_sub(d_max);
-                if (lo2..hi2).all(|q| self.cell_domains[q][c] & Self::BLACK1_COL == 0) {
+                if (lo2..hi2).all(|q| self.domains[q][c] & Self::BLACK1_COL == 0) {
                     changed |= self.clear_mask(p, c, Self::BLACK2_COL);
                 }
             }
@@ -310,10 +310,10 @@ impl SolverState<6> {
             let cant_outside = Self::CANT_BE_INSIDE[10 - t];
 
             for p in 0..6 {
-                let b1_before = (0..p).any(|q| self.cell_domains[r][q] & Self::BLACK1_ROW != 0);
-                let b2_before = (0..p).any(|q| self.cell_domains[r][q] & Self::BLACK2_ROW != 0);
-                let b1_after = (p + 1..6).any(|q| self.cell_domains[r][q] & Self::BLACK1_ROW != 0);
-                let b2_after = (p + 1..6).any(|q| self.cell_domains[r][q] & Self::BLACK2_ROW != 0);
+                let b1_before = (0..p).any(|q| self.domains[r][q] & Self::BLACK1_ROW != 0);
+                let b2_before = (0..p).any(|q| self.domains[r][q] & Self::BLACK2_ROW != 0);
+                let b1_after = (p + 1..6).any(|q| self.domains[r][q] & Self::BLACK1_ROW != 0);
+                let b2_after = (p + 1..6).any(|q| self.domains[r][q] & Self::BLACK2_ROW != 0);
 
                 if !b1_before || !b2_after {
                     changed |= self.clear_mask(r, p, cant_outside);
@@ -330,10 +330,10 @@ impl SolverState<6> {
             let cant_outside = Self::CANT_BE_INSIDE[10 - t];
 
             for p in 0..6 {
-                let b1_before = (0..p).any(|q| self.cell_domains[q][c] & Self::BLACK1_COL != 0);
-                let b2_before = (0..p).any(|q| self.cell_domains[q][c] & Self::BLACK2_COL != 0);
-                let b1_after = (p + 1..6).any(|q| self.cell_domains[q][c] & Self::BLACK1_COL != 0);
-                let b2_after = (p + 1..6).any(|q| self.cell_domains[q][c] & Self::BLACK2_COL != 0);
+                let b1_before = (0..p).any(|q| self.domains[q][c] & Self::BLACK1_COL != 0);
+                let b2_before = (0..p).any(|q| self.domains[q][c] & Self::BLACK2_COL != 0);
+                let b1_after = (p + 1..6).any(|q| self.domains[q][c] & Self::BLACK1_COL != 0);
+                let b2_after = (p + 1..6).any(|q| self.domains[q][c] & Self::BLACK2_COL != 0);
 
                 if !b1_before || !b2_after {
                     changed |= self.clear_mask(p, c, cant_outside);
@@ -360,7 +360,7 @@ impl SolverState<6> {
 
         for r in 0..6 {
             for c in 0..6 {
-                let domain = self.cell_domains[r][c];
+                let domain = self.domains[r][c];
                 if domain.count_ones() == 1 {
                     changed |= self.set_cell(r, c, domain);
                 } else if domain & Self::ALL_DIGITS == 0 && domain != 0 {
@@ -419,7 +419,7 @@ impl SolverState<6> {
 
         for r in 0..6 {
             for c in 0..6 {
-                let domain = self.cell_domains[r][c];
+                let domain = self.domains[r][c];
                 if domain & Self::ROW_BLACKS == 0 {
                     changed |= self.clear_mask(r, c, Self::COL_BLACKS);
                 }
@@ -439,7 +439,7 @@ impl SolverState<6> {
     fn singleton_in_row(&self, r: usize, bit: u64) -> Option<usize> {
         let mut found = None;
         for c in 0..6 {
-            if self.cell_domains[r][c] & bit != 0 {
+            if self.domains[r][c] & bit != 0 {
                 if found.is_some() {
                     return None;
                 }
@@ -454,7 +454,7 @@ impl SolverState<6> {
     fn singleton_in_col(&self, c: usize, bit: u64) -> Option<usize> {
         let mut found = None;
         for r in 0..6 {
-            if self.cell_domains[r][c] & bit != 0 {
+            if self.domains[r][c] & bit != 0 {
                 if found.is_some() {
                     return None;
                 }
@@ -483,7 +483,7 @@ impl SolverState<6> {
         }
         let domains: Vec<u64> = cells
             .iter()
-            .map(|&(r, c)| self.cell_domains[r][c] & Self::ALL_DIGITS)
+            .map(|&(r, c)| self.domains[r][c] & Self::ALL_DIGITS)
             .collect();
         let union: u64 = tuples[target][k]
             .iter()
@@ -587,7 +587,7 @@ impl fmt::Display for SolverState<6> {
                     Cell::Black => write!(f, " # |")?,
                     Cell::Number(n) => write!(f, "{:2} |", n)?,
                     Cell::Empty => {
-                        let sym = match self.cell_domains[r][c].count_ones() {
+                        let sym = match self.domains[r][c].count_ones() {
                             0 => " X ", // contradiction
                             1 => " ⠁ ",
                             2 => " ⠃ ",
@@ -640,8 +640,8 @@ mod tests {
     fn cell_domain_all_values_possible() {
         let state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
         // 8 bits set: numbers 1-4 and the four variants of black
-        assert_eq!(state.cell_domains[0][0], 0b111111110);
-        assert_eq!(state.cell_domains[5][5], 0b111111110);
+        assert_eq!(state.domains[0][0], 0b111111110);
+        assert_eq!(state.domains[5][5], 0b111111110);
     }
 
     // ── Solver rule tests ─────────────────────────────────────────────────────
@@ -653,7 +653,7 @@ mod tests {
         state.propagate();
         for r in 0..6 {
             assert_eq!(
-                state.cell_domains[r][5] & SolverState::<6>::BLACK1_ROW,
+                state.domains[r][5] & SolverState::<6>::BLACK1_ROW,
                 0,
                 "row {r}: black-1 should be cleared at the last position"
             );
@@ -673,18 +673,18 @@ mod tests {
         state.propagate();
 
         assert_ne!(
-            state.cell_domains[0][0] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][0] & SolverState::<6>::BLACK1_ROW,
             0,
             "p=0 should still be allowed"
         );
         assert_ne!(
-            state.cell_domains[0][1] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][1] & SolverState::<6>::BLACK1_ROW,
             0,
             "p=1 should still be allowed"
         );
         for p in 2..6 {
             assert_eq!(
-                state.cell_domains[0][p] & SolverState::<6>::BLACK1_ROW,
+                state.domains[0][p] & SolverState::<6>::BLACK1_ROW,
                 0,
                 "p={p} should be forbidden for black-1 with target 9"
             );
@@ -700,42 +700,40 @@ mod tests {
         // Middle cells lose digit 1.
         for c in 1..5 {
             assert_eq!(
-                state.cell_domains[0][c] & (1 << 1),
+                state.domains[0][c] & (1 << 1),
                 0,
                 "digit 1 should be cleared from middle cell (row=0, col={c})"
             );
         }
         // Position 0: only digit 1 or black-1 remain (row bits).
         assert_ne!(
-            state.cell_domains[0][0] & (1 << 1),
+            state.domains[0][0] & (1 << 1),
             0,
             "col=0 should keep digit 1"
         );
         assert_ne!(
-            state.cell_domains[0][0] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][0] & SolverState::<6>::BLACK1_ROW,
             0,
             "col=0 should keep black-1"
         );
         assert_eq!(
-            state.cell_domains[0][0]
-                & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_ROW),
+            state.domains[0][0] & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_ROW),
             0,
             "col=0 should have digits 2-4 and black-2 cleared"
         );
         // Position 5: only digit 1 or black-2 remain (row bits).
         assert_ne!(
-            state.cell_domains[0][5] & (1 << 1),
+            state.domains[0][5] & (1 << 1),
             0,
             "col=5 should keep digit 1"
         );
         assert_ne!(
-            state.cell_domains[0][5] & SolverState::<6>::BLACK2_ROW,
+            state.domains[0][5] & SolverState::<6>::BLACK2_ROW,
             0,
             "col=5 should keep black-2"
         );
         assert_eq!(
-            state.cell_domains[0][5]
-                & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_ROW),
+            state.domains[0][5] & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_ROW),
             0,
             "col=5 should have digits 2-4 and black-1 cleared"
         );
@@ -752,42 +750,40 @@ mod tests {
         // Middle cells lose digit 2.
         for r in 1..5 {
             assert_eq!(
-                state.cell_domains[r][2] & (1 << 2),
+                state.domains[r][2] & (1 << 2),
                 0,
                 "digit 2 should be cleared from middle cell (row={r}, col=2)"
             );
         }
         // Row 0: only digit 2 or black-1-col remain (col bits).
         assert_ne!(
-            state.cell_domains[0][2] & (1 << 2),
+            state.domains[0][2] & (1 << 2),
             0,
             "row=0 should keep digit 2"
         );
         assert_ne!(
-            state.cell_domains[0][2] & SolverState::<6>::BLACK1_COL,
+            state.domains[0][2] & SolverState::<6>::BLACK1_COL,
             0,
             "row=0 should keep black-1-col"
         );
         assert_eq!(
-            state.cell_domains[0][2]
-                & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_COL),
+            state.domains[0][2] & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_COL),
             0,
             "row=0 should have digits 1,3,4 and black-2-col cleared"
         );
         // Row 5: only digit 2 or black-2-col remain (col bits).
         assert_ne!(
-            state.cell_domains[5][2] & (1 << 2),
+            state.domains[5][2] & (1 << 2),
             0,
             "row=5 should keep digit 2"
         );
         assert_ne!(
-            state.cell_domains[5][2] & SolverState::<6>::BLACK2_COL,
+            state.domains[5][2] & SolverState::<6>::BLACK2_COL,
             0,
             "row=5 should keep black-2-col"
         );
         assert_eq!(
-            state.cell_domains[5][2]
-                & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_COL),
+            state.domains[5][2] & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_COL),
             0,
             "row=5 should have digits 1,3,4 and black-1-col cleared"
         );
@@ -803,19 +799,19 @@ mod tests {
         state.set_cell(0, 0, 1 << 3);
 
         // The cell itself holds only digit 3.
-        assert_eq!(state.cell_domains[0][0], 1 << 3);
+        assert_eq!(state.domains[0][0], 1 << 3);
         assert_eq!(state.puzzle.board[0][0], Cell::Number(3));
 
         // Digit 3 is gone from the rest of row 0 and col 0.
         for c in 1..6 {
-            assert_eq!(state.cell_domains[0][c] & (1 << 3), 0, "row 0, col {c}");
+            assert_eq!(state.domains[0][c] & (1 << 3), 0, "row 0, col {c}");
         }
         for r in 1..6 {
-            assert_eq!(state.cell_domains[r][0] & (1 << 3), 0, "row {r}, col 0");
+            assert_eq!(state.domains[r][0] & (1 << 3), 0, "row {r}, col 0");
         }
 
         // An unrelated cell (1, 1) is completely untouched.
-        assert_eq!(state.cell_domains[1][1], 0b111111110);
+        assert_eq!(state.domains[1][1], 0b111111110);
     }
 
     #[test]
@@ -825,7 +821,7 @@ mod tests {
 
         // The assigned cell keeps BLACK1_ROW and both col-black bits, but
         // loses digits and BLACK2_ROW.
-        let d = state.cell_domains[2][1];
+        let d = state.domains[2][1];
         assert_ne!(d & SolverState::<6>::BLACK1_ROW, 0, "keep BLACK1_ROW");
         assert_ne!(d & SolverState::<6>::BLACK1_COL, 0, "keep BLACK1_COL");
         assert_ne!(d & SolverState::<6>::BLACK2_COL, 0, "keep BLACK2_COL");
@@ -835,7 +831,7 @@ mod tests {
         // BLACK1_ROW is gone from every other cell in row 2.
         for c in (0..6).filter(|&c| c != 1) {
             assert_eq!(
-                state.cell_domains[2][c] & SolverState::<6>::BLACK1_ROW,
+                state.domains[2][c] & SolverState::<6>::BLACK1_ROW,
                 0,
                 "col {c} should lose BLACK1_ROW"
             );
@@ -844,14 +840,14 @@ mod tests {
         // BLACK2_ROW is gone from every everything to the left, kept on the right
         for c in 0..1 {
             assert_eq!(
-                state.cell_domains[2][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[2][c] & SolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should lose BLACK2_ROW"
             );
         }
         for c in 2..6 {
             assert_ne!(
-                state.cell_domains[2][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[2][c] & SolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should keep BLACK2_ROW"
             );
@@ -868,14 +864,14 @@ mod tests {
 
         for c in 0..3 {
             assert_eq!(
-                state.cell_domains[0][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[0][c] & SolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should lose BLACK2_ROW (left of black-1)"
             );
         }
         for c in 4..6 {
             assert_ne!(
-                state.cell_domains[0][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[0][c] & SolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should keep BLACK2_ROW (right of black-1)"
             );
@@ -890,18 +886,18 @@ mod tests {
         // the remaining BLACK2_ROW candidate).
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
         for c in (0..6).filter(|&c| c != 3) {
-            state.cell_domains[0][c] &= !SolverState::<6>::BLACK2_ROW;
+            state.domains[0][c] &= !SolverState::<6>::BLACK2_ROW;
         }
         state.apply_black_range_rules();
 
         assert_ne!(
-            state.cell_domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
             0,
             "col 2 should keep BLACK1_ROW (adjacent to the only BLACK2_ROW at col 3)"
         );
         for p in (0..6).filter(|&p| p != 2) {
             assert_eq!(
-                state.cell_domains[0][p] & SolverState::<6>::BLACK1_ROW,
+                state.domains[0][p] & SolverState::<6>::BLACK1_ROW,
                 0,
                 "col {p} should lose BLACK1_ROW"
             );
@@ -912,17 +908,17 @@ mod tests {
     fn apply_singleton_rule_assigns_sole_digit() {
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Force cell (3, 3) to have only digit 2 in its domain.
-        state.cell_domains[3][3] = 1 << 2;
+        state.domains[3][3] = 1 << 2;
         // Run just this one rule (not propagate, to isolate it).
         state.apply_singleton_rule();
 
         assert_eq!(state.puzzle.board[3][3], Cell::Number(2));
         // Digit 2 should be gone from the rest of row 3 and col 3.
         for c in (0..6).filter(|&c| c != 3) {
-            assert_eq!(state.cell_domains[3][c] & (1 << 2), 0);
+            assert_eq!(state.domains[3][c] & (1 << 2), 0);
         }
         for r in (0..6).filter(|&r| r != 3) {
-            assert_eq!(state.cell_domains[r][3] & (1 << 2), 0);
+            assert_eq!(state.domains[r][3] & (1 << 2), 0);
         }
     }
 
@@ -931,26 +927,26 @@ mod tests {
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Remove digit 4 from every cell in row 0 except column 2.
         for c in (0..6).filter(|&c| c != 2) {
-            state.cell_domains[0][c] &= !(1 << 4);
+            state.domains[0][c] &= !(1 << 4);
         }
         state.apply_hidden_single_rule();
 
         assert_eq!(state.puzzle.board[0][2], Cell::Number(4));
-        assert_eq!(state.cell_domains[0][2], 1 << 4);
+        assert_eq!(state.domains[0][2], 1 << 4);
     }
 
     #[test]
     fn apply_black_consistency_rule_clears_col_blacks_when_no_row_blacks() {
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Strip all row-black bits from cell (1, 4).
-        state.cell_domains[1][4] &= !SolverState::<6>::ROW_BLACKS;
+        state.domains[1][4] &= !SolverState::<6>::ROW_BLACKS;
         state.apply_black_consistency_rule();
 
         // Col-black bits must now also be gone.
-        assert_eq!(state.cell_domains[1][4] & SolverState::<6>::COL_BLACKS, 0);
+        assert_eq!(state.domains[1][4] & SolverState::<6>::COL_BLACKS, 0);
         // But digit bits are intact.
         assert_eq!(
-            state.cell_domains[1][4] & SolverState::<6>::ALL_DIGITS,
+            state.domains[1][4] & SolverState::<6>::ALL_DIGITS,
             SolverState::<6>::ALL_DIGITS
         );
     }
@@ -966,7 +962,7 @@ mod tests {
         state.apply_inside_outside_cage_rule();
 
         assert_eq!(
-            state.cell_domains[0][2] & SolverState::<6>::ALL_DIGITS,
+            state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
             1 << 3,
             "inside cell's digit domain should be reduced to just digit 3"
         );
@@ -985,7 +981,7 @@ mod tests {
         state.apply_inside_outside_cage_rule();
 
         assert_eq!(
-            state.cell_domains[0][2] & SolverState::<6>::ALL_DIGITS,
+            state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
             1 << 3,
             "empty inside cell's digit domain should be reduced to just digit 3"
         );
