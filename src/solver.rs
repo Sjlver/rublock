@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::OnceLock;
+use std::sync::Arc;
 
 // ── Puzzle ────────────────────────────────────────────────────────────────────
 
@@ -11,7 +11,10 @@ pub struct Puzzle<const N: usize> {
 
 impl<const N: usize> Puzzle<N> {
     pub fn new(row_targets: [u8; N], col_targets: [u8; N]) -> Self {
-        Self { row_targets, col_targets }
+        Self {
+            row_targets,
+            col_targets,
+        }
     }
 }
 
@@ -42,6 +45,7 @@ type CellDomain = u64;
 pub struct SolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
+    tables: Arc<Tables>,
 }
 
 impl<const N: usize> SolverState<N> {
@@ -51,45 +55,110 @@ impl<const N: usize> SolverState<N> {
         Self {
             puzzle,
             domains: [[full_cell; N]; N],
+            tables: Arc::new(Tables::build(N - 2)),
         }
     }
 }
 
-// ── Precomputed cage tuples ───────────────────────────────────────────────────
+// ── Precomputed tables ────────────────────────────────────────────────────────
+//
+// `Tables` holds data derived purely from the grid size that is cheap to build
+// but reused on every propagation pass.  It is computed once in
+// `SolverState::new` and shared across all backtracking clones via `Arc`.
+//
+// All fields are `Vec`-based because their sizes depend on `num_digits = N-2`,
+// which is only known at runtime.
 
-/// For each (target, size) pair, the list of valid digit-set bitmasks.
-///
-/// A valid digit-set for cage target `t` and size `k` is any k-element subset
-/// of {1,2,3,4} whose elements sum to `t`.  Each set is encoded as a `u64`
-/// with bit `d` set (i.e. `1 << d`) if digit `d` belongs to the set — the
-/// same layout used for cell domains.
-///
-/// Indexed as `VALID_TUPLES[target][size]`.
-static VALID_TUPLES: OnceLock<[[Vec<u64>; 5]; 11]> = OnceLock::new();
+#[derive(Debug)]
+struct Tables {
+    /// For each (target, size) pair, the list of valid digit-set bitmasks.
+    ///
+    /// A valid digit-set for cage target `t` and size `k` is any k-element
+    /// subset of the digit set whose elements sum to `t`.  Each set is encoded
+    /// as a `u64` with bit `d` set (i.e. `1 << d`) if digit `d` belongs to
+    /// the set — the same layout used for cell domains.
+    ///
+    /// Indexed as `valid_tuples[target][size]`.
+    valid_tuples: Vec<Vec<Vec<u64>>>,
 
-fn build_valid_tuples() -> [[Vec<u64>; 5]; 11] {
-    let mut table: [[Vec<u64>; 5]; 11] = Default::default();
-    for target in 0usize..=10 {
-        for size in 0usize..=4 {
-            // Each value of `subset` (bits 0–3) represents a subset of {1,2,3,4}
-            // where bit b corresponds to digit b+1.
-            for subset in 0u32..16 {
-                if subset.count_ones() as usize != size {
-                    continue;
-                }
-                let sum: usize = (0..4)
-                    .filter(|&b| subset & (1 << b) != 0)
-                    .map(|b| b + 1)
-                    .sum();
-                if sum != target {
-                    continue;
-                }
-                // Shift left by 1: bit b (digit b+1) becomes bit b+1 in the domain mask.
-                table[target][size].push((subset as u64) << 1);
-            }
+    /// For each target `t`, the bitmask of digit bits that cannot appear inside
+    /// (between the two blacks).  Digit `d` cannot be inside iff no valid tuple
+    /// for target `t` contains it.
+    ///
+    /// By symmetry, `cant_be_inside[max_target - t]` gives the digits that
+    /// cannot be outside, since inside and outside together always hold the
+    /// full digit set.
+    cant_be_inside: Vec<u64>,
+
+    /// Minimum valid distance `d = p2 - p1` between the two blacks for each
+    /// target.  `d` is valid iff `valid_tuples[t][d - 1]` is non-empty.
+    d_min: Vec<usize>,
+
+    /// Maximum valid distance `d = p2 - p1` between the two blacks for each
+    /// target.
+    d_max: Vec<usize>,
+}
+
+impl Tables {
+    /// Build tables for a grid whose rows/columns contain `num_digits` distinct
+    /// digit values (i.e. `num_digits = N - 2` for an N×N grid).
+    fn build(num_digits: usize) -> Self {
+        // Digits are 1..=num_digits; max achievable cage sum is their total.
+        let max_target: usize = (1..=num_digits).sum();
+        let num_targets = max_target + 1;
+
+        // valid_tuples[target][size]: one Vec per (target, size) pair.
+        let mut valid_tuples: Vec<Vec<Vec<u64>>> = vec![vec![vec![]; num_digits + 1]; num_targets];
+
+        // Iterate over every subset of the digit set {1, …, num_digits}.
+        // For each subset, its size and sum determine exactly which slot it
+        // belongs in — no inner loops or filtering needed.
+        for subset in 0u64..(1u64 << num_digits) {
+            let size = subset.count_ones() as usize;
+            let target: usize = (0..num_digits)
+                .filter(|&b| subset & (1 << b) != 0)
+                .map(|b| b + 1) // bit b represents digit b+1
+                .sum();
+            // Shift left by 1: bit b (digit b+1) → bit b+1 in the domain mask.
+            valid_tuples[target][size].push(subset << 1);
+        }
+
+        // all_digits: bitmask of every digit bit (bits 1..=num_digits).
+        let all_digits: u64 = ((1u64 << num_digits) - 1) << 1;
+
+        // cant_be_inside[t]: digit bits absent from every valid tuple for target t.
+        let cant_be_inside: Vec<u64> = (0..num_targets)
+            .map(|t| {
+                let can_be_inside: u64 = valid_tuples[t]
+                    .iter()
+                    .flat_map(|size_vec| size_vec.iter().copied())
+                    .fold(0, |acc, tup| acc | tup);
+                all_digits & !can_be_inside
+            })
+            .collect();
+
+        // d_min[t] / d_max[t]: distance d = k+1 is valid for target t iff
+        // valid_tuples[t][k] is non-empty.
+        let mut d_min = vec![0usize; num_targets];
+        let mut d_max = vec![0usize; num_targets];
+        for t in 0..num_targets {
+            let (lo, hi) = (0..=num_digits)
+                .filter(|&k| !valid_tuples[t][k].is_empty())
+                .map(|k| k + 1)
+                // Every reachable target has at least one valid distance (t=0
+                // uses d=1 with no cells between the blacks).
+                .fold((usize::MAX, 0), |(lo, hi), d| (lo.min(d), hi.max(d)));
+            d_min[t] = lo;
+            d_max[t] = hi;
+        }
+
+        Self {
+            valid_tuples,
+            cant_be_inside,
+            d_min,
+            d_max,
         }
     }
-    table
 }
 
 // ── Solver rules (N = 6) ─────────────────────────────────────────────────────
@@ -109,46 +178,16 @@ impl SolverState<6> {
     // Composite masks for common groups of bits.
     const ALL_DIGITS: u64 = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
 
-    // Digit bits that are incompatible with being inside (between the blacks),
-    // indexed by target.  A digit d cannot be inside iff no subset of {1,2,3,4}
-    // containing d sums to t.
-    //
-    // CANT_BE_OUTSIDE[t] == CANT_BE_INSIDE[10 - t] by symmetry (inside and
-    // outside always partition the same four digits, summing to 10 in total).
-    const CANT_BE_INSIDE: [u64; 11] = [
-        (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // t=0:  no digit can be inside
-        (1 << 2) | (1 << 3) | (1 << 4),            // t=1:  only digit 1 can be inside
-        (1 << 1) | (1 << 3) | (1 << 4),            // t=2:  only digit 2 can be inside
-        (1 << 4),                                  // t=3:  digits 1–3 can be inside; 4 cannot
-        (1 << 2),                                  // t=4:  digits 1,3,4 can be inside; 2 cannot
-        0,                                         // t=5:  all digits can be inside
-        0,                                         // t=6:  all digits can be inside
-        0,                                         // t=7:  all digits can be inside
-        (1 << 2),                                  // t=8:  digits 1,3,4 can be inside; 2 cannot
-        (1 << 1),                                  // t=9:  digits 2,3,4 can be inside; 1 cannot
-        0,                                         // t=10: all digits can be inside
-    ];
     const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
     const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
     const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
 
-    // Valid distance d = p2 - p1 between the two blacks, indexed by target.
-    //
-    // With k = d - 1 cells between the blacks:
-    //   min achievable sum: 0, 1, 3, 6, 10   (for k = 0..=4)
-    //   max achievable sum: 0, 4, 7, 9, 10
-    //
-    // D_MIN[t] = smallest d with max_sum[d-1] >= t  (target is reachable)
-    // D_MAX[t] = largest  d with min_sum[d-1] <= t  (target is not overshot)
-    const D_MIN: [usize; 11] = [1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5];
-    const D_MAX: [usize; 11] = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5];
-
     /// Clear all bits in `mask` from a cell's domain.  Returns `true` iff any
     /// bit was actually set before (i.e. the domain shrank).
-    fn clear_mask(&mut self, row: usize, col: usize, mask: u64) -> bool {
-        let before = self.domains[row][col];
-        self.domains[row][col] = before & !mask;
-        self.domains[row][col] != before
+    fn clear_mask(domains: &mut [[CellDomain; 6]; 6], row: usize, col: usize, mask: u64) -> bool {
+        let before = domains[row][col];
+        domains[row][col] = before & !mask;
+        domains[row][col] != before
     }
 
     /// Assign `bit` to cell (row, col) and propagate the constraint.
@@ -170,45 +209,55 @@ impl SolverState<6> {
         if bit & Self::ALL_DIGITS != 0 {
             // Remove this digit from every other cell in the row and column.
             for c in (0..6).filter(|&c| c != col) {
-                changed |= self.clear_mask(row, c, bit);
+                changed |= Self::clear_mask(&mut self.domains, row, c, bit);
             }
             for r in (0..6).filter(|&r| r != row) {
-                changed |= self.clear_mask(r, col, bit);
+                changed |= Self::clear_mask(&mut self.domains, r, col, bit);
             }
             // Fix this cell: keep only this digit.
-            changed |= self.clear_mask(row, col, !bit);
+            changed |= Self::clear_mask(&mut self.domains, row, col, !bit);
         } else if bit & Self::ROW_BLACKS != 0 {
             // Each row-black variant appears once per row.
             for c in (0..6).filter(|&c| c != col) {
-                changed |= self.clear_mask(row, c, bit);
+                changed |= Self::clear_mask(&mut self.domains, row, c, bit);
             }
 
             // Cell is black: drop digits and the other row-black variant.
-            changed |= self.clear_mask(row, col, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit));
+            changed |= Self::clear_mask(
+                &mut self.domains,
+                row,
+                col,
+                Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit),
+            );
         } else if bit & Self::COL_BLACKS != 0 {
             // Each col-black variant appears once per column.
             for r in (0..6).filter(|&r| r != row) {
-                changed |= self.clear_mask(r, col, bit);
+                changed |= Self::clear_mask(&mut self.domains, r, col, bit);
             }
 
             // Cell is black: drop digits and the other col-black variant.
-            changed |= self.clear_mask(row, col, Self::ALL_DIGITS | (Self::COL_BLACKS & !bit));
+            changed |= Self::clear_mask(
+                &mut self.domains,
+                row,
+                col,
+                Self::ALL_DIGITS | (Self::COL_BLACKS & !bit),
+            );
         }
 
         if bit & Self::ALL_BLACKS != 0 {
             // Enforce ordering: clear all BLACK2 from cells above and to the
             // left, and clear BLACK1 from cells below and to the right.
             for left in 0..col {
-                changed |= self.clear_mask(row, left, Self::BLACK2_ROW)
+                changed |= Self::clear_mask(&mut self.domains, row, left, Self::BLACK2_ROW)
             }
             for right in col + 1..6 {
-                changed |= self.clear_mask(row, right, Self::BLACK1_ROW)
+                changed |= Self::clear_mask(&mut self.domains, row, right, Self::BLACK1_ROW)
             }
             for above in 0..row {
-                changed |= self.clear_mask(above, col, Self::BLACK2_COL)
+                changed |= Self::clear_mask(&mut self.domains, above, col, Self::BLACK2_COL)
             }
             for below in row + 1..6 {
-                changed |= self.clear_mask(below, col, Self::BLACK1_COL)
+                changed |= Self::clear_mask(&mut self.domains, below, col, Self::BLACK1_COL)
             }
         }
 
@@ -229,38 +278,38 @@ impl SolverState<6> {
 
         for r in 0..6 {
             let t = self.puzzle.row_targets[r] as usize;
-            let d_min = Self::D_MIN[t];
-            let d_max = Self::D_MAX[t];
+            let d_min = self.tables.d_min[t];
+            let d_max = self.tables.d_max[t];
             for p in 0..6 {
                 // BLACK1_ROW at p: need BLACK2_ROW somewhere in [p+d_min, p+d_max].
                 let lo = p + d_min;
                 let hi = (p + d_max + 1).min(6);
                 if (lo..hi).all(|q| self.domains[r][q] & Self::BLACK2_ROW == 0) {
-                    changed |= self.clear_mask(r, p, Self::BLACK1_ROW);
+                    changed |= Self::clear_mask(&mut self.domains, r, p, Self::BLACK1_ROW);
                 }
                 // BLACK2_ROW at p: need BLACK1_ROW somewhere in [p-d_max, p-d_min].
                 let hi2 = (p + 1).saturating_sub(d_min);
                 let lo2 = p.saturating_sub(d_max);
                 if (lo2..hi2).all(|q| self.domains[r][q] & Self::BLACK1_ROW == 0) {
-                    changed |= self.clear_mask(r, p, Self::BLACK2_ROW);
+                    changed |= Self::clear_mask(&mut self.domains, r, p, Self::BLACK2_ROW);
                 }
             }
         }
 
         for c in 0..6 {
             let t = self.puzzle.col_targets[c] as usize;
-            let d_min = Self::D_MIN[t];
-            let d_max = Self::D_MAX[t];
+            let d_min = self.tables.d_min[t];
+            let d_max = self.tables.d_max[t];
             for p in 0..6 {
                 let lo = p + d_min;
                 let hi = (p + d_max + 1).min(6);
                 if (lo..hi).all(|q| self.domains[q][c] & Self::BLACK2_COL == 0) {
-                    changed |= self.clear_mask(p, c, Self::BLACK1_COL);
+                    changed |= Self::clear_mask(&mut self.domains, p, c, Self::BLACK1_COL);
                 }
                 let hi2 = (p + 1).saturating_sub(d_min);
                 let lo2 = p.saturating_sub(d_max);
                 if (lo2..hi2).all(|q| self.domains[q][c] & Self::BLACK1_COL == 0) {
-                    changed |= self.clear_mask(p, c, Self::BLACK2_COL);
+                    changed |= Self::clear_mask(&mut self.domains, p, c, Self::BLACK2_COL);
                 }
             }
         }
@@ -286,8 +335,8 @@ impl SolverState<6> {
 
         for r in 0..6 {
             let t = self.puzzle.row_targets[r] as usize;
-            let cant_inside = Self::CANT_BE_INSIDE[t];
-            let cant_outside = Self::CANT_BE_INSIDE[10 - t];
+            let cant_inside = self.tables.cant_be_inside[t];
+            let cant_outside = self.tables.cant_be_inside[10 - t];
 
             for p in 0..6 {
                 let b1_before = (0..p).any(|q| self.domains[r][q] & Self::BLACK1_ROW != 0);
@@ -296,18 +345,18 @@ impl SolverState<6> {
                 let b2_after = (p + 1..6).any(|q| self.domains[r][q] & Self::BLACK2_ROW != 0);
 
                 if !b1_before || !b2_after {
-                    changed |= self.clear_mask(r, p, cant_outside);
+                    changed |= Self::clear_mask(&mut self.domains, r, p, cant_outside);
                 }
                 if !b1_after && !b2_before {
-                    changed |= self.clear_mask(r, p, cant_inside);
+                    changed |= Self::clear_mask(&mut self.domains, r, p, cant_inside);
                 }
             }
         }
 
         for c in 0..6 {
             let t = self.puzzle.col_targets[c] as usize;
-            let cant_inside = Self::CANT_BE_INSIDE[t];
-            let cant_outside = Self::CANT_BE_INSIDE[10 - t];
+            let cant_inside = self.tables.cant_be_inside[t];
+            let cant_outside = self.tables.cant_be_inside[10 - t];
 
             for p in 0..6 {
                 let b1_before = (0..p).any(|q| self.domains[q][c] & Self::BLACK1_COL != 0);
@@ -316,10 +365,10 @@ impl SolverState<6> {
                 let b2_after = (p + 1..6).any(|q| self.domains[q][c] & Self::BLACK2_COL != 0);
 
                 if !b1_before || !b2_after {
-                    changed |= self.clear_mask(p, c, cant_outside);
+                    changed |= Self::clear_mask(&mut self.domains, p, c, cant_outside);
                 }
                 if !b1_after && !b2_before {
-                    changed |= self.clear_mask(p, c, cant_inside);
+                    changed |= Self::clear_mask(&mut self.domains, p, c, cant_inside);
                 }
             }
         }
@@ -392,10 +441,10 @@ impl SolverState<6> {
             for c in 0..6 {
                 let domain = self.domains[r][c];
                 if domain & Self::ROW_BLACKS == 0 {
-                    changed |= self.clear_mask(r, c, Self::COL_BLACKS);
+                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::COL_BLACKS);
                 }
                 if domain & Self::COL_BLACKS == 0 {
-                    changed |= self.clear_mask(r, c, Self::ROW_BLACKS);
+                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::ROW_BLACKS);
                 }
             }
         }
@@ -443,26 +492,26 @@ impl SolverState<6> {
     /// only those where every cage cell's domain intersects the set, then
     /// removes from every cage cell any digit absent from the union.
     fn apply_cage(
-        &mut self,
+        domains: &mut [[CellDomain; 6]; 6],
         cells: &[(usize, usize)],
         target: usize,
-        tuples: &[[Vec<u64>; 5]; 11],
+        tuples: &[Vec<Vec<u64>>],
     ) -> bool {
         let k = cells.len();
         if k == 0 {
             return false;
         }
-        let domains: Vec<u64> = cells
+        let cell_domains: Vec<u64> = cells
             .iter()
-            .map(|&(r, c)| self.domains[r][c] & Self::ALL_DIGITS)
+            .map(|&(r, c)| domains[r][c] & Self::ALL_DIGITS)
             .collect();
         let union: u64 = tuples[target][k]
             .iter()
-            .filter(|&&tup| domains.iter().all(|&d| d & tup != 0))
+            .filter(|&&tup| cell_domains.iter().all(|&d| d & tup != 0))
             .fold(0, |a, &tup| a | tup);
         let mut changed = false;
         for &(r, c) in cells {
-            changed |= self.clear_mask(r, c, Self::ALL_DIGITS & !union);
+            changed |= Self::clear_mask(domains, r, c, Self::ALL_DIGITS & !union);
         }
         changed
     }
@@ -481,7 +530,7 @@ impl SolverState<6> {
     /// unassigned, exactly one digit-set is feasible and the union pins the
     /// remaining digit.
     fn apply_inside_outside_cage_rule(&mut self) -> bool {
-        let tuples = VALID_TUPLES.get_or_init(build_valid_tuples);
+        let tuples = &self.tables.valid_tuples;
         let mut changed = false;
 
         for r in 0..6 {
@@ -501,8 +550,8 @@ impl SolverState<6> {
             }
             let inside: Vec<(usize, usize)> = (b1 + 1..b2).map(|c| (r, c)).collect();
             let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..6).map(|c| (r, c)).collect();
-            changed |= self.apply_cage(&inside, t, tuples);
-            changed |= self.apply_cage(&outside, 10 - t, tuples);
+            changed |= Self::apply_cage(&mut self.domains, &inside, t, tuples);
+            changed |= Self::apply_cage(&mut self.domains, &outside, 10 - t, tuples);
         }
 
         for c in 0..6 {
@@ -518,8 +567,8 @@ impl SolverState<6> {
             }
             let inside: Vec<(usize, usize)> = (b1 + 1..b2).map(|r| (r, c)).collect();
             let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..6).map(|r| (r, c)).collect();
-            changed |= self.apply_cage(&inside, t, tuples);
-            changed |= self.apply_cage(&outside, 10 - t, tuples);
+            changed |= Self::apply_cage(&mut self.domains, &inside, t, tuples);
+            changed |= Self::apply_cage(&mut self.domains, &outside, 10 - t, tuples);
         }
 
         changed

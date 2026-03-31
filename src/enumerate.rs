@@ -163,7 +163,9 @@ pub fn count_from_partial(partial: &PartialGrid) -> (u64, u64) {
 fn dfs(partial: &PartialGrid, total: &mut u64, valid: &mut u64) {
     if partial.is_complete() {
         *total += 1;
-        let grid = Grid { cells: partial.cells };
+        let grid = Grid {
+            cells: partial.cells,
+        };
         if grid.is_valid_puzzle() {
             *valid += 1;
         }

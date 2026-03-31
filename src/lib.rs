@@ -1,3 +1,3 @@
-pub mod solver;
-pub mod grid;
 pub mod enumerate;
+pub mod grid;
+pub mod solver;

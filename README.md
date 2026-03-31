@@ -25,3 +25,5 @@ Write a solver in Rust that, given the 12 target numbers (6 for rows, 6 for colu
 ## Project Structure
 
 This project is primarily a vehicle for learning Rust — exploring ownership, iterators, enums, pattern matching, and more.
+
+Because of that, I prefer code that is simple over code that maximizes performance at all costs. I also want code that is highly idiomatic and corresponds to best practices.
