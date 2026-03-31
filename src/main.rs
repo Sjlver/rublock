@@ -1,31 +1,17 @@
 use std::fmt;
 use std::sync::OnceLock;
 
-// ── Cell ──────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Cell {
-    Empty,
-    Black,
-    Number(u8), // valid range: 1..=N-2 for an N×N grid
-}
-
 // ── Puzzle ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct Puzzle<const N: usize> {
-    board: [[Cell; N]; N],
     row_targets: [u8; N],
     col_targets: [u8; N],
 }
 
 impl<const N: usize> Puzzle<N> {
     fn new(row_targets: [u8; N], col_targets: [u8; N]) -> Self {
-        Self {
-            board: [[Cell::Empty; N]; N],
-            row_targets,
-            col_targets,
-        }
+        Self { row_targets, col_targets }
     }
 }
 
@@ -182,8 +168,6 @@ impl SolverState<6> {
         let mut changed = false;
 
         if bit & Self::ALL_DIGITS != 0 {
-            let k = bit.trailing_zeros() as u8;
-            self.puzzle.board[row][col] = Cell::Number(k);
             // Remove this digit from every other cell in the row and column.
             for c in (0..6).filter(|&c| c != col) {
                 changed |= self.clear_mask(row, c, bit);
@@ -194,8 +178,6 @@ impl SolverState<6> {
             // Fix this cell: keep only this digit.
             changed |= self.clear_mask(row, col, !bit);
         } else if bit & Self::ROW_BLACKS != 0 {
-            self.puzzle.board[row][col] = Cell::Black;
-
             // Each row-black variant appears once per row.
             for c in (0..6).filter(|&c| c != col) {
                 changed |= self.clear_mask(row, c, bit);
@@ -204,8 +186,6 @@ impl SolverState<6> {
             // Cell is black: drop digits and the other row-black variant.
             changed |= self.clear_mask(row, col, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit));
         } else if bit & Self::COL_BLACKS != 0 {
-            self.puzzle.board[row][col] = Cell::Black;
-
             // Each col-black variant appears once per column.
             for r in (0..6).filter(|&r| r != row) {
                 changed |= self.clear_mask(r, col, bit);
@@ -347,14 +327,10 @@ impl SolverState<6> {
         changed
     }
 
-    /// Rule: if a cell's domain has shrunk to a single bit, assign it; if it
-    /// has no digit bits remaining, mark it as black on the board.
+    /// Rule: if a cell's domain has shrunk to a single bit, assign it.
     ///
     /// A singleton domain means there is only one possible value — call
-    /// `set_cell` to fix it and propagate.  A domain with only black bits (but
-    /// more than one) means the cell is definitely black even though we don't
-    /// yet know its row/column order; we record that on the board so it can be
-    /// used for display and checking, but defer full assignment.
+    /// `set_cell` to fix it and propagate.
     fn apply_singleton_rule(&mut self) -> bool {
         let mut changed = false;
 
@@ -363,11 +339,6 @@ impl SolverState<6> {
                 let domain = self.domains[r][c];
                 if domain.count_ones() == 1 {
                     changed |= self.set_cell(r, c, domain);
-                } else if domain & Self::ALL_DIGITS == 0 && domain != 0 {
-                    if self.puzzle.board[r][c] != Cell::Black {
-                        self.puzzle.board[r][c] = Cell::Black;
-                        changed = true;
-                    }
                 }
             }
         }
@@ -583,24 +554,24 @@ impl fmt::Display for SolverState<6> {
         for r in 0..6 {
             write!(f, "{:2} |", self.puzzle.row_targets[r])?;
             for c in 0..6 {
-                match self.puzzle.board[r][c] {
-                    Cell::Black => write!(f, " # |")?,
-                    Cell::Number(n) => write!(f, "{:2} |", n)?,
-                    Cell::Empty => {
-                        let sym = match self.domains[r][c].count_ones() {
-                            0 => " X ", // contradiction
-                            1 => " ⠁ ",
-                            2 => " ⠃ ",
-                            3 => " ⠇ ",
-                            4 => " ⡇ ",
-                            5 => " ⡏ ",
-                            6 => " ⡟ ",
-                            7 => " ⡿ ",
-                            8 => " ⣿ ",
-                            bits => panic!("invalid bit count at row {r} col {c}: {bits}"),
-                        };
-                        write!(f, "{}|", sym)?;
-                    }
+                let domain = self.domains[r][c];
+                if domain & Self::ALL_DIGITS == 0 && domain != 0 {
+                    write!(f, " # |")?;
+                } else if domain.count_ones() == 1 {
+                    write!(f, "{:2} |", domain.trailing_zeros())?;
+                } else {
+                    let sym = match domain.count_ones() {
+                        0 => " X ", // contradiction
+                        2 => " ⠃ ",
+                        3 => " ⠇ ",
+                        4 => " ⡇ ",
+                        5 => " ⡏ ",
+                        6 => " ⡟ ",
+                        7 => " ⡿ ",
+                        8 => " ⣿ ",
+                        bits => panic!("invalid bit count at row {r} col {c}: {bits}"),
+                    };
+                    write!(f, "{}|", sym)?;
                 }
             }
             writeln!(f)?;
@@ -625,16 +596,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn puzzle_new_is_all_empty() {
-        let p = Puzzle::new([0; 6], [0; 6]);
-        for row in p.board {
-            for cell in row {
-                assert_eq!(cell, Cell::Empty);
-            }
-        }
-    }
 
     #[test]
     fn cell_domain_all_values_possible() {
@@ -800,7 +761,6 @@ mod tests {
 
         // The cell itself holds only digit 3.
         assert_eq!(state.domains[0][0], 1 << 3);
-        assert_eq!(state.puzzle.board[0][0], Cell::Number(3));
 
         // Digit 3 is gone from the rest of row 0 and col 0.
         for c in 1..6 {
@@ -912,7 +872,7 @@ mod tests {
         // Run just this one rule (not propagate, to isolate it).
         state.apply_singleton_rule();
 
-        assert_eq!(state.puzzle.board[3][3], Cell::Number(2));
+        assert_eq!(state.domains[3][3], 1 << 2);
         // Digit 2 should be gone from the rest of row 3 and col 3.
         for c in (0..6).filter(|&c| c != 3) {
             assert_eq!(state.domains[3][c] & (1 << 2), 0);
@@ -931,7 +891,6 @@ mod tests {
         }
         state.apply_hidden_single_rule();
 
-        assert_eq!(state.puzzle.board[0][2], Cell::Number(4));
         assert_eq!(state.domains[0][2], 1 << 4);
     }
 
