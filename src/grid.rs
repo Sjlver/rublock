@@ -9,23 +9,23 @@ pub enum Cell {
     Empty,
     /// The cell is one of the two black squares in its row and column.
     Black,
-    /// The cell holds a digit from 1 to 4.
+    /// The cell holds a digit from 1 to N-2.
     Number(u8),
 }
 
 // ── Grid ──────────────────────────────────────────────────────────────────────
 
-/// A fully filled 6×6 grid: every cell is either `Black` or `Number(1..=4)`.
+/// A fully filled N×N grid: every cell is either `Black` or `Number(1..=N-2)`.
 ///
 /// Each row and each column must contain exactly two black squares and the
-/// digits 1, 2, 3, 4 — this is the structural invariant that the grid
+/// digits 1..=(N-2) — this is the structural invariant that the grid
 /// enumerator maintains, and that `compute_targets` relies on.
 #[derive(Debug, Clone)]
-pub struct Grid {
-    pub cells: [[Cell; 6]; 6],
+pub struct Grid<const N: usize> {
+    pub cells: [[Cell; N]; N],
 }
 
-impl Grid {
+impl<const N: usize> Grid<N> {
     /// Compute the row and column targets for this filled grid.
     ///
     /// The target for a row (or column) is the sum of the numbers that lie
@@ -34,11 +34,11 @@ impl Grid {
     ///
     /// Panics if any cell is `Empty`, or if a row or column does not have
     /// exactly two black squares.
-    pub fn compute_targets(&self) -> ([u8; 6], [u8; 6]) {
-        let mut row_targets = [0u8; 6];
-        let mut col_targets = [0u8; 6];
+    pub fn compute_targets(&self) -> ([u8; N], [u8; N]) {
+        let mut row_targets = [0u8; N];
+        let mut col_targets = [0u8; N];
 
-        for r in 0..6 {
+        for r in 0..N {
             let (b1, b2) = black_pair_in_row(&self.cells[r], r);
             row_targets[r] = (b1 + 1..b2)
                 .map(|c| match self.cells[r][c] {
@@ -48,8 +48,8 @@ impl Grid {
                 .sum();
         }
 
-        for c in 0..6 {
-            let col: [Cell; 6] = std::array::from_fn(|r| self.cells[r][c]);
+        for c in 0..N {
+            let col: [Cell; N] = std::array::from_fn(|r| self.cells[r][c]);
             let (b1, b2) = black_pair_in_row(&col, c);
             col_targets[c] = (b1 + 1..b2)
                 .map(|r| match self.cells[r][c] {
@@ -66,7 +66,7 @@ impl Grid {
     ///
     /// A puzzle is *valid* when the targets derived from the grid's black
     /// placement and digit arrangement lead to exactly one solution — i.e.,
-    /// a solver given only the 12 target numbers can reconstruct this grid
+    /// a solver given only the N target numbers can reconstruct this grid
     /// uniquely.
     pub fn is_valid_puzzle(&self) -> bool {
         let (row_targets, col_targets) = self.compute_targets();
@@ -79,8 +79,8 @@ impl Grid {
 /// Find the positions of the two black squares in a row (or column) of cells.
 ///
 /// Panics if the row does not contain exactly two `Black` cells.
-fn black_pair_in_row(cells: &[Cell; 6], index: usize) -> (usize, usize) {
-    let blacks: Vec<usize> = (0..6).filter(|&i| cells[i] == Cell::Black).collect();
+fn black_pair_in_row<const N: usize>(cells: &[Cell; N], index: usize) -> (usize, usize) {
+    let blacks: Vec<usize> = (0..N).filter(|&i| cells[i] == Cell::Black).collect();
     assert_eq!(
         blacks.len(),
         2,
@@ -96,8 +96,7 @@ fn black_pair_in_row(cells: &[Cell; 6], index: usize) -> (usize, usize) {
 mod tests {
     use super::*;
 
-    fn make_grid(rows: &[[u8; 6]; 6]) -> Grid {
-        // 0 = Black, 1-4 = Number
+    fn make_grid(rows: &[[u8; 6]; 6]) -> Grid<6> {
         let cells = std::array::from_fn(|r| {
             std::array::from_fn(|c| match rows[r][c] {
                 0 => Cell::Black,

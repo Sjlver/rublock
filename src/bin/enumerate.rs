@@ -1,8 +1,11 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use rublock::enumerate::{count_from_partial, generate_partial_grids};
 
-/// Count all valid 6×6 rublock grids and report how many are valid puzzles
+/// Count all valid 5×5 rublock grids and report how many are valid puzzles
 /// (i.e. have exactly one solution given their derived targets).
 ///
 /// Strategy:
@@ -10,7 +13,8 @@ use rublock::enumerate::{count_from_partial, generate_partial_grids};
 ///    parallel load distribution.  Target: 100 items per CPU core, so that
 ///    `rayon`'s work-stealing scheduler can handle uneven subtree sizes
 ///    while maintaining roughly linear progress.
-/// 2. Process each work item in parallel, accumulating counts.
+/// 2. Process each work item in parallel using atomic counters to track the
+///    running totals, so the progress bar can show live counts.
 /// 3. Display a progress bar while work is in flight.
 fn main() {
     let num_threads = rayon::current_num_threads();
@@ -18,7 +22,7 @@ fn main() {
 
     // ── Build work queue ──────────────────────────────────────────────────────
 
-    let work_items = generate_partial_grids(target);
+    let work_items = generate_partial_grids::<5>(target);
 
     println!(
         "Work queue: {} items ({} threads × 100 target).",
@@ -26,12 +30,23 @@ fn main() {
         num_threads,
     );
 
+    // ── Shared atomic counters ────────────────────────────────────────────────
+    //
+    // Workers increment these atomically so the progress bar can read live
+    // totals without synchronisation overhead on the hot path.  Relaxed
+    // ordering is sufficient: we only need the final value to be correct, not
+    // any ordering guarantee relative to other memory operations.
+
+    let total_grids = Arc::new(AtomicU64::new(0));
+    let valid_puzzles = Arc::new(AtomicU64::new(0));
+
     // ── Set up progress bar ───────────────────────────────────────────────────
 
     let pb = ProgressBar::new(work_items.len() as u64);
     pb.set_style(
         ProgressStyle::with_template(
-            "[{elapsed_precise}] [{bar:50.cyan/blue}] {pos:>6}/{len} items  ({eta} remaining)",
+            "[{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>6}/{len} items  \
+             grids={msg}  ({eta} remaining)",
         )
         .unwrap()
         .progress_chars("=> "),
@@ -41,21 +56,30 @@ fn main() {
     //
     // Each work item is an independent subtree of the full search.  `rayon`
     // distributes them across the thread pool and steals work to keep all
-    // cores busy.  The two `u64` counts are folded with addition, which is
-    // associative and commutative — safe to reduce in any order.
+    // cores busy.
 
-    let (total, valid) = work_items
-        .par_iter()
-        .map(|partial| {
-            let counts = count_from_partial(partial);
-            pb.inc(1);
-            counts
-        })
-        .reduce(|| (0, 0), |(a0, b0), (a1, b1)| (a0 + a1, b0 + b1));
+    let total_grids_ref = Arc::clone(&total_grids);
+    let valid_puzzles_ref = Arc::clone(&valid_puzzles);
+
+    work_items.par_iter().for_each(|partial| {
+        let (t, v) = count_from_partial(partial);
+        total_grids_ref.fetch_add(t, Ordering::Relaxed);
+        valid_puzzles_ref.fetch_add(v, Ordering::Relaxed);
+        // Update message with live counts before incrementing the bar.
+        pb.set_message(format!(
+            "{} ({} valid)",
+            total_grids_ref.load(Ordering::Relaxed),
+            valid_puzzles_ref.load(Ordering::Relaxed),
+        ));
+        pb.inc(1);
+    });
 
     pb.finish_with_message("done");
 
     // ── Report ────────────────────────────────────────────────────────────────
+
+    let total = total_grids.load(Ordering::Relaxed);
+    let valid = valid_puzzles.load(Ordering::Relaxed);
 
     println!("\nTotal valid grids:          {total}");
     println!("Valid puzzles (unique soln): {valid}");

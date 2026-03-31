@@ -97,6 +97,9 @@ struct Tables {
     /// Maximum valid distance `d = p2 - p1` between the two blacks for each
     /// target.
     d_max: Vec<usize>,
+
+    /// Maximum achievable cage sum (= 1 + 2 + ... + num_digits).
+    max_sum: usize,
 }
 
 impl Tables {
@@ -157,26 +160,23 @@ impl Tables {
             cant_be_inside,
             d_min,
             d_max,
+            max_sum: max_target,
         }
     }
 }
 
-// ── Solver rules (N = 6) ─────────────────────────────────────────────────────
-//
-// This impl block is intentionally specialised for 6×6.  Once the rules are
-// correct and tested, they can be generalised and moved to the generic
-// `impl<const N: usize> SolverState<N>` block above.
+// ── Solver rules ──────────────────────────────────────────────────────────────
 
-impl SolverState<6> {
-    // Bit positions for the "black" value variants, specific to N = 6.
-    // (The general formula is in the CellDomain layout comment above.)
-    const BLACK1_ROW: u64 = 1 << 5; // N - 1
-    const BLACK2_ROW: u64 = 1 << 6; // N
-    const BLACK1_COL: u64 = 1 << 7; // N + 1
-    const BLACK2_COL: u64 = 1 << 8; // N + 2
+impl<const N: usize> SolverState<N> {
+    // Bit positions for the "black" value variants.
+    const BLACK1_ROW: u64 = 1u64 << (N - 1);
+    const BLACK2_ROW: u64 = 1u64 << N;
+    const BLACK1_COL: u64 = 1u64 << (N + 1);
+    const BLACK2_COL: u64 = 1u64 << (N + 2);
 
     // Composite masks for common groups of bits.
-    const ALL_DIGITS: u64 = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
+    // Digit bits occupy positions 1..=(N-2); ALL_DIGITS sets exactly those bits.
+    const ALL_DIGITS: u64 = ((1u64 << (N - 2)) - 1) << 1;
 
     const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
     const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
@@ -184,7 +184,7 @@ impl SolverState<6> {
 
     /// Clear all bits in `mask` from a cell's domain.  Returns `true` iff any
     /// bit was actually set before (i.e. the domain shrank).
-    fn clear_mask(domains: &mut [[CellDomain; 6]; 6], row: usize, col: usize, mask: u64) -> bool {
+    fn clear_mask(domains: &mut [[CellDomain; N]; N], row: usize, col: usize, mask: u64) -> bool {
         let before = domains[row][col];
         domains[row][col] = before & !mask;
         domains[row][col] != before
@@ -208,17 +208,17 @@ impl SolverState<6> {
 
         if bit & Self::ALL_DIGITS != 0 {
             // Remove this digit from every other cell in the row and column.
-            for c in (0..6).filter(|&c| c != col) {
+            for c in (0..N).filter(|&c| c != col) {
                 changed |= Self::clear_mask(&mut self.domains, row, c, bit);
             }
-            for r in (0..6).filter(|&r| r != row) {
+            for r in (0..N).filter(|&r| r != row) {
                 changed |= Self::clear_mask(&mut self.domains, r, col, bit);
             }
             // Fix this cell: keep only this digit.
             changed |= Self::clear_mask(&mut self.domains, row, col, !bit);
         } else if bit & Self::ROW_BLACKS != 0 {
             // Each row-black variant appears once per row.
-            for c in (0..6).filter(|&c| c != col) {
+            for c in (0..N).filter(|&c| c != col) {
                 changed |= Self::clear_mask(&mut self.domains, row, c, bit);
             }
 
@@ -231,7 +231,7 @@ impl SolverState<6> {
             );
         } else if bit & Self::COL_BLACKS != 0 {
             // Each col-black variant appears once per column.
-            for r in (0..6).filter(|&r| r != row) {
+            for r in (0..N).filter(|&r| r != row) {
                 changed |= Self::clear_mask(&mut self.domains, r, col, bit);
             }
 
@@ -250,13 +250,13 @@ impl SolverState<6> {
             for left in 0..col {
                 changed |= Self::clear_mask(&mut self.domains, row, left, Self::BLACK2_ROW)
             }
-            for right in col + 1..6 {
+            for right in col + 1..N {
                 changed |= Self::clear_mask(&mut self.domains, row, right, Self::BLACK1_ROW)
             }
             for above in 0..row {
                 changed |= Self::clear_mask(&mut self.domains, above, col, Self::BLACK2_COL)
             }
-            for below in row + 1..6 {
+            for below in row + 1..N {
                 changed |= Self::clear_mask(&mut self.domains, below, col, Self::BLACK1_COL)
             }
         }
@@ -276,14 +276,14 @@ impl SolverState<6> {
     fn apply_black_range_rules(&mut self) -> bool {
         let mut changed = false;
 
-        for r in 0..6 {
+        for r in 0..N {
             let t = self.puzzle.row_targets[r] as usize;
             let d_min = self.tables.d_min[t];
             let d_max = self.tables.d_max[t];
-            for p in 0..6 {
+            for p in 0..N {
                 // BLACK1_ROW at p: need BLACK2_ROW somewhere in [p+d_min, p+d_max].
                 let lo = p + d_min;
-                let hi = (p + d_max + 1).min(6);
+                let hi = (p + d_max + 1).min(N);
                 if (lo..hi).all(|q| self.domains[r][q] & Self::BLACK2_ROW == 0) {
                     changed |= Self::clear_mask(&mut self.domains, r, p, Self::BLACK1_ROW);
                 }
@@ -296,13 +296,13 @@ impl SolverState<6> {
             }
         }
 
-        for c in 0..6 {
+        for c in 0..N {
             let t = self.puzzle.col_targets[c] as usize;
             let d_min = self.tables.d_min[t];
             let d_max = self.tables.d_max[t];
-            for p in 0..6 {
+            for p in 0..N {
                 let lo = p + d_min;
-                let hi = (p + d_max + 1).min(6);
+                let hi = (p + d_max + 1).min(N);
                 if (lo..hi).all(|q| self.domains[q][c] & Self::BLACK2_COL == 0) {
                     changed |= Self::clear_mask(&mut self.domains, p, c, Self::BLACK1_COL);
                 }
@@ -332,17 +332,18 @@ impl SolverState<6> {
     /// This rule only removes digit bits; black placement is handled elsewhere.
     fn apply_inside_outside_rule(&mut self) -> bool {
         let mut changed = false;
+        let max_sum = self.tables.max_sum;
 
-        for r in 0..6 {
+        for r in 0..N {
             let t = self.puzzle.row_targets[r] as usize;
             let cant_inside = self.tables.cant_be_inside[t];
-            let cant_outside = self.tables.cant_be_inside[10 - t];
+            let cant_outside = self.tables.cant_be_inside[max_sum - t];
 
-            for p in 0..6 {
+            for p in 0..N {
                 let b1_before = (0..p).any(|q| self.domains[r][q] & Self::BLACK1_ROW != 0);
                 let b2_before = (0..p).any(|q| self.domains[r][q] & Self::BLACK2_ROW != 0);
-                let b1_after = (p + 1..6).any(|q| self.domains[r][q] & Self::BLACK1_ROW != 0);
-                let b2_after = (p + 1..6).any(|q| self.domains[r][q] & Self::BLACK2_ROW != 0);
+                let b1_after = (p + 1..N).any(|q| self.domains[r][q] & Self::BLACK1_ROW != 0);
+                let b2_after = (p + 1..N).any(|q| self.domains[r][q] & Self::BLACK2_ROW != 0);
 
                 if !b1_before || !b2_after {
                     changed |= Self::clear_mask(&mut self.domains, r, p, cant_outside);
@@ -353,16 +354,16 @@ impl SolverState<6> {
             }
         }
 
-        for c in 0..6 {
+        for c in 0..N {
             let t = self.puzzle.col_targets[c] as usize;
             let cant_inside = self.tables.cant_be_inside[t];
-            let cant_outside = self.tables.cant_be_inside[10 - t];
+            let cant_outside = self.tables.cant_be_inside[max_sum - t];
 
-            for p in 0..6 {
+            for p in 0..N {
                 let b1_before = (0..p).any(|q| self.domains[q][c] & Self::BLACK1_COL != 0);
                 let b2_before = (0..p).any(|q| self.domains[q][c] & Self::BLACK2_COL != 0);
-                let b1_after = (p + 1..6).any(|q| self.domains[q][c] & Self::BLACK1_COL != 0);
-                let b2_after = (p + 1..6).any(|q| self.domains[q][c] & Self::BLACK2_COL != 0);
+                let b1_after = (p + 1..N).any(|q| self.domains[q][c] & Self::BLACK1_COL != 0);
+                let b2_after = (p + 1..N).any(|q| self.domains[q][c] & Self::BLACK2_COL != 0);
 
                 if !b1_before || !b2_after {
                     changed |= Self::clear_mask(&mut self.domains, p, c, cant_outside);
@@ -383,8 +384,8 @@ impl SolverState<6> {
     fn apply_singleton_rule(&mut self) -> bool {
         let mut changed = false;
 
-        for r in 0..6 {
-            for c in 0..6 {
+        for r in 0..N {
+            for c in 0..N {
                 let domain = self.domains[r][c];
                 if domain.count_ones() == 1 {
                     changed |= self.set_cell(r, c, domain);
@@ -405,20 +406,24 @@ impl SolverState<6> {
     fn apply_hidden_single_rule(&mut self) -> bool {
         let mut changed = false;
 
-        for r in 0..6 {
-            // Bits 1–4 are digits; bits 5–6 are the two row-black variants.
-            for bit_pos in 1u32..=6 {
-                let bit = 1u64 << bit_pos;
+        for r in 0..N {
+            // Digit bits (1..=N-2) and row-black bits (N-1, N).
+            let mut mask = Self::ALL_DIGITS | Self::ROW_BLACKS;
+            while mask != 0 {
+                let bit = mask & mask.wrapping_neg();
+                mask &= mask - 1;
                 if let Some(only_col) = self.singleton_in_row(r, bit) {
                     changed |= self.set_cell(r, only_col, bit);
                 }
             }
         }
 
-        for c in 0..6 {
-            // Bits 1–4 are digits; bits 7–8 are the two col-black variants.
-            for bit_pos in [1u32, 2, 3, 4, 7, 8] {
-                let bit = 1u64 << bit_pos;
+        for c in 0..N {
+            // Digit bits (1..=N-2) and col-black bits (N+1, N+2).
+            let mut mask = Self::ALL_DIGITS | Self::COL_BLACKS;
+            while mask != 0 {
+                let bit = mask & mask.wrapping_neg();
+                mask &= mask - 1;
                 if let Some(only_row) = self.singleton_in_col(c, bit) {
                     changed |= self.set_cell(only_row, c, bit);
                 }
@@ -437,8 +442,8 @@ impl SolverState<6> {
     fn apply_black_consistency_rule(&mut self) -> bool {
         let mut changed = false;
 
-        for r in 0..6 {
-            for c in 0..6 {
+        for r in 0..N {
+            for c in 0..N {
                 let domain = self.domains[r][c];
                 if domain & Self::ROW_BLACKS == 0 {
                     changed |= Self::clear_mask(&mut self.domains, r, c, Self::COL_BLACKS);
@@ -458,7 +463,7 @@ impl SolverState<6> {
     /// or `None` if no such position exists or more than one does.
     fn singleton_in_row(&self, r: usize, bit: u64) -> Option<usize> {
         let mut found = None;
-        for c in 0..6 {
+        for c in 0..N {
             if self.domains[r][c] & bit != 0 {
                 if found.is_some() {
                     return None;
@@ -473,7 +478,7 @@ impl SolverState<6> {
     /// or `None` if no such position exists or more than one does.
     fn singleton_in_col(&self, c: usize, bit: u64) -> Option<usize> {
         let mut found = None;
-        for r in 0..6 {
+        for r in 0..N {
             if self.domains[r][c] & bit != 0 {
                 if found.is_some() {
                     return None;
@@ -492,7 +497,7 @@ impl SolverState<6> {
     /// only those where every cage cell's domain intersects the set, then
     /// removes from every cage cell any digit absent from the union.
     fn apply_cage(
-        domains: &mut [[CellDomain; 6]; 6],
+        domains: &mut [[CellDomain; N]; N],
         cells: &[(usize, usize)],
         target: usize,
         tuples: &[Vec<Vec<u64>>],
@@ -530,10 +535,11 @@ impl SolverState<6> {
     /// unassigned, exactly one digit-set is feasible and the union pins the
     /// remaining digit.
     fn apply_inside_outside_cage_rule(&mut self) -> bool {
+        let max_sum = self.tables.max_sum;
         let tuples = &self.tables.valid_tuples;
         let mut changed = false;
 
-        for r in 0..6 {
+        for r in 0..N {
             let t = self.puzzle.row_targets[r] as usize;
             let Some(b1) = self.singleton_in_row(r, Self::BLACK1_ROW) else {
                 continue;
@@ -549,12 +555,12 @@ impl SolverState<6> {
                 continue;
             }
             let inside: Vec<(usize, usize)> = (b1 + 1..b2).map(|c| (r, c)).collect();
-            let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..6).map(|c| (r, c)).collect();
+            let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..N).map(|c| (r, c)).collect();
             changed |= Self::apply_cage(&mut self.domains, &inside, t, tuples);
-            changed |= Self::apply_cage(&mut self.domains, &outside, 10 - t, tuples);
+            changed |= Self::apply_cage(&mut self.domains, &outside, max_sum - t, tuples);
         }
 
-        for c in 0..6 {
+        for c in 0..N {
             let t = self.puzzle.col_targets[c] as usize;
             let Some(b1) = self.singleton_in_col(c, Self::BLACK1_COL) else {
                 continue;
@@ -566,9 +572,9 @@ impl SolverState<6> {
                 continue;
             }
             let inside: Vec<(usize, usize)> = (b1 + 1..b2).map(|r| (r, c)).collect();
-            let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..6).map(|r| (r, c)).collect();
+            let outside: Vec<(usize, usize)> = (0..b1).chain(b2 + 1..N).map(|r| (r, c)).collect();
             changed |= Self::apply_cage(&mut self.domains, &inside, t, tuples);
-            changed |= Self::apply_cage(&mut self.domains, &outside, 10 - t, tuples);
+            changed |= Self::apply_cage(&mut self.domains, &outside, max_sum - t, tuples);
         }
 
         changed
@@ -655,8 +661,8 @@ impl SolverState<6> {
     /// Returns `None` when every cell is already fully determined.
     fn pick_branching_cell(&self) -> Option<(usize, usize)> {
         let mut best: Option<(usize, usize, u32)> = None;
-        for r in 0..6 {
-            for c in 0..6 {
+        for r in 0..N {
+            for c in 0..N {
                 let bits = Self::branching_bits(self.domains[r][c]);
                 let freedom = bits.count_ones();
                 if freedom > 1 && best.map_or(true, |b| freedom < b.2) {
@@ -696,7 +702,7 @@ impl SolverState<6> {
 
         let Some((row, col)) = state.pick_branching_cell() else {
             // Propagation stalled but the grid is neither solved nor
-            // contradicted.  This shouldn't happen for well-formed 6×6
+            // contradicted.  This shouldn't happen for well-formed N×N
             // inputs, but returning 0 is safer than panicking.
             return 0;
         };
@@ -721,19 +727,23 @@ impl SolverState<6> {
 
 // ── Display ───────────────────────────────────────────────────────────────────
 
-impl fmt::Display for SolverState<6> {
+impl<const N: usize> fmt::Display for SolverState<N> {
     /// Print the board and, for unsolved cells, the remaining domain bits.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ct = &self.puzzle.col_targets;
-        writeln!(
-            f,
-            "    {:2}  {:2}  {:2}  {:2}  {:2}  {:2}",
-            ct[0], ct[1], ct[2], ct[3], ct[4], ct[5]
-        )?;
-        writeln!(f, "   +---+---+---+---+---+---+")?;
-        for r in 0..6 {
+        write!(f, "    ")?;
+        for c in 0..N {
+            if c > 0 {
+                write!(f, "  ")?;
+            }
+            write!(f, "{:2}", ct[c])?;
+        }
+        writeln!(f)?;
+        let sep = format!("   +{}", "---+".repeat(N));
+        writeln!(f, "{}", sep)?;
+        for r in 0..N {
             write!(f, "{:2} |", self.puzzle.row_targets[r])?;
-            for c in 0..6 {
+            for c in 0..N {
                 let domain = self.domains[r][c];
                 if domain & Self::ALL_DIGITS == 0 && domain != 0 {
                     write!(f, " # |")?;
@@ -749,13 +759,13 @@ impl fmt::Display for SolverState<6> {
                         6 => " ⡟ ",
                         7 => " ⡿ ",
                         8 => " ⣿ ",
-                        bits => panic!("invalid bit count at row {r} col {c}: {bits}"),
+                        _ => " ? ",
                     };
                     write!(f, "{}|", sym)?;
                 }
             }
             writeln!(f)?;
-            writeln!(f, "   +---+---+---+---+---+---+")?;
+            writeln!(f, "{}", sep)?;
         }
         Ok(())
     }
@@ -1189,5 +1199,47 @@ mod tests {
                 "   +---+---+---+---+---+---+\n",
             )
         );
+    }
+
+    // ── Tests for other grid sizes ────────────────────────────────────────────
+
+    #[test]
+    fn n2_all_black_grid_has_unique_solution() {
+        // N=2: a 2×2 grid with 2 blacks per row/column and no digit cells.
+        // Targets must be 0 (no cells between adjacent blacks).
+        // The only valid arrangement is [[B1,B2],[B1,B2]] with consistent
+        // column ordering, and the solver should find exactly one solution.
+        let state = SolverState::<2>::new(Puzzle::new([0; 2], [0; 2]));
+        assert_eq!(state.count_solutions(2), 1);
+    }
+
+    #[test]
+    fn n4_has_solutions_for_satisfiable_targets() {
+        // N=4 puzzle that can be satisfied.  All targets 0 means adjacent
+        // blacks in every row and column; many valid grids exist.
+        let state = SolverState::<4>::new(Puzzle::new([0; 4], [0; 4]));
+        assert!(state.count_solutions(1) >= 1);
+    }
+
+    #[test]
+    fn n4_no_solutions_for_contradictory_targets() {
+        // All row targets 3 forces blacks to col 0 and col 3 in every row,
+        // which means every cell in cols 0 and 3 is black — but a column
+        // can hold at most 2 blacks, giving a contradiction.
+        let state = SolverState::<4>::new(Puzzle::new([3; 4], [3; 4]));
+        assert_eq!(state.count_solutions(1), 0);
+    }
+
+    #[test]
+    fn n4_domain_initialises_correctly() {
+        // For N=4: digits are 1 and 2 (bits 1-2), row blacks are bits 3-4,
+        // col blacks are bits 5-6. Full cell = bits 1-6 = 0b1111110.
+        let state = SolverState::<4>::new(Puzzle::new([0; 4], [0; 4]));
+        assert_eq!(state.domains[0][0], 0b1111110);
+        assert_eq!(SolverState::<4>::ALL_DIGITS, 0b110);
+        assert_eq!(SolverState::<4>::BLACK1_ROW, 1 << 3);
+        assert_eq!(SolverState::<4>::BLACK2_ROW, 1 << 4);
+        assert_eq!(SolverState::<4>::BLACK1_COL, 1 << 5);
+        assert_eq!(SolverState::<4>::BLACK2_COL, 1 << 6);
     }
 }

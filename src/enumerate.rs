@@ -1,14 +1,5 @@
 use crate::grid::{Cell, Grid};
 
-/// Candidate values to try at each cell: black first, then digits 1–4.
-const CANDIDATES: [Cell; 5] = [
-    Cell::Black,
-    Cell::Number(1),
-    Cell::Number(2),
-    Cell::Number(3),
-    Cell::Number(4),
-];
-
 // ── PartialGrid ───────────────────────────────────────────────────────────────
 
 /// Working state for cell-by-cell grid enumeration.
@@ -16,36 +7,39 @@ const CANDIDATES: [Cell; 5] = [
 /// Cells are filled in row-major order (left to right, top to bottom).
 /// Per-row and per-column constraint counts are updated incrementally so
 /// that invalid branches can be pruned as soon as a constraint is violated.
+///
+/// Each row and column must contain exactly 2 black squares and the digits
+/// 1..=(N-2), for a total of N cells per row/column.
 #[derive(Clone)]
-pub struct PartialGrid {
-    cells: [[Cell; 6]; 6],
-    /// Number of cells filled so far (0..=36).
+pub struct PartialGrid<const N: usize> {
+    cells: [[Cell; N]; N],
+    /// Number of cells filled so far (0..=N*N).
     filled: usize,
     /// Number of black squares placed in each row so far.
-    row_black: [u8; 6],
+    row_black: [u8; N],
     /// Bitmask of digits placed in each row so far.
     /// Bit `k` (0-indexed from LSB) is set when digit `k + 1` has been used.
-    row_digit_mask: [u8; 6],
+    row_digit_mask: [u8; N],
     /// Number of black squares placed in each column so far.
-    col_black: [u8; 6],
+    col_black: [u8; N],
     /// Bitmask of digits placed in each column so far.
-    col_digit_mask: [u8; 6],
+    col_digit_mask: [u8; N],
 }
 
-impl PartialGrid {
+impl<const N: usize> PartialGrid<N> {
     pub fn new() -> Self {
         Self {
-            cells: [[Cell::Empty; 6]; 6],
+            cells: [[Cell::Empty; N]; N],
             filled: 0,
-            row_black: [0; 6],
-            row_digit_mask: [0; 6],
-            col_black: [0; 6],
-            col_digit_mask: [0; 6],
+            row_black: [0; N],
+            row_digit_mask: [0; N],
+            col_black: [0; N],
+            col_digit_mask: [0; N],
         }
     }
 
     fn is_complete(&self) -> bool {
-        self.filled == 36
+        self.filled == N * N
     }
 
     /// Try placing `value` at the next empty cell (row-major order).
@@ -55,10 +49,10 @@ impl PartialGrid {
     ///
     /// After placing, a look-ahead checks that the remaining cells in the
     /// current row and column can still satisfy the grid invariants:
-    /// exactly two black squares and digits 1–4 in every row and column.
+    /// exactly two black squares and digits 1..=(N-2) in every row and column.
     fn try_place(&self, value: Cell) -> Option<Self> {
-        let row = self.filled / 6;
-        let col = self.filled % 6;
+        let row = self.filled / N;
+        let col = self.filled % N;
 
         let mut next = self.clone();
         next.cells[row][col] = value;
@@ -85,26 +79,32 @@ impl PartialGrid {
         }
 
         // Look-ahead for the current row.
-        // The remaining cells (positions col+1..=5) must be able to supply
+        // The remaining cells (positions col+1..=N-1) must be able to supply
         // the blacks and digits that are still missing.
-        let cells_left_in_row = 5 - col;
+        let cells_left_in_row = (N - 1) - col;
         let row_blacks_needed = 2u8.saturating_sub(next.row_black[row]) as usize;
-        let row_digits_needed = (4 - next.row_digit_mask[row].count_ones()) as usize;
+        let row_digits_needed = ((N as u32 - 2) - next.row_digit_mask[row].count_ones()) as usize;
         if row_blacks_needed + row_digits_needed > cells_left_in_row {
             return None;
         }
 
         // Look-ahead for the current column.
-        // The remaining rows (positions row+1..=5) must satisfy the same.
-        let rows_left_in_col = 5 - row;
+        // The remaining rows (positions row+1..=N-1) must satisfy the same.
+        let rows_left_in_col = (N - 1) - row;
         let col_blacks_needed = 2u8.saturating_sub(next.col_black[col]) as usize;
-        let col_digits_needed = (4 - next.col_digit_mask[col].count_ones()) as usize;
+        let col_digits_needed = ((N as u32 - 2) - next.col_digit_mask[col].count_ones()) as usize;
         if col_blacks_needed + col_digits_needed > rows_left_in_col {
             return None;
         }
 
         Some(next)
     }
+}
+
+/// Iterator over the candidate values to try at each cell: black first, then
+/// digits 1..=(N-2).
+fn candidates<const N: usize>() -> impl Iterator<Item = Cell> {
+    std::iter::once(Cell::Black).chain((1u8..=(N as u8 - 2)).map(Cell::Number))
 }
 
 // ── BFS work-queue generation ─────────────────────────────────────────────────
@@ -118,7 +118,7 @@ impl PartialGrid {
 /// A good `target` is around 100× the number of CPU cores, which gives
 /// `rayon`'s work-stealing scheduler enough items to balance uneven subtree
 /// sizes while keeping BFS overhead low.
-pub fn generate_partial_grids(target: usize) -> Vec<PartialGrid> {
+pub fn generate_partial_grids<const N: usize>(target: usize) -> Vec<PartialGrid<N>> {
     let mut queue = vec![PartialGrid::new()];
 
     loop {
@@ -133,7 +133,7 @@ pub fn generate_partial_grids(target: usize) -> Vec<PartialGrid> {
                 // Leaf node: keep it as-is; it will be counted in the DFS phase.
                 queue.push(partial);
             } else {
-                for value in CANDIDATES {
+                for value in candidates::<N>() {
                     if let Some(extended) = partial.try_place(value) {
                         queue.push(extended);
                     }
@@ -153,14 +153,14 @@ pub fn generate_partial_grids(target: usize) -> Vec<PartialGrid> {
 ///
 /// This is the unit of parallel work: call it from `par_iter` on the items
 /// returned by `generate_partial_grids`.
-pub fn count_from_partial(partial: &PartialGrid) -> (u64, u64) {
+pub fn count_from_partial<const N: usize>(partial: &PartialGrid<N>) -> (u64, u64) {
     let mut total = 0u64;
     let mut valid = 0u64;
     dfs(partial, &mut total, &mut valid);
     (total, valid)
 }
 
-fn dfs(partial: &PartialGrid, total: &mut u64, valid: &mut u64) {
+fn dfs<const N: usize>(partial: &PartialGrid<N>, total: &mut u64, valid: &mut u64) {
     if partial.is_complete() {
         *total += 1;
         let grid = Grid {
@@ -172,7 +172,7 @@ fn dfs(partial: &PartialGrid, total: &mut u64, valid: &mut u64) {
         return;
     }
 
-    for value in CANDIDATES {
+    for value in candidates::<N>() {
         if let Some(next) = partial.try_place(value) {
             dfs(&next, total, valid);
         }
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn generate_partial_grids_stops_at_target() {
-        let partials = generate_partial_grids(50);
+        let partials = generate_partial_grids::<5>(50);
         assert!(partials.len() >= 50);
     }
 
@@ -195,18 +195,20 @@ mod tests {
     fn generate_partial_grids_all_items_consistent() {
         // Verify that every returned partial satisfies the row/column
         // invariants for the cells that have been filled.
-        let partials = generate_partial_grids(200);
+        // N=5: each row has 2 blacks and digits 1,2,3 (mask = 0b111 = 7).
+        let partials = generate_partial_grids::<5>(200);
+        let full_digit_mask: u8 = (1 << (5u8 - 2)) - 1; // 0b111
         for p in &partials {
-            let row = p.filled / 6;
+            let row = p.filled / 5;
             // All completed rows must be fully valid.
             for r in 0..row {
                 assert_eq!(p.row_black[r], 2, "row {r} black count");
-                assert_eq!(p.row_digit_mask[r], 0b1111, "row {r} digits");
+                assert_eq!(p.row_digit_mask[r], full_digit_mask, "row {r} digits");
             }
             // The partial row (if any) must not be over-committed.
-            if p.filled % 6 != 0 {
+            if p.filled % 5 != 0 {
                 assert!(p.row_black[row] <= 2);
-                assert_eq!(p.row_digit_mask[row] & !0b1111, 0);
+                assert_eq!(p.row_digit_mask[row] & !full_digit_mask, 0);
             }
         }
     }

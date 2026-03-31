@@ -2,19 +2,21 @@
 
 Rublock is a small puzzle solving project, to learn Rust. See README.md for the puzzle rules.
 
-## Solver generalization for arbitrary N (partially done)
+## Solver generalization for arbitrary N (done)
 
-Currently, the solver in src/solver.rs is specialized for N=6. I want to make it general.
+The solver in src/solver.rs is now fully generic over `const N: usize`.  All
+rules, masks, and loops use N instead of the old hardcoded 6.  The bit-position
+constants (BLACK1_ROW, ALL_DIGITS, etc.) are associated constants computed from N
+at monomorphisation time.  `Tables` stores `max_sum` so that the outside-cage
+target (`max_sum - t`) is derived correctly for any N.
 
-- Most of the size-specific code can be generalized if we generalize VALID_TUPLES first. We need one per size.
-- The other constants like CANT_BE_INSIDE and D_MIN can be easily derived from VALID_TUPLES.
+Tests cover N=2 (degenerate all-black grid) and N=4 (two-digit puzzles) in
+addition to the original N=6 newspaper puzzles.
 
-Overall, I'm not super sure it makes sense that SolverState has a `const N` template parameter. Maybe it does... after all, it would be nice if it is easily cloneable without heap allocations. But we have to find a good idiomatic way to make this work.
-
-Next steps:
-- generalize the solver for N >= 2
-- Add some tests for other sizes. N=2 is an extreme case with just the all-black grid.
-- change bin/enumerate.rs to enumerate puzzles of size 5 instead of 6. Size 6 takes a bit too long for iterative development.
+Both `grid.rs` and `enumerate.rs` are now also fully generic over N.  `PartialGrid<N>`,
+`Grid<N>`, and all helper functions use `N` throughout.  `bin/enumerate.rs` enumerates
+5×5 grids (`N=5`) and shows live grid/puzzle counts in the progress bar via
+`Arc<AtomicU64>` shared atomic counters.
 
 ## Solver improvements
 
