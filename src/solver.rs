@@ -90,14 +90,6 @@ struct Tables {
     /// full digit set.
     cant_be_inside: Vec<u64>,
 
-    /// Minimum valid distance `d = p2 - p1` between the two blacks for each
-    /// target.  `d` is valid iff `valid_tuples[t][d - 1]` is non-empty.
-    d_min: Vec<usize>,
-
-    /// Maximum valid distance `d = p2 - p1` between the two blacks for each
-    /// target.
-    d_max: Vec<usize>,
-
     /// Maximum achievable cage sum (= 1 + 2 + ... + num_digits).
     max_sum: usize,
 }
@@ -140,26 +132,9 @@ impl Tables {
             })
             .collect();
 
-        // d_min[t] / d_max[t]: distance d = k+1 is valid for target t iff
-        // valid_tuples[t][k] is non-empty.
-        let mut d_min = vec![0usize; num_targets];
-        let mut d_max = vec![0usize; num_targets];
-        for t in 0..num_targets {
-            let (lo, hi) = (0..=num_digits)
-                .filter(|&k| !valid_tuples[t][k].is_empty())
-                .map(|k| k + 1)
-                // Every reachable target has at least one valid distance (t=0
-                // uses d=1 with no cells between the blacks).
-                .fold((usize::MAX, 0), |(lo, hi), d| (lo.min(d), hi.max(d)));
-            d_min[t] = lo;
-            d_max[t] = hi;
-        }
-
         Self {
             valid_tuples,
             cant_be_inside,
-            d_min,
-            d_max,
             max_sum: max_target,
         }
     }
@@ -266,50 +241,156 @@ impl<const N: usize> SolverState<N> {
 
     // ── Rules ────────────────────────────────────────────────────────────────
 
-    /// Rule: black-1 and black-2 must be placed at a distance `d = p2 - p1`
-    /// within `[D_MIN[target], D_MAX[target]]`, and each must have a valid
-    /// counterpart still present in the current domain.
+    /// Returns true if any tuple in `tuples` supports a black at position `pos`.
+    /// The end cell must have `black_bit` set. The scan to the end must wrap
+    /// around iff `wrap` is set. The in-between cells' domain must intersect
+    /// with the tuple.
+    fn black_has_forward_support(
+        line: &[u64; N],
+        pos: usize,
+        tuples: &[Vec<u64>],
+        black_bit: u64,
+        wrap: bool,
+    ) -> bool {
+        tuples
+            .iter()
+            .enumerate()
+            .flat_map(|(l, ts)| ts.iter().map(move |&t| (l, t)))
+            .any(|(l, t)| {
+                let anchor = (pos + l + 1) % N;
+                (!wrap && anchor > pos || wrap && anchor < pos)
+                    && line[anchor] & black_bit != 0
+                    && (pos + 1..=pos + l)
+                        .map(|p| line[p % N])
+                        .all(|cell| cell & t != 0)
+            })
+    }
+
+    /// Same as `black_has_forward_support`, but scans backwards.
+    fn black_has_backward_support(
+        line: &[u64; N],
+        pos: usize,
+        tuples: &[Vec<u64>],
+        black_bit: u64,
+        wrap: bool,
+    ) -> bool {
+        tuples
+            .iter()
+            .enumerate()
+            .flat_map(|(l, ts)| ts.iter().map(move |&t| (l, t)))
+            .any(|(l, t)| {
+                let anchor = (pos + N - l - 1) % N;
+                (!wrap && anchor < pos || wrap && anchor > pos)
+                    && line[anchor] & black_bit != 0
+                    && (1..=l)
+                        .map(|p| line[(pos + N - p) % N])
+                        .all(|cell| cell & t != 0)
+            })
+    }
+
+    /// Rule: BLACK bits must have support from at least one valid tuple, in both
+    /// the forward and backward direction.
     ///
-    /// For black-1 at position `p`, remove it if no cell in
-    /// `[p + D_MIN, p + D_MAX]` still has BLACK2 in its domain.  Black-2 is
-    /// symmetric: for black-2 at `p`, look for BLACK1 in `[p - D_MAX, p - D_MIN]`.
-    fn apply_black_range_rules(&mut self) -> bool {
+    /// 1. **Forward (inside) support:** There must exist some length `l` and a
+    ///    valid tuple in `valid_tuples[t][l]` such that:
+    ///     - Cell at `p + l + 1` has BLACK2 in its domain
+    ///     - Each of the `l` cells `p+1 .. p+l` has digit-domain intersecting the tuple
+    /// 2. **Backward (outside, wrapping) support:** There must exist some
+    ///    length `l` and a valid tuple in `valid_tuples[max_sum - t][l]` such that:
+    ///     - Cell at `(p - l - 1 + N) % N` has BLACK2 in its domain
+    ///     - Each of the `l` cells going backward from `p` (wrapping at edge
+    ///       0 → N-1) has digit-domain intersecting the tuple
+    ///
+    /// The same logic applies symmetrically to BLACK2 (checking backward for
+    /// inside, forward-wrapping for outside).
+    fn apply_black_arc_consistency(&mut self) -> bool {
         let mut changed = false;
 
         for r in 0..N {
-            let t = self.puzzle.row_targets[r] as usize;
-            let d_min = self.tables.d_min[t];
-            let d_max = self.tables.d_max[t];
-            for p in 0..N {
-                // BLACK1_ROW at p: need BLACK2_ROW somewhere in [p+d_min, p+d_max].
-                let lo = p + d_min;
-                let hi = (p + d_max + 1).min(N);
-                if (lo..hi).all(|q| self.domains[r][q] & Self::BLACK2_ROW == 0) {
-                    changed |= Self::clear_mask(&mut self.domains, r, p, Self::BLACK1_ROW);
+            let target = self.puzzle.row_targets[r] as usize;
+            let outside_target = self.tables.max_sum - target;
+            for c in 0..N {
+                let cell = self.domains[r][c];
+                // BLACK1_ROW: needs forward (inside) support and backward (outside) support.
+                if cell & Self::BLACK1_ROW != 0
+                    && (!Self::black_has_forward_support(
+                        &self.domains[r],
+                        c,
+                        &self.tables.valid_tuples[target],
+                        Self::BLACK2_ROW,
+                        false,
+                    ) || !Self::black_has_backward_support(
+                        &self.domains[r],
+                        c,
+                        &self.tables.valid_tuples[outside_target],
+                        Self::BLACK2_ROW,
+                        true,
+                    ))
+                {
+                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::BLACK1_ROW);
                 }
-                // BLACK2_ROW at p: need BLACK1_ROW somewhere in [p-d_max, p-d_min].
-                let hi2 = (p + 1).saturating_sub(d_min);
-                let lo2 = p.saturating_sub(d_max);
-                if (lo2..hi2).all(|q| self.domains[r][q] & Self::BLACK1_ROW == 0) {
-                    changed |= Self::clear_mask(&mut self.domains, r, p, Self::BLACK2_ROW);
+                // BLACK2_ROW: needs backward (inside) support and forward (outside) support.
+                if cell & Self::BLACK2_ROW != 0
+                    && (!Self::black_has_backward_support(
+                        &self.domains[r],
+                        c,
+                        &self.tables.valid_tuples[target],
+                        Self::BLACK1_ROW,
+                        false,
+                    ) || !Self::black_has_forward_support(
+                        &self.domains[r],
+                        c,
+                        &self.tables.valid_tuples[outside_target],
+                        Self::BLACK1_ROW,
+                        true,
+                    ))
+                {
+                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::BLACK2_ROW);
                 }
             }
         }
 
         for c in 0..N {
-            let t = self.puzzle.col_targets[c] as usize;
-            let d_min = self.tables.d_min[t];
-            let d_max = self.tables.d_max[t];
-            for p in 0..N {
-                let lo = p + d_min;
-                let hi = (p + d_max + 1).min(N);
-                if (lo..hi).all(|q| self.domains[q][c] & Self::BLACK2_COL == 0) {
-                    changed |= Self::clear_mask(&mut self.domains, p, c, Self::BLACK1_COL);
+            let target = self.puzzle.col_targets[c] as usize;
+            let outside_target = self.tables.max_sum - target;
+            let col: [u64; N] = std::array::from_fn(|r| self.domains[r][c]);
+            for r in 0..N {
+                let cell = self.domains[r][c];
+                // BLACK1_COL
+                if cell & Self::BLACK1_COL != 0
+                    && (!Self::black_has_forward_support(
+                        &col,
+                        r,
+                        &self.tables.valid_tuples[target],
+                        Self::BLACK2_COL,
+                        false,
+                    ) || !Self::black_has_backward_support(
+                        &col,
+                        r,
+                        &self.tables.valid_tuples[outside_target],
+                        Self::BLACK2_COL,
+                        true,
+                    ))
+                {
+                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::BLACK1_COL);
                 }
-                let hi2 = (p + 1).saturating_sub(d_min);
-                let lo2 = p.saturating_sub(d_max);
-                if (lo2..hi2).all(|q| self.domains[q][c] & Self::BLACK1_COL == 0) {
-                    changed |= Self::clear_mask(&mut self.domains, p, c, Self::BLACK2_COL);
+                // BLACK2_COL
+                if cell & Self::BLACK2_COL != 0
+                    && (!Self::black_has_backward_support(
+                        &col,
+                        r,
+                        &self.tables.valid_tuples[target],
+                        Self::BLACK1_COL,
+                        false,
+                    ) || !Self::black_has_forward_support(
+                        &col,
+                        r,
+                        &self.tables.valid_tuples[outside_target],
+                        Self::BLACK1_COL,
+                        true,
+                    ))
+                {
+                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::BLACK2_COL);
                 }
             }
         }
@@ -591,11 +672,11 @@ impl<const N: usize> SolverState<N> {
     /// backtracking search can begin.
     pub fn propagate(&mut self) {
         loop {
-            let changed = self.apply_black_range_rules()
-                | self.apply_inside_outside_rule()
+            let changed = self.apply_black_arc_consistency()
                 | self.apply_black_consistency_rule()
                 | self.apply_singleton_rule()
                 | self.apply_hidden_single_rule()
+                | self.apply_inside_outside_rule()
                 | self.apply_inside_outside_cage_rule();
             if !changed {
                 break;
@@ -791,7 +872,7 @@ mod tests {
     fn black1_row_always_forbidden_at_last_position() {
         // Black-1 can never sit at position 5, even for target = 0.
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.propagate();
+        state.apply_black_arc_consistency();
         for r in 0..6 {
             assert_eq!(
                 state.domains[r][5] & SolverState::<6>::BLACK1_ROW,
@@ -811,7 +892,7 @@ mod tests {
         //   p=4: MAX_SUM[0] =  0 < 9  → forbidden
         //   p=5: always forbidden
         let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
-        state.propagate();
+        state.apply_black_arc_consistency();
 
         assert_ne!(
             state.domains[0][0] & SolverState::<6>::BLACK1_ROW,
@@ -836,7 +917,8 @@ mod tests {
     fn inside_outside_rule_target_9() {
         // Row 0 has target 9: digit 1 is outside the blacks.
         let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
-        state.propagate();
+        state.apply_black_arc_consistency();
+        state.apply_inside_outside_rule();
 
         // Middle cells lose digit 1.
         for c in 1..5 {
@@ -846,47 +928,36 @@ mod tests {
                 "digit 1 should be cleared from middle cell (row=0, col={c})"
             );
         }
-        // Position 0: only digit 1 or black-1 remain (row bits).
+        // Position 0: only digit 1 remains (row bits).
         assert_ne!(
             state.domains[0][0] & (1 << 1),
             0,
             "col=0 should keep digit 1"
         );
-        assert_ne!(
-            state.domains[0][0] & SolverState::<6>::BLACK1_ROW,
-            0,
-            "col=0 should keep black-1"
-        );
         assert_eq!(
-            state.domains[0][0] & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_ROW),
+            state.domains[0][0] & ((1 << 2) | (1 << 3) | (1 << 4)),
             0,
-            "col=0 should have digits 2-4 and black-2 cleared"
+            "col=0 should have digits 2-4 cleared"
         );
-        // Position 5: only digit 1 or black-2 remain (row bits).
+        // Position 5: only digit 1 remains (row bits).
         assert_ne!(
             state.domains[0][5] & (1 << 1),
             0,
             "col=5 should keep digit 1"
         );
-        assert_ne!(
-            state.domains[0][5] & SolverState::<6>::BLACK2_ROW,
-            0,
-            "col=5 should keep black-2"
-        );
         assert_eq!(
-            state.domains[0][5] & ((1 << 2) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_ROW),
+            state.domains[0][5] & ((1 << 2) | (1 << 3) | (1 << 4)),
             0,
-            "col=5 should have digits 2-4 and black-1 cleared"
+            "col=5 should have digits 2-4 cleared"
         );
     }
 
     #[test]
     fn inside_outside_rule_target_8_column() {
         // Column 2 has target 8: digit 2 is outside the blacks.
-        let mut col_targets = [0u8; 6];
-        col_targets[2] = 8;
-        let mut state = SolverState::new(Puzzle::new([0; 6], col_targets));
-        state.propagate();
+        let mut state = SolverState::new(Puzzle::new([0; 6], [0, 0, 8, 0, 0, 0]));
+        state.apply_black_arc_consistency();
+        state.apply_inside_outside_rule();
 
         // Middle cells lose digit 2.
         for r in 1..5 {
@@ -896,41 +967,18 @@ mod tests {
                 "digit 2 should be cleared from middle cell (row={r}, col=2)"
             );
         }
-        // Row 0: only digit 2 or black-1-col remain (col bits).
-        assert_ne!(
-            state.domains[0][2] & (1 << 2),
-            0,
-            "row=0 should keep digit 2"
-        );
-        assert_ne!(
-            state.domains[0][2] & SolverState::<6>::BLACK1_COL,
-            0,
-            "row=0 should keep black-1-col"
+        // Row 0 and 5: only digit 2 remains.
+        assert_eq!(
+            state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
+            (1 << 2),
+            "row=0 should have only digit 2"
         );
         assert_eq!(
-            state.domains[0][2] & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK2_COL),
-            0,
-            "row=0 should have digits 1,3,4 and black-2-col cleared"
-        );
-        // Row 5: only digit 2 or black-2-col remain (col bits).
-        assert_ne!(
-            state.domains[5][2] & (1 << 2),
-            0,
-            "row=5 should keep digit 2"
-        );
-        assert_ne!(
-            state.domains[5][2] & SolverState::<6>::BLACK2_COL,
-            0,
-            "row=5 should keep black-2-col"
-        );
-        assert_eq!(
-            state.domains[5][2] & ((1 << 1) | (1 << 3) | (1 << 4) | SolverState::<6>::BLACK1_COL),
-            0,
-            "row=5 should have digits 1,3,4 and black-1-col cleared"
+            state.domains[5][2] & SolverState::<6>::ALL_DIGITS,
+            (1 << 2),
+            "row=0 should have only digit 2"
         );
     }
-
-    // ── set_cell / singleton / hidden-single / black-consistency tests ────────
 
     #[test]
     fn set_cell_digit_propagates_to_row_and_col() {
@@ -1019,8 +1067,8 @@ mod tests {
     }
 
     #[test]
-    fn black_range_rule_uses_actual_domain_state() {
-        // Row 0 with target 0 (d_min = d_max = 1, blacks must be adjacent).
+    fn black_arc_consistency_uses_actual_domain_state() {
+        // Row 0 with target 0 (blacks must be adjacent).
         // Manually clear BLACK2_ROW from every cell except col 3.
         // Then BLACK1_ROW is only valid at col 2 (the sole cell adjacent to
         // the remaining BLACK2_ROW candidate).
@@ -1028,7 +1076,7 @@ mod tests {
         for c in (0..6).filter(|&c| c != 3) {
             state.domains[0][c] &= !SolverState::<6>::BLACK2_ROW;
         }
-        state.apply_black_range_rules();
+        state.apply_black_arc_consistency();
 
         assert_ne!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
@@ -1123,6 +1171,142 @@ mod tests {
             state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
             1 << 3,
             "empty inside cell's digit domain should be reduced to just digit 3"
+        );
+    }
+
+    #[test]
+    fn black_arc_consistency_black1_forward() {
+        // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
+        // isn't clear whether col 2 could be BLACK1. It could be for the
+        // shorter target.
+        let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
+        state.apply_black_arc_consistency();
+        assert_ne!(
+            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            0,
+            "BLACK1 still possible at col 2"
+        );
+
+        // If we set col 0 to be 3, then the 3,4 tuple can no longer be inside.
+        // The rule should clear BLACK1 from col 2.
+        state.set_cell(0, 0, 1 << 3);
+        state.apply_black_arc_consistency();
+        assert_eq!(
+            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            0,
+            "BLACK1 no longer possible at col 2"
+        );
+
+        // In fact, this should completely determine the blacks.
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, true, false, false, false, false],
+            "BLACK1 is completely determined"
+        );
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, false, false, false, false, true],
+            "BLACK2 is completely determined"
+        );
+    }
+
+    #[test]
+    fn black_arc_consistency_black1_backward() {
+        // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
+        // isn't clear whether col 2 could be BLACK1. It could be for the
+        // shorter target.
+        let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
+        state.apply_black_arc_consistency();
+        assert_ne!(
+            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            0,
+            "BLACK1 still possible at col 2"
+        );
+
+        // If we set col 5 to be 3, then the 3,4 tuple can no longer be inside.
+        // This completely determines the blacks
+        state.set_cell(0, 5, 1 << 3);
+        state.apply_black_arc_consistency();
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .collect::<Vec<_>>(),
+            [true, false, false, false, false, false],
+            "BLACK1 is completely determined"
+        );
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, false, false, false, true, false],
+            "BLACK2 is completely determined"
+        );
+    }
+
+    #[test]
+    fn black_arc_consistency_black1_forward_not_enough_info() {
+        // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
+        // isn't clear where the blacks are. The target could be 2 or 3 cells wide.
+        let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
+        state.apply_black_arc_consistency();
+
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .collect::<Vec<_>>(),
+            [true, true, true, false, false, false],
+            "BLACK1 still possible in first three rows"
+        );
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, false, false, true, true, true],
+            "BLACK2 still possible in last three rows"
+        );
+
+        // If we set col 0 to be 1, then the inside must be the 3,4 tuple.
+        // However, there are still two possibilities for the blacks.
+        state.set_cell(0, 0, 1 << 1);
+        state.apply_black_arc_consistency();
+
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, true, true, false, false, false],
+            "BLACK1 has two remaining possibilities"
+        );
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, false, false, false, true, true],
+            "BLACK2 has two remaining possibilities"
+        );
+
+        // Now, if we exclude 2 from the last cell, then the 1#..#2 configuration
+        // is ruled out and the blacks are determined.
+        state.domains[0][5] &= !(1 << 2);
+        state.apply_black_arc_consistency();
+
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, false, true, false, false, false],
+            "BLACK1 is determined"
+        );
+        assert_eq!(
+            (0..6)
+                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .collect::<Vec<_>>(),
+            [false, false, false, false, false, true],
+            "BLACK2 is determined"
         );
     }
 
