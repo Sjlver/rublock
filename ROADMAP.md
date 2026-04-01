@@ -1,22 +1,6 @@
 # Rublock roadmap
 
-Rublock is a small puzzle solving project, to learn Rust. See README.md for the puzzle rules.
-
-## Solver generalization for arbitrary N (done)
-
-The solver in src/solver.rs is now fully generic over `const N: usize`.  All
-rules, masks, and loops use N instead of the old hardcoded 6.  The bit-position
-constants (BLACK1_ROW, ALL_DIGITS, etc.) are associated constants computed from N
-at monomorphisation time.  `Tables` stores `max_sum` so that the outside-cage
-target (`max_sum - t`) is derived correctly for any N.
-
-Tests cover N=2 (degenerate all-black grid) and N=4 (two-digit puzzles) in
-addition to the original N=6 newspaper puzzles.
-
-Both `grid.rs` and `enumerate.rs` are now also fully generic over N.  `PartialGrid<N>`,
-`Grid<N>`, and all helper functions use `N` throughout.  `bin/enumerate.rs` enumerates
-5×5 grids (`N=5`) and shows live grid/puzzle counts in the progress bar via
-`Arc<AtomicU64>` shared atomic counters.
+Rublock is a small puzzle solving project, to learn Rust. See README.md for the puzzle rules and the goals of the project.
 
 ## Solver improvements
 
