@@ -715,23 +715,13 @@ impl<const N: usize> SolverState<N> {
 
     /// Return the bits to branch on for the given cell domain.
     ///
-    /// To avoid double-counting solutions, we branch on ONE dimension at a time:
-    ///
-    /// 1. **Row identity**: is this cell digit-1, digit-2, …, digit-4,
-    ///    BLACK1_ROW, or BLACK2_ROW?  These six options are mutually exclusive —
-    ///    picking one commits the cell's identity in its row.
-    /// 2. **Column ordering**: only after the row identity is pinned to a black
-    ///    do we branch on whether the cell is BLACK1_COL or BLACK2_COL.
+    /// To avoid double-counting solutions, we use only row blacks when branching.
     ///
     /// Returns `0` when the cell is fully determined (no branching needed).
     fn branching_bits(domain: u64) -> u64 {
         let primary = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
         if primary.count_ones() > 1 {
             return primary;
-        }
-        let col_blacks = domain & Self::COL_BLACKS;
-        if col_blacks.count_ones() > 1 {
-            return col_blacks;
         }
         0
     }
