@@ -773,9 +773,8 @@ impl<const N: usize> SolverState<N> {
 
         let Some((row, col)) = state.pick_branching_cell() else {
             // Propagation stalled but the grid is neither solved nor
-            // contradicted.  This shouldn't happen for well-formed N×N
-            // inputs, but returning 0 is safer than panicking.
-            return 0;
+            // contradicted.  This shouldn't happen, let's just panic.
+            panic!("Propagation stalled");
         };
 
         let bits = Self::branching_bits(state.domains[row][col]);

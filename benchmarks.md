@@ -29,3 +29,6 @@ Benchmark 1: ./target/release/enumerate
   Time (mean ± σ):     532.2 ms ±  37.9 ms    [User: 4170.8 ms, System: 10.4 ms]
   Range (min … max):   515.3 ms … 639.5 ms    10 runs
  
+Hmm, this found four more solutions than the previous one.
+I'm not sure what the issue is... guessing that the old version didn't fully
+determine some of the blacks?
