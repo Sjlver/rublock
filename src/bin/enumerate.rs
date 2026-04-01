@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
@@ -18,6 +19,7 @@ use rublock::grid::Cell;
 ///    running totals, so the progress bar can show live counts.
 /// 3. Display a progress bar while work is in flight.
 fn main() {
+    let started_at = Instant::now();
     let num_threads = rayon::current_num_threads();
     let target = num_threads * 100;
 
@@ -95,6 +97,10 @@ fn main() {
     let total = total_grids.load(Ordering::Relaxed);
     let valid = valid_puzzles.load(Ordering::Relaxed);
 
-    println!("\nTotal valid grids:          {total}");
-    println!("Valid puzzles (unique soln): {valid}");
+    println!("\nTotal valid grids:            {total:10}");
+    println!("Valid puzzles (unique soln):  {valid:10}");
+
+    let elapsed_s = started_at.elapsed().as_secs_f64();
+    let grids_per_s = (total as f64) / elapsed_s.max(f64::EPSILON);
+    println!("Time: {elapsed_s:.3} seconds ({grids_per_s:.1} grids per second)");
 }
