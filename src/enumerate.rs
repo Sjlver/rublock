@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::grid::{Cell, Grid};
 
 // ── PartialGrid ───────────────────────────────────────────────────────────────
@@ -5,8 +7,6 @@ use crate::grid::{Cell, Grid};
 /// Working state for cell-by-cell grid enumeration.
 ///
 /// Cells are filled in row-major order (left to right, top to bottom).
-/// Per-row and per-column constraint counts are updated incrementally so
-/// that invalid branches can be pruned as soon as a constraint is violated.
 ///
 /// Each row and column must contain exactly 2 black squares and the digits
 /// 1..=(N-2), for a total of N cells per row/column.
@@ -15,15 +15,14 @@ pub struct PartialGrid<const N: usize> {
     cells: [[Cell; N]; N],
     /// Number of cells filled so far (0..=N*N).
     filled: usize,
-    /// Number of black squares placed in each row so far.
+    /// Number of black cells placed in each row so far.
     row_black: [u8; N],
-    /// Bitmask of digits placed in each row so far.
-    /// Bit `k` (0-indexed from LSB) is set when digit `k + 1` has been used.
-    row_digit_mask: [u8; N],
-    /// Number of black squares placed in each column so far.
+    /// Number of black cells placed in each column so far.
     col_black: [u8; N],
-    /// Bitmask of digits placed in each column so far.
-    col_digit_mask: [u8; N],
+    /// Bitmask of digits seen in each row (bit k set ↔ digit k+1 present).
+    row_digit_mask: [u64; N],
+    /// Bitmask of digits seen in each column.
+    col_digit_mask: [u64; N],
 }
 
 impl<const N: usize> PartialGrid<N> {
@@ -32,12 +31,20 @@ impl<const N: usize> PartialGrid<N> {
             cells: [[Cell::Empty; N]; N],
             filled: 0,
             row_black: [0; N],
-            row_digit_mask: [0; N],
             col_black: [0; N],
+            row_digit_mask: [0; N],
             col_digit_mask: [0; N],
         }
     }
+}
 
+impl<const N: usize> Default for PartialGrid<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const N: usize> PartialGrid<N> {
     fn is_complete(&self) -> bool {
         self.filled == N * N
     }
@@ -46,58 +53,95 @@ impl<const N: usize> PartialGrid<N> {
     ///
     /// Returns `Some(new_state)` if the placement is consistent with all
     /// constraints, or `None` if it violates a constraint.
-    ///
-    /// After placing, a look-ahead checks that the remaining cells in the
-    /// current row and column can still satisfy the grid invariants:
-    /// exactly two black squares and digits 1..=(N-2) in every row and column.
-    fn try_place(&self, value: Cell) -> Option<Self> {
+    pub fn try_place(&self, value: Cell) -> Option<Self> {
         let row = self.filled / N;
         let col = self.filled % N;
 
-        let mut next = self.clone();
-        next.cells[row][col] = value;
-        next.filled += 1;
-
-        // Update constraint counts and check for immediate violations.
+        // Check the constraint before paying the clone cost.
         match value {
             Cell::Black => {
-                next.row_black[row] += 1;
-                next.col_black[col] += 1;
-                if next.row_black[row] > 2 || next.col_black[col] > 2 {
+                if self.row_black[row] >= 2 || self.col_black[col] >= 2 {
                     return None;
                 }
             }
             Cell::Number(n) => {
-                let bit = 1u8 << (n - 1);
-                if next.row_digit_mask[row] & bit != 0 || next.col_digit_mask[col] & bit != 0 {
-                    return None; // digit already used in this row or column
+                let bit = 1u64 << (n - 1);
+                if self.row_digit_mask[row] & bit != 0 || self.col_digit_mask[col] & bit != 0 {
+                    return None;
                 }
+            }
+            Cell::Empty => unreachable!(),
+        }
+
+        let mut next = self.clone();
+        next.cells[row][col] = value;
+        next.filled += 1;
+        match value {
+            Cell::Black => {
+                next.row_black[row] += 1;
+                next.col_black[col] += 1;
+            }
+            Cell::Number(n) => {
+                let bit = 1u64 << (n - 1);
                 next.row_digit_mask[row] |= bit;
                 next.col_digit_mask[col] |= bit;
             }
-            Cell::Empty => unreachable!("try_place called with Empty"),
-        }
-
-        // Look-ahead for the current row.
-        // The remaining cells (positions col+1..=N-1) must be able to supply
-        // the blacks and digits that are still missing.
-        let cells_left_in_row = (N - 1) - col;
-        let row_blacks_needed = 2u8.saturating_sub(next.row_black[row]) as usize;
-        let row_digits_needed = ((N as u32 - 2) - next.row_digit_mask[row].count_ones()) as usize;
-        if row_blacks_needed + row_digits_needed > cells_left_in_row {
-            return None;
-        }
-
-        // Look-ahead for the current column.
-        // The remaining rows (positions row+1..=N-1) must satisfy the same.
-        let rows_left_in_col = (N - 1) - row;
-        let col_blacks_needed = 2u8.saturating_sub(next.col_black[col]) as usize;
-        let col_digits_needed = ((N as u32 - 2) - next.col_digit_mask[col].count_ones()) as usize;
-        if col_blacks_needed + col_digits_needed > rows_left_in_col {
-            return None;
+            Cell::Empty => unreachable!(),
         }
 
         Some(next)
+    }
+
+    #[cfg(test)]
+    fn is_consistent(&self) -> bool {
+        // Each row and column must have at most two blacks and no repeated digit.
+        for r in 0..N {
+            let mut black_count: u8 = 0;
+            let mut digit_mask: u64 = 0;
+            for c in 0..N {
+                match self.cells[r][c] {
+                    Cell::Empty => {}
+                    Cell::Black => {
+                        black_count += 1;
+                        if black_count > 2 {
+                            return false;
+                        }
+                    }
+                    Cell::Number(n) => {
+                        let bit = 1u64 << (n - 1);
+                        if digit_mask & bit != 0 {
+                            return false;
+                        }
+                        digit_mask |= bit;
+                    }
+                }
+            }
+        }
+
+        for c in 0..N {
+            let mut black_count: u8 = 0;
+            let mut digit_mask: u64 = 0;
+            for r in 0..N {
+                match self.cells[r][c] {
+                    Cell::Empty => {}
+                    Cell::Black => {
+                        black_count += 1;
+                        if black_count > 2 {
+                            return false;
+                        }
+                    }
+                    Cell::Number(n) => {
+                        let bit = 1u64 << (n - 1);
+                        if digit_mask & bit != 0 {
+                            return false;
+                        }
+                        digit_mask |= bit;
+                    }
+                }
+            }
+        }
+
+        true
     }
 }
 
@@ -112,37 +156,44 @@ fn candidates<const N: usize>() -> impl Iterator<Item = Cell> {
 /// Generate partial grids suitable as parallel work items.
 ///
 /// Expands the search tree level by level (BFS) until the queue contains at
-/// least `target` items.  Each item in the returned `Vec` represents a
+/// least `target` items, then returns exactly `target` of them.  Each item in
+/// the returned `Vec` represents a
 /// distinct subtree that a worker thread can process independently.
 ///
 /// A good `target` is around 100× the number of CPU cores, which gives
 /// `rayon`'s work-stealing scheduler enough items to balance uneven subtree
 /// sizes while keeping BFS overhead low.
-pub fn generate_partial_grids<const N: usize>(target: usize) -> Vec<PartialGrid<N>> {
-    let mut queue = vec![PartialGrid::new()];
+pub fn generate_partial_grids<const N: usize>(
+    start: PartialGrid<N>,
+    target: usize,
+) -> Vec<PartialGrid<N>> {
+    let mut queue = VecDeque::from([start]);
+    let mut leaves: Vec<PartialGrid<N>> = vec![];
 
     loop {
         // Stop if we have enough items or every item is already complete.
-        if queue.len() >= target || queue.iter().all(|p| p.is_complete()) {
+        if queue.len() + leaves.len() >= target {
             break;
         }
 
-        let prev = std::mem::take(&mut queue);
-        for partial in prev {
-            if partial.is_complete() {
-                // Leaf node: keep it as-is; it will be counted in the DFS phase.
-                queue.push(partial);
-            } else {
-                for value in candidates::<N>() {
-                    if let Some(extended) = partial.try_place(value) {
-                        queue.push(extended);
+        let current = queue.pop_front();
+        match current {
+            None => break,
+            Some(partial) => {
+                if partial.is_complete() {
+                    leaves.push(partial);
+                } else {
+                    for value in candidates::<N>() {
+                        if let Some(extended) = partial.try_place(value) {
+                            queue.push_back(extended);
+                        }
                     }
                 }
             }
         }
     }
 
-    queue
+    leaves.into_iter().chain(queue).take(target).collect()
 }
 
 // ── Per-work-item DFS ─────────────────────────────────────────────────────────
@@ -187,33 +238,61 @@ mod tests {
 
     #[test]
     fn generate_partial_grids_stops_at_target() {
-        let partials = generate_partial_grids::<5>(50);
-        assert!(partials.len() >= 50);
+        let partials = generate_partial_grids(PartialGrid::<5>::new(), 50);
+        assert!(partials.len() == 50);
     }
 
     #[test]
     fn generate_partial_grids_all_items_consistent() {
         // Verify that every returned partial satisfies the row/column
         // invariants for the cells that have been filled.
-        // N=5: each row has 2 blacks and digits 1,2,3 (mask = 0b111 = 7).
-        let partials = generate_partial_grids::<5>(200);
-        let full_digit_mask: u8 = (1 << (5u8 - 2)) - 1; // 0b111
+        let partials = generate_partial_grids(PartialGrid::<5>::new(), 200);
         for p in &partials {
-            let row = p.filled / 5;
-            // All completed rows must be fully valid.
-            for r in 0..row {
-                assert_eq!(p.row_black[r], 2, "row {r} black count");
-                assert_eq!(p.row_digit_mask[r], full_digit_mask, "row {r} digits");
-            }
-            // The partial row (if any) must not be over-committed.
-            if p.filled % 5 != 0 {
-                assert!(p.row_black[row] <= 2);
-                assert_eq!(p.row_digit_mask[row] & !full_digit_mask, 0);
-            }
+            assert!(p.is_consistent());
         }
     }
 
-    // `count_from_partial` is exercised end-to-end by the `enumerate` binary.
-    // A unit test starting from a shallow partial would need to run the full
-    // DFS over millions of grids, which is too slow for `cargo test`.
+    #[test]
+    fn is_consistent_accepts_partial_grid() {
+        let mut g = PartialGrid::<6>::new();
+        g.cells[0][0] = Cell::Black;
+        g.cells[0][1] = Cell::Number(1);
+        g.cells[0][2] = Cell::Number(2);
+
+        assert!(g.is_consistent());
+    }
+
+    #[test]
+    fn is_consistent_rejects_three_blacks() {
+        let mut g = PartialGrid::<6>::new();
+        g.cells[0][0] = Cell::Black;
+        assert!(g.is_consistent());
+
+        g.cells[0][1] = Cell::Black;
+        assert!(g.is_consistent());
+
+        g.cells[0][2] = Cell::Black;
+        assert!(!g.is_consistent());
+    }
+
+    #[test]
+    fn is_consistent_rejects_duplicate_values_in_col() {
+        let mut g = PartialGrid::<6>::new();
+        g.cells[0][0] = Cell::Black;
+        assert!(g.is_consistent());
+
+        g.cells[1][0] = Cell::Black;
+        assert!(g.is_consistent());
+
+        g.cells[2][0] = Cell::Number(1);
+        assert!(g.is_consistent());
+
+        // A different row/column should not cause this to be inconsistent
+        g.cells[5][5] = Cell::Number(1);
+        assert!(g.is_consistent());
+
+        // ... but the same column does
+        g.cells[3][0] = Cell::Number(1);
+        assert!(!g.is_consistent());
+    }
 }

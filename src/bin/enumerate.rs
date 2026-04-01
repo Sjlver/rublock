@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use rublock::enumerate::{count_from_partial, generate_partial_grids};
+use rublock::enumerate::{PartialGrid, count_from_partial, generate_partial_grids};
+use rublock::grid::Cell;
 
-/// Count all valid 5×5 rublock grids and report how many are valid puzzles
+/// Count all valid 6×6 rublock grids and report how many are valid puzzles
 /// (i.e. have exactly one solution given their derived targets).
 ///
 /// Strategy:
@@ -22,7 +23,20 @@ fn main() {
 
     // ── Build work queue ──────────────────────────────────────────────────────
 
-    let work_items = generate_partial_grids::<5>(target);
+    // Counting all 6x6 grids is a bit slow for my benchmark. Thus, start with a
+    // grid that has a few cells filled already.
+    let start = PartialGrid::<6>::new()
+        .try_place(Cell::Black)
+        .and_then(|g| g.try_place(Cell::Number(1)))
+        .and_then(|g| g.try_place(Cell::Number(2)))
+        .and_then(|g| g.try_place(Cell::Number(3)))
+        .and_then(|g| g.try_place(Cell::Number(4)))
+        .and_then(|g| g.try_place(Cell::Black))
+        .and_then(|g| g.try_place(Cell::Number(1)))
+        .and_then(|g| g.try_place(Cell::Number(2)))
+        .expect("hard-coded initial placement must be valid");
+
+    let work_items = generate_partial_grids(start, target);
 
     println!(
         "Work queue: {} items ({} threads × 100 target).",
