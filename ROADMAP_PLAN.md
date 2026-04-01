@@ -79,61 +79,114 @@ for each candidate bit (iterate over remaining bits dynamically):
 
 This optimizes the `propagate` fixpoint loop to avoid re-running rules on unchanged rows/columns. Implement this last because it benefits from having the final rule set from Phase 1.
 
-**Approach: per-row/per-column changed flags** (as suggested in the roadmap — simpler than a full work queue).
+**Approach: a `ChangeSet` bitset struct** that bundles row and column dirty flags together, so rules can return it and the fixpoint loop can compose them with `|`.
+
+**`ChangeSet` struct.** Wraps two `u64` bitfields — one bit per row index, one per column index. Since N is a const generic and all realistic puzzle sizes are well under 64, `u64` is always sufficient.
+
+```rust
+#[derive(Copy, Clone, Default)]
+struct ChangeSet {
+    rows: u64,
+    cols: u64,
+}
+
+impl ChangeSet {
+    /// Mark every row and column as dirty (use at propagation start).
+    fn all(n: usize) -> Self {
+        let mask = (1u64 << n) - 1;
+        Self { rows: mask, cols: mask }
+    }
+    fn set_row(&mut self, r: usize) { self.rows |= 1 << r; }
+    fn set_col(&mut self, c: usize) { self.cols |= 1 << c; }
+    fn has_row(self, r: usize) -> bool { self.rows & (1 << r) != 0 }
+    fn has_col(self, c: usize) -> bool { self.cols & (1 << c) != 0 }
+    fn any(self) -> bool { self.rows != 0 || self.cols != 0 }
+
+    /// Iterate indices of set bits (set-bit walk: O(k) for k set bits).
+    fn iter_rows(self) -> SetBits { SetBits(self.rows) }
+    fn iter_cols(self) -> SetBits { SetBits(self.cols) }
+}
+
+// Rust operator overloading via std::ops traits — ChangeSet | ChangeSet
+// unions both bitfields, enabling `r1 | r2 | r3 | ...` in the loop.
+impl std::ops::BitOr for ChangeSet {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self {
+        Self { rows: self.rows | rhs.rows, cols: self.cols | rhs.cols }
+    }
+}
+impl std::ops::BitOrAssign for ChangeSet {
+    fn bitor_assign(&mut self, rhs: Self) { self.rows |= rhs.rows; self.cols |= rhs.cols; }
+}
+
+// `!changed` → bool, so `if !changed { break; }` works naturally.
+impl std::ops::Not for ChangeSet {
+    type Output = bool;
+    fn not(self) -> bool { !self.any() }
+}
+
+/// Iterator over indices of set bits using the trailing_zeros trick.
+struct SetBits(u64);
+impl Iterator for SetBits {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        if self.0 == 0 { return None; }
+        let i = self.0.trailing_zeros() as usize;
+        self.0 &= self.0 - 1;   // clear lowest set bit
+        Some(i)
+    }
+}
+```
 
 **Steps:**
 
-1. **Add change-tracking to `SolverState`:**
+1. **Define `ChangeSet` and `SetBits`** as above (a small standalone module or at the top of `solver.rs`).
+
+2. **Change each `apply_xxx_rule` signature** to accept a `ChangeSet` (the previous pass's dirty set) and return a `ChangeSet` (what it changed). Rules no longer mutate any shared flag state:
+
    ```rust
-   row_changed: [bool; N],
-   col_changed: [bool; N],
+   fn apply_black_arc_consistency(&mut self, prev: ChangeSet) -> ChangeSet {
+       let mut changed = ChangeSet::default();
+       for r in prev.iter_rows() {
+           // process row r; if a domain shrinks at cell (r, c):
+           changed.set_row(r);
+           changed.set_col(c);
+       }
+       for c in prev.iter_cols() {
+           // process column c; if a domain shrinks at cell (r, c):
+           changed.set_row(r);
+           changed.set_col(c);
+       }
+       changed
+   }
    ```
-   Initialize all to `true` (everything needs processing initially).
 
-2. **Modify `clear_mask`** (and `set_cell`, which calls it) to set `row_changed[row] = true` and `col_changed[col] = true` whenever a domain actually shrinks. Since `clear_mask` is a static method taking `&mut domains`, you'll need to either:
-   - Make it a method on `&mut self` so it can update the flags, or
-   - Return the changed info and let the caller update flags, or
-   - Pass the flags arrays as additional parameters.
+   The `prev` snapshot tells the rule which lines were dirty *before* this pass. Changes made by earlier rules in the same pass are already reflected in `self.domains` (since they run sequentially and mutate `&mut self`), but a rule only re-processes lines flagged in `prev` — changes from earlier rules in this pass will be picked up next pass via the returned `ChangeSet`. This is correct fixpoint behavior.
 
-   The cleanest option is probably making `clear_mask` return a `bool` (which it already does) and having a thin wrapper or having the callers set the flags. Actually, since almost all callers are rule methods on `&mut self`, making `clear_mask` a method that also sets the flags is cleanest.
-
-3. **Modify each rule** to skip rows/columns whose flags are `false`. For example, `apply_black_arc_consistency` would skip row `r` if `!row_changed[r]`. But be careful: a rule operating on row `r` might need to be re-run if a *column* that intersects row `r` changed (because a cell in that column had its domain reduced). The safe approach:
-   - Each rule operates on a line (row or column).
-   - A line needs re-processing if *any* cell in it changed — which means the line's flag OR the flag of any crossing line that had a change.
-   - Simplification: at the start of each propagation pass, compute `need_row[r] = row_changed[r] || any(col_changed[c] for c in 0..N)` and similarly for columns. This is conservative but cheap.
-   - Actually, the simpler version the roadmap suggests: just use per-row and per-column flags directly. A row rule runs if `row_changed[r]` is true. A column rule runs if `col_changed[c]` is true. At the start of each pass, snapshot and clear the flags. Rules that make changes set new flags. This undershoots slightly (a row rule might miss that a cell in its row changed due to a column rule) but that'll be caught on the next pass when the row gets flagged.
-
-   Wait, that's actually fine because `clear_mask` sets *both* `row_changed` and `col_changed`. So if a column rule changes cell (r,c), it sets `row_changed[r] = true`, which means row `r`'s rules will run on the next pass. The system is self-correcting.
-
-4. **Add cheap precondition checks** where applicable. For example, `apply_black_consistency_rule` can skip a row if all cells already have at most one row-black bit configuration (both row-blacks fully assigned). This is a simple check at the start of the row loop.
-
-5. **Snapshot-and-clear pattern** for the propagation loop:
+3. **Rewrite the `propagate` loop** to compose rule results with `|`:
 
    ```rust
    pub fn propagate(&mut self) {
+       let mut changed = ChangeSet::all(N);
        loop {
-           let snap_row = self.row_changed;
-           let snap_col = self.col_changed;
-           self.row_changed = [false; N];
-           self.col_changed = [false; N];
-
-           // Run rules, which internally check snap_row/snap_col
-           // and set self.row_changed/col_changed for new changes
-           self.apply_rule_1(&snap_row, &snap_col);
-           self.apply_rule_2(&snap_row, &snap_col);
-           // ...
-
-           if !self.row_changed.iter().any(|&x| x)
-              && !self.col_changed.iter().any(|&x| x) {
-               break;
-           }
+           changed = self.apply_black_arc_consistency(changed)
+               | self.apply_inside_outside_rule(changed)
+               | self.apply_black_consistency_rule(changed)
+               | self.apply_singleton_rule(changed)
+               | self.apply_hidden_single_rule(changed)
+               | self.apply_inside_outside_cage_rule(changed);
+           if !changed { break; }
        }
    }
    ```
 
-   Actually, this gets a bit awkward with the signatures. An alternative: keep the flags on `self` and have rules read/write them directly. At the top of `propagate`, snapshot and clear. Rules check the snapshot to decide what to process, and write directly to `self.row_changed` / `self.col_changed`.
+   No snapshot-and-clear bookkeeping needed on `self` — the returned `ChangeSet` *is* the snapshot for the next pass.
 
-6. **Test.** The existing integration and unit tests should all still pass (the optimization shouldn't change results). You could add a test that verifies the flags are set correctly, but the main validation is that the newspaper puzzles still solve correctly.
+4. **Update `clear_mask`** to return a `ChangeSet` instead of `bool`. It already knows the row and column of the cell being modified, so it can construct the right `ChangeSet` directly when a domain actually shrinks, and return an empty one otherwise. Call sites then use `changed |= clear_mask(...)`, which composes cleanly with the rest of the rule accumulation pattern.
+
+5. **Add cheap precondition checks** where applicable. For example, `apply_black_consistency_rule` can skip a row if all cells already have at most one row-black bit configuration. This is a simple check at the start of the row loop inside `iter_rows`.
+
+6. **Test.** The existing integration and unit tests should all still pass (the optimization shouldn't change results). You could add a unit test for `ChangeSet` / `SetBits` (set, iterate, `|`, `!`) and verify the newspaper puzzles still solve correctly as an integration smoke-test.
 
 ---
 
