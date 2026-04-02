@@ -276,6 +276,74 @@ mod tests {
     }
 
     #[test]
+    fn solver_count_solutions_matches_brute_force() {
+        use crate::solver::{Puzzle, SolverState};
+        use std::collections::HashMap;
+
+        // Collect all valid 6×6 grids via DFS from a fixed prefix so the test
+        // runs fast (enumerating from scratch is too slow for a unit test).
+        fn collect_all<const N: usize>(partial: &PartialGrid<N>, out: &mut Vec<[[Cell; N]; N]>) {
+            if partial.is_complete() {
+                out.push(partial.cells);
+                return;
+            }
+            for v in candidates::<N>() {
+                if let Some(next) = partial.try_place(v) {
+                    collect_all(&next, out);
+                }
+            }
+        }
+        let start = PartialGrid::<6>::new()
+            .try_place(Cell::Black)
+            .and_then(|g| g.try_place(Cell::Number(1)))
+            .and_then(|g| g.try_place(Cell::Number(2)))
+            .and_then(|g| g.try_place(Cell::Number(3)))
+            .and_then(|g| g.try_place(Cell::Number(4)))
+            .and_then(|g| g.try_place(Cell::Black))
+            .and_then(|g| g.try_place(Cell::Number(1)))
+            .and_then(|g| g.try_place(Cell::Number(2)))
+            .and_then(|g| g.try_place(Cell::Number(3)))
+            .and_then(|g| g.try_place(Cell::Number(4)))
+            .and_then(|g| g.try_place(Cell::Black))
+            .and_then(|g| g.try_place(Cell::Black))
+            .and_then(|g| g.try_place(Cell::Number(2)))
+            .and_then(|g| g.try_place(Cell::Number(3)))
+            .expect("hard-coded initial placement must be valid");
+        let mut raw_grids: Vec<[[Cell; 6]; 6]> = Vec::new();
+        collect_all(&start, &mut raw_grids);
+
+        // Group grid indices by their puzzle targets.
+        let mut by_targets: HashMap<([u8; 6], [u8; 6]), usize> = HashMap::new();
+        for cells in &raw_grids {
+            let grid = Grid { cells: *cells };
+            let targets = grid.compute_targets();
+            *by_targets.entry(targets).or_insert(0) += 1;
+        }
+
+        // For every unique target set, the brute-force count is the number of
+        // grids that share those targets.  The solver must agree.
+        let mut mismatches: Vec<([u8; 6], [u8; 6], usize, usize)> = Vec::new();
+        for ((row_t, col_t), brute_count) in &by_targets {
+            let puzzle = Puzzle::new(*row_t, *col_t);
+            let state = SolverState::new(puzzle);
+            let solver_count = state.count_solutions(brute_count + 1);
+            if solver_count != *brute_count {
+                mismatches.push((*row_t, *col_t, *brute_count, solver_count));
+            }
+        }
+
+        if !mismatches.is_empty() {
+            for (row_t, col_t, expected, got) in &mismatches {
+                eprintln!(
+                    "MISMATCH row={:?} col={:?}  brute_force={expected}  solver={got}",
+                    row_t, col_t
+                );
+            }
+            panic!("{} mismatch(es) — solver count differs from brute force", mismatches.len());
+        }
+    }
+
+    #[test]
     fn is_consistent_rejects_duplicate_values_in_col() {
         let mut g = PartialGrid::<6>::new();
         g.cells[0][0] = Cell::Black;

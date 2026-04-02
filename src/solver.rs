@@ -777,21 +777,17 @@ impl<const N: usize> SolverState<N> {
             panic!("Propagation stalled");
         };
 
+        // Try the first possible value for this cell.
         let bits = Self::branching_bits(state.domains[row][col]);
-        let mut total = 0;
-        let mut bit = 1u64;
-        while bit <= bits {
-            if bits & bit != 0 {
-                let mut branch = state.clone();
-                branch.set_cell(row, col, bit);
-                total += branch.count_solutions(max - total);
-                if total >= max {
-                    return total;
-                }
-            }
-            bit <<= 1;
-        }
-        total
+        let bit = 1 << bits.trailing_zeros();
+        let mut branch = state.clone();
+        branch.set_cell(row, col, bit);
+        let branch_solutions = branch.count_solutions(max);
+
+        // For the remaining values, remove bit from the state,
+        // then count the remaining solutions.
+        state.domains[row][col] &= !bit;
+        branch_solutions + state.count_solutions(max - branch_solutions)
     }
 }
 
