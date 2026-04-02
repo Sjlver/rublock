@@ -46,3 +46,17 @@ Benchmark 1: ./target/release/enumerate
   Range (min … max):    1.142 s …  1.295 s    10 runs
  
 General arc consistency is actually slower. Bummer :( But the code is cooler :)
+
+-----------------
+Thu Apr  2 12:38:59 PM CEST 2026
+e177812 Fixes from Claude review.
+Work queue: 800 items (8 threads × 100 target).
+
+Total valid grids:                 32448
+Valid puzzles (unique soln):        7161
+Time: 0.911 seconds (35599.2 grids per second)
+Benchmark 1: ./target/release/enumerate
+  Time (mean ± σ):      1.022 s ±  0.053 s    [User: 7.996 s, System: 0.027 s]
+  Range (min … max):    0.945 s …  1.106 s    10 runs
+ 
+Yay, Claude's review helped a bit to avoid temporary allocs.
