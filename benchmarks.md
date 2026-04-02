@@ -32,3 +32,17 @@ Benchmark 1: ./target/release/enumerate
 Hmm, this found four more solutions than the previous one.
 I'm not sure what the issue is... guessing that the old version didn't fully
 determine some of the blacks?
+
+-----------------
+Thu Apr  2 12:29:40 PM CEST 2026
+1e9419e General arc consistency rule :)
+Work queue: 800 items (8 threads × 100 target).
+
+Total valid grids:                 32448
+Valid puzzles (unique soln):        7161
+Time: 1.144 seconds (28366.6 grids per second)
+Benchmark 1: ./target/release/enumerate
+  Time (mean ± σ):      1.231 s ±  0.054 s    [User: 9.456 s, System: 0.022 s]
+  Range (min … max):    1.142 s …  1.295 s    10 runs
+ 
+General arc consistency is actually slower. Bummer :( But the code is cooler :)

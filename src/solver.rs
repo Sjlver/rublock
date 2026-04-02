@@ -231,22 +231,29 @@ impl<const N: usize> SolverState<N> {
     /// is supported by at least one cell.
     fn is_pattern_supported(&self, pattern: &[u64], cells: &[(usize, usize)]) -> bool {
         debug_assert_eq!(pattern.len(), cells.len());
-        let pattern_bits = pattern.iter().fold(0u64, |union, bits| union | bits);
-
-        let support: Vec<u64> = pattern
-            .iter()
-            .zip(cells)
-            .map(|(&p, &(r, c))| self.domains[r][c] & p)
-            .collect();
-
-        support.iter().all(|&s| s != 0)
-            && support.iter().fold(0u64, |union, bits| union | bits) == pattern_bits
+        let pattern_bits = pattern.iter().fold(0u64, |acc, &b| acc | b);
+        let mut supported = 0u64;
+        for (&p, &(r, c)) in pattern.iter().zip(cells) {
+            let s = self.domains[r][c] & p;
+            if s == 0 {
+                return false;
+            }
+            supported |= s;
+        }
+        supported == pattern_bits
     }
 
-    /// Update mask, set it to the union of it and the pattern
-    fn mark_pattern_supported(mask: &mut [u64], pattern: &[u64], cells: &[usize]) {
-        for (&p, &c) in pattern.iter().zip(cells) {
+    /// Update `mask` with bits supported by `pattern` placed at `cells` (row scan).
+    fn mark_row_pattern_supported(mask: &mut [u64], pattern: &[u64], cells: &[(usize, usize)]) {
+        for (&p, &(_, c)) in pattern.iter().zip(cells) {
             mask[c] |= p;
+        }
+    }
+
+    /// Update `mask` with bits supported by `pattern` placed at `cells` (col scan).
+    fn mark_col_pattern_supported(mask: &mut [u64], pattern: &[u64], cells: &[(usize, usize)]) {
+        for (&p, &(r, _)) in pattern.iter().zip(cells) {
+            mask[r] |= p;
         }
     }
 
@@ -335,11 +342,7 @@ impl<const N: usize> SolverState<N> {
                         continue;
                     };
                     if self.is_pattern_supported(&pattern, &cells) {
-                        Self::mark_pattern_supported(
-                            &mut mask,
-                            &pattern,
-                            &cells.iter().map(|&(_, c)| c).collect::<Vec<_>>(),
-                        );
+                        Self::mark_row_pattern_supported(&mut mask, &pattern, &cells);
                     }
                 }
             }
@@ -391,11 +394,7 @@ impl<const N: usize> SolverState<N> {
                         continue;
                     };
                     if self.is_pattern_supported(&pattern, &cells) {
-                        Self::mark_pattern_supported(
-                            &mut mask,
-                            &pattern,
-                            &cells.iter().map(|&(r, _)| r).collect::<Vec<_>>(),
-                        )
+                        Self::mark_col_pattern_supported(&mut mask, &pattern, &cells);
                     }
                 }
             }
