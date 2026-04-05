@@ -60,3 +60,16 @@ Benchmark 1: ./target/release/enumerate
   Range (min … max):    0.945 s …  1.106 s    10 runs
  
 Yay, Claude's review helped a bit to avoid temporary allocs.
+
+-----------------
+Sun Apr  5 03:54:55 PM CEST 2026
+64ea131 Add per-row / per-column change tracking.
+Work queue: 800 items (8 threads × 100 target).
+
+Total valid grids:                 32448
+Valid puzzles (unique soln):        7161
+Time: 1.052 seconds (30847.2 grids per second)
+Benchmark 1: ./target/release/enumerate
+  Time (mean ± σ):     947.2 ms ±  16.7 ms    [User: 7443.7 ms, System: 9.5 ms]
+  Range (min … max):   931.7 ms … 978.7 ms    10 runs
+ 

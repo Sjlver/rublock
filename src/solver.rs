@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use crate::changeset::ChangeSet;
+
 // ── Puzzle ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -142,12 +144,23 @@ impl<const N: usize> SolverState<N> {
     const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
     const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
 
-    /// Clear all bits in `mask` from a cell's domain.  Returns `true` iff any
-    /// bit was actually set before (i.e. the domain shrank).
-    fn clear_mask(domains: &mut [[CellDomain; N]; N], row: usize, col: usize, mask: u64) -> bool {
+    /// Clear all bits in `mask` from a cell's domain.  Returns a `ChangeSet`
+    /// with the cell's row and column set iff any bit was actually cleared (i.e.
+    /// the domain shrank); otherwise returns an empty `ChangeSet`.
+    fn clear_mask(
+        domains: &mut [[CellDomain; N]; N],
+        row: usize,
+        col: usize,
+        mask: u64,
+    ) -> ChangeSet {
+        let mut cs = ChangeSet::default();
         let before = domains[row][col];
         domains[row][col] = before & !mask;
-        domains[row][col] != before
+        if domains[row][col] != before {
+            cs.set_row(row);
+            cs.set_col(col);
+        }
+        cs
     }
 
     /// Assign `bit` to cell (row, col) and propagate the constraint.
@@ -162,9 +175,9 @@ impl<const N: usize> SolverState<N> {
     /// **Black bit** - Clear the bit from its row (if it's a row black) or
     /// column. Clear BLACK 1 from cells to the left and above, and BLACK 2
     /// from cells to the right.
-    fn set_cell(&mut self, row: usize, col: usize, bit: u64) -> bool {
+    fn set_cell(&mut self, row: usize, col: usize, bit: u64) -> ChangeSet {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
-        let mut changed = false;
+        let mut changed = ChangeSet::default();
 
         if bit & Self::ALL_DIGITS != 0 {
             // Remove this digit from every other cell in the row and column.
@@ -296,10 +309,10 @@ impl<const N: usize> SolverState<N> {
     /// positions. It computes the union of the tuple bits. Any domain bit
     /// that is not in this union isn't supported by any tuple, and can
     /// be removed.
-    fn apply_general_arc_consistency(&mut self) -> bool {
-        let mut changed = false;
+    fn apply_general_arc_consistency(&mut self, prev: ChangeSet) -> ChangeSet {
+        let mut changed = ChangeSet::default();
 
-        for row in 0..N {
+        for row in prev.iter_rows() {
             let inside_target = self.puzzle.row_targets[row] as usize;
             let outside_target = self.tables.max_sum - inside_target;
 
@@ -353,7 +366,7 @@ impl<const N: usize> SolverState<N> {
             }
         }
 
-        for col in 0..N {
+        for col in prev.iter_cols() {
             let inside_target = self.puzzle.col_targets[col] as usize;
             let outside_target = self.tables.max_sum - inside_target;
 
@@ -411,17 +424,17 @@ impl<const N: usize> SolverState<N> {
     ///
     /// A singleton domain means there is only one possible value — call
     /// `set_cell` to fix it and propagate.
-    fn apply_singleton_rule(&mut self) -> bool {
-        let mut changed = false;
+    fn apply_singleton_rule(&mut self, prev: ChangeSet) -> ChangeSet {
+        let mut changed = ChangeSet::default();
 
-        for r in 0..N {
-            for c in 0..N {
+        for r in prev.iter_rows() {
+            for c in prev.iter_cols() {
                 let domain = self.domains[r][c];
                 let row_domain = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
                 let col_domain = domain & (Self::ALL_DIGITS | Self::COL_BLACKS);
-                if (row_domain).count_ones() == 1 {
+                if row_domain.count_ones() == 1 {
                     changed |= self.set_cell(r, c, row_domain);
-                } else if (col_domain).count_ones() == 1 {
+                } else if col_domain.count_ones() == 1 {
                     changed |= self.set_cell(r, c, col_domain);
                 }
             }
@@ -437,10 +450,10 @@ impl<const N: usize> SolverState<N> {
     /// `singleton_in_row`; if exactly one cell carries a given bit, that cell is
     /// the only candidate and is assigned via `set_cell`.  Column scanning is
     /// identical but uses `singleton_in_col` with the col-black bits.
-    fn apply_hidden_single_rule(&mut self) -> bool {
-        let mut changed = false;
+    fn apply_hidden_single_rule(&mut self, prev: ChangeSet) -> ChangeSet {
+        let mut changed = ChangeSet::default();
 
-        for r in 0..N {
+        for r in prev.iter_rows() {
             // Digit bits (1..=N-2) and row-black bits (N-1, N).
             let mut mask = Self::ALL_DIGITS | Self::ROW_BLACKS;
             while mask != 0 {
@@ -452,7 +465,7 @@ impl<const N: usize> SolverState<N> {
             }
         }
 
-        for c in 0..N {
+        for c in prev.iter_cols() {
             // Digit bits (1..=N-2) and col-black bits (N+1, N+2).
             let mut mask = Self::ALL_DIGITS | Self::COL_BLACKS;
             while mask != 0 {
@@ -473,11 +486,11 @@ impl<const N: usize> SolverState<N> {
     /// If a cell has no row-black bits in its domain, it cannot be black, so
     /// any col-black bits are also impossible and are cleared.  Vice versa: no
     /// col-black bits means the row-black bits must also go.
-    fn apply_black_consistency_rule(&mut self) -> bool {
-        let mut changed = false;
+    fn apply_black_consistency_rule(&mut self, prev: ChangeSet) -> ChangeSet {
+        let mut changed = ChangeSet::default();
 
-        for r in 0..N {
-            for c in 0..N {
+        for r in prev.iter_rows() {
+            for c in prev.iter_cols() {
                 let domain = self.domains[r][c];
                 if domain & Self::ROW_BLACKS == 0 {
                     changed |= Self::clear_mask(&mut self.domains, r, c, Self::COL_BLACKS);
@@ -533,14 +546,12 @@ impl<const N: usize> SolverState<N> {
     /// full pass leaves every domain unchanged, we have reached a fixpoint and
     /// backtracking search can begin.
     pub fn propagate(&mut self) {
-        loop {
-            let changed = self.apply_general_arc_consistency()
-                | self.apply_black_consistency_rule()
-                | self.apply_singleton_rule()
-                | self.apply_hidden_single_rule();
-            if !changed {
-                break;
-            }
+        let mut changed = ChangeSet::all(N);
+        while changed.any() {
+            changed = self.apply_general_arc_consistency(changed)
+                | self.apply_black_consistency_rule(changed)
+                | self.apply_singleton_rule(changed)
+                | self.apply_hidden_single_rule(changed);
         }
     }
 
@@ -755,7 +766,7 @@ mod tests {
     fn black1_row_always_forbidden_at_last_position() {
         // Black-1 can never sit at position 5, even for target = 0.
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
         for r in 0..6 {
             assert_eq!(
                 state.domains[r][5] & SolverState::<6>::BLACK1_ROW,
@@ -775,7 +786,7 @@ mod tests {
         //   p=4: MAX_SUM[0] =  0 < 9  → forbidden
         //   p=5: always forbidden
         let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
         println!("{state}");
         // dbg!(&state);
 
@@ -802,7 +813,7 @@ mod tests {
     fn inside_outside_rule_target_9() {
         // Row 0 has target 9: digit 1 is outside the blacks.
         let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         // Middle cells lose digit 1.
         for c in 1..5 {
@@ -840,7 +851,7 @@ mod tests {
     fn inside_outside_rule_target_8_column() {
         // Column 2 has target 8: digit 2 is outside the blacks.
         let mut state = SolverState::new(Puzzle::new([0; 6], [0, 0, 8, 0, 0, 0]));
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         // Middle cells lose digit 2.
         for r in 1..5 {
@@ -959,7 +970,7 @@ mod tests {
         for c in (0..6).filter(|&c| c != 3) {
             state.domains[0][c] &= !SolverState::<6>::BLACK2_ROW;
         }
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_ne!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
@@ -981,7 +992,7 @@ mod tests {
         // Force cell (3, 3) to have only digit 2 in its domain.
         state.domains[3][3] = 1 << 2;
         // Run just this one rule (not propagate, to isolate it).
-        state.apply_singleton_rule();
+        state.apply_singleton_rule(ChangeSet::all(6));
 
         assert_eq!(state.domains[3][3], 1 << 2);
         // Digit 2 should be gone from the rest of row 3 and col 3.
@@ -1000,7 +1011,7 @@ mod tests {
         for c in (0..6).filter(|&c| c != 2) {
             state.domains[0][c] &= !(1 << 4);
         }
-        state.apply_hidden_single_rule();
+        state.apply_hidden_single_rule(ChangeSet::all(6));
 
         assert_eq!(state.domains[0][2], 1 << 4);
     }
@@ -1010,7 +1021,7 @@ mod tests {
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Strip all row-black bits from cell (1, 4).
         state.domains[1][4] &= !SolverState::<6>::ROW_BLACKS;
-        state.apply_black_consistency_rule();
+        state.apply_black_consistency_rule(ChangeSet::all(6));
 
         // Col-black bits must now also be gone.
         assert_eq!(state.domains[1][4] & SolverState::<6>::COL_BLACKS, 0);
@@ -1029,7 +1040,7 @@ mod tests {
         let mut state = SolverState::new(Puzzle::new([3, 0, 0, 0, 0, 0], [0; 6]));
         state.set_cell(0, 1, SolverState::<6>::BLACK1_ROW);
         state.set_cell(0, 3, SolverState::<6>::BLACK2_ROW);
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
             state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
@@ -1048,7 +1059,7 @@ mod tests {
         state.set_cell(0, 4, SolverState::<6>::BLACK2_ROW);
         state.set_cell(0, 1, 1 << 2); // digit 2
         state.set_cell(0, 3, 1 << 1); // digit 1
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
             state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
@@ -1064,7 +1075,7 @@ mod tests {
         // shorter target.
         let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
         println!("Initial state with target 7");
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_ne!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
             0,
@@ -1075,7 +1086,7 @@ mod tests {
         // The rule should clear BLACK1 from col 2.
         state.set_cell(0, 0, 1 << 3);
         println!("Cell 0 is set to 3");
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
             0,
@@ -1105,7 +1116,7 @@ mod tests {
         // isn't clear whether col 2 could be BLACK1. It could be for the
         // shorter target.
         let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_ne!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
             0,
@@ -1115,7 +1126,7 @@ mod tests {
         // If we set col 5 to be 3, then the 3,4 tuple can no longer be inside.
         // This completely determines the blacks
         state.set_cell(0, 5, 1 << 3);
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
             (0..6)
                 .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
@@ -1137,7 +1148,7 @@ mod tests {
         // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
         // isn't clear where the blacks are. The target could be 2 or 3 cells wide.
         let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
             (0..6)
@@ -1158,7 +1169,7 @@ mod tests {
         // However, there are still two possibilities for the blacks.
         state.set_cell(0, 0, 1 << 1);
         println!("Col 0 set to 1");
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
             (0..6)
@@ -1181,9 +1192,9 @@ mod tests {
         // black2, and then another arc consistency pass.
         state.domains[0][5] &= !(1 << 2);
         println!("Col 5 can no longer be 2");
-        state.apply_general_arc_consistency();
-        state.apply_singleton_rule();
-        state.apply_general_arc_consistency();
+        state.apply_general_arc_consistency(ChangeSet::all(6));
+        state.apply_singleton_rule(ChangeSet::all(6));
+        state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
             (0..6)
