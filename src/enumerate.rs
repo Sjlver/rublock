@@ -276,13 +276,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "working on solver first"]
     fn solver_count_solutions_matches_brute_force() {
         use crate::solver::{Puzzle, SolverState};
         use std::collections::HashMap;
 
-        // Collect all valid 6×6 grids via DFS from a fixed prefix so the test
-        // runs fast (enumerating from scratch is too slow for a unit test).
+        const N: usize = 4;
+
+        // Collect all valid NxN grids via DFS.
         fn collect_all<const N: usize>(partial: &PartialGrid<N>, out: &mut Vec<[[Cell; N]; N]>) {
             if partial.is_complete() {
                 out.push(partial.cells);
@@ -294,27 +294,12 @@ mod tests {
                 }
             }
         }
-        let start = PartialGrid::<6>::new()
-            .try_place(Cell::Black)
-            .and_then(|g| g.try_place(Cell::Number(1)))
-            .and_then(|g| g.try_place(Cell::Number(2)))
-            .and_then(|g| g.try_place(Cell::Number(3)))
-            .and_then(|g| g.try_place(Cell::Number(4)))
-            .and_then(|g| g.try_place(Cell::Black))
-            .and_then(|g| g.try_place(Cell::Number(1)))
-            .and_then(|g| g.try_place(Cell::Number(2)))
-            .and_then(|g| g.try_place(Cell::Number(3)))
-            .and_then(|g| g.try_place(Cell::Number(4)))
-            .and_then(|g| g.try_place(Cell::Black))
-            .and_then(|g| g.try_place(Cell::Black))
-            .and_then(|g| g.try_place(Cell::Number(2)))
-            .and_then(|g| g.try_place(Cell::Number(3)))
-            .expect("hard-coded initial placement must be valid");
-        let mut raw_grids: Vec<[[Cell; 6]; 6]> = Vec::new();
+        let start = PartialGrid::<N>::new();
+        let mut raw_grids: Vec<[[Cell; N]; N]> = Vec::new();
         collect_all(&start, &mut raw_grids);
 
         // Group grid indices by their puzzle targets.
-        let mut by_targets: HashMap<([u8; 6], [u8; 6]), usize> = HashMap::new();
+        let mut by_targets: HashMap<([u8; N], [u8; N]), usize> = HashMap::new();
         for cells in &raw_grids {
             let grid = Grid { cells: *cells };
             let targets = grid.compute_targets();
@@ -323,7 +308,7 @@ mod tests {
 
         // For every unique target set, the brute-force count is the number of
         // grids that share those targets.  The solver must agree.
-        let mut mismatches: Vec<([u8; 6], [u8; 6], usize, usize)> = Vec::new();
+        let mut mismatches: Vec<([u8; N], [u8; N], usize, usize)> = Vec::new();
         for ((row_t, col_t), brute_count) in &by_targets {
             let puzzle = Puzzle::new(*row_t, *col_t);
             let state = SolverState::new(puzzle);

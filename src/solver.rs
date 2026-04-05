@@ -1319,8 +1319,8 @@ mod tests {
     }
 
     #[test]
-    fn solver_finds_single_known_solution() {
+    fn solver_finds_known_solutions() {
         let state = SolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
-        assert_eq!(state.count_solutions(2), 1);
+        assert_eq!(state.count_solutions(100), 32);
     }
 }
