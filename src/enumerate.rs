@@ -196,6 +196,87 @@ pub fn generate_partial_grids<const N: usize>(
     leaves.into_iter().chain(queue).take(target).collect()
 }
 
+// ── D4 symmetry helpers ───────────────────────────────────────────────────────
+
+/// Generate all 8 elements of the D4 (square symmetry) orbit of a puzzle.
+///
+/// The symmetries are: identity, transpose, flip-rows, flip-cols, 180° rotation,
+/// and the three remaining reflections.  Every valid puzzle is equivalent to
+/// exactly one canonical representative — the lex-minimum of its orbit.
+fn d4_orbit<const N: usize>(row: [u8; N], col: [u8; N]) -> [([u8; N], [u8; N]); 8] {
+    let mut rr = row;
+    rr.reverse();
+    let mut rc = col;
+    rc.reverse();
+    [
+        (row, col),
+        (col, row),
+        (rr,  col),
+        (row,  rc),
+        (rr,   rc),
+        (rc,  row),
+        (col,  rr),
+        (rc,   rr),
+    ]
+}
+
+/// Return `true` if `(row, col)` is the lex-minimum of its D4 orbit.
+///
+/// Only canonical puzzles are solved; their orbit size is used as a multiplier
+/// to recover the total count.
+fn is_canonical<const N: usize>(row: [u8; N], col: [u8; N]) -> bool {
+    d4_orbit(row, col).iter().all(|&(r, c)| (row, col) <= (r, c))
+}
+
+/// Count distinct elements in the D4 orbit, i.e. the number of symmetrically
+/// distinct puzzles represented by this canonical form.
+fn orbit_size<const N: usize>(row: [u8; N], col: [u8; N]) -> u64 {
+    let mut forms: Vec<_> = d4_orbit(row, col).into_iter().collect();
+    forms.sort_unstable();
+    forms.dedup();
+    forms.len() as u64
+}
+
+/// Return `true` if the puzzle derived from `grid` is known to have at least
+/// two solutions, without running the full solver.
+///
+/// For N > 3 every grid has distinct digits appearing exactly once per
+/// row and column, so no grid can equal its vertical or horizontal flip.
+/// Therefore palindromic row/col targets immediately imply two solutions.
+///
+/// For N ≤ 3 this shortcut is skipped (degenerate cases).
+fn uniqueness_ruled_out<const N: usize>(
+    grid: &Grid<N>,
+    row_t: [u8; N],
+    col_t: [u8; N],
+) -> bool {
+    if N <= 3 {
+        return false;
+    }
+    let mut rev_row = row_t;
+    rev_row.reverse();
+    if row_t == rev_row {
+        return true; // V(grid) ≠ grid always, so two solutions exist
+    }
+    let mut rev_col = col_t;
+    rev_col.reverse();
+    if col_t == rev_col {
+        return true; // H(grid) ≠ grid always, so two solutions exist
+    }
+    if row_t == col_t {
+        // Self-transposed grids can exist, so we must compare explicitly.
+        return grid.transpose() != *grid;
+    }
+    false
+}
+
+/// Return `true` if the puzzle with the given targets has exactly one solution.
+fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N]) -> bool {
+    use crate::solver::{Puzzle, SolverState};
+    let state = SolverState::new(Puzzle::new(row_t, col_t));
+    state.count_solutions(2) == 1
+}
+
 // ── Per-work-item DFS ─────────────────────────────────────────────────────────
 
 /// Count the complete grids and valid puzzles reachable from `partial`.
@@ -214,11 +295,13 @@ pub fn count_from_partial<const N: usize>(partial: &PartialGrid<N>) -> (u64, u64
 fn dfs<const N: usize>(partial: &PartialGrid<N>, total: &mut u64, valid: &mut u64) {
     if partial.is_complete() {
         *total += 1;
-        let grid = Grid {
-            cells: partial.cells,
-        };
-        if grid.is_valid_puzzle() {
-            *valid += 1;
+        let grid = Grid { cells: partial.cells };
+        let (row_t, col_t) = grid.compute_targets();
+        if is_canonical(row_t, col_t)
+            && !uniqueness_ruled_out(&grid, row_t, col_t)
+            && is_valid_puzzle(row_t, col_t)
+        {
+            *valid += orbit_size(row_t, col_t);
         }
         return;
     }
@@ -330,6 +413,47 @@ mod tests {
                 mismatches.len()
             );
         }
+    }
+
+    /// Verify that the orbit-multiplied valid count from count_from_partial
+    /// matches the brute-force count of distinct puzzles with a unique solution.
+    #[test]
+    fn valid_puzzle_count_matches_brute_force_with_symmetry() {
+        use std::collections::HashMap;
+
+        const N: usize = 4;
+
+        fn collect_all<const N: usize>(partial: &PartialGrid<N>, out: &mut Vec<[[Cell; N]; N]>) {
+            if partial.is_complete() {
+                out.push(partial.cells);
+                return;
+            }
+            for v in candidates::<N>() {
+                if let Some(next) = partial.try_place(v) {
+                    collect_all(&next, out);
+                }
+            }
+        }
+
+        // Brute-force: count distinct (row_targets, col_targets) pairs with
+        // exactly one solution (= exactly one grid with those targets).
+        let mut raw_grids: Vec<[[Cell; N]; N]> = Vec::new();
+        collect_all(&PartialGrid::<N>::new(), &mut raw_grids);
+        let mut by_targets: HashMap<([u8; N], [u8; N]), usize> = HashMap::new();
+        for cells in &raw_grids {
+            let grid = Grid { cells: *cells };
+            let targets = grid.compute_targets();
+            *by_targets.entry(targets).or_insert(0) += 1;
+        }
+        let brute_force_valid: u64 = by_targets.values().filter(|&&c| c == 1).count() as u64;
+
+        // New code: count_from_partial with D4 symmetry multiplier.
+        let (_, valid) = count_from_partial(&PartialGrid::<N>::new());
+
+        assert_eq!(
+            valid, brute_force_valid,
+            "symmetry-aware count {valid} != brute-force {brute_force_valid}"
+        );
     }
 
     #[test]

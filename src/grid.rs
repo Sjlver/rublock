@@ -1,5 +1,3 @@
-use crate::solver::{Puzzle, SolverState};
-
 // ── Cell ──────────────────────────────────────────────────────────────────────
 
 /// The value of a single cell in a fully or partially filled grid.
@@ -20,7 +18,7 @@ pub enum Cell {
 /// Each row and each column must contain exactly two black squares and the
 /// digits 1..=(N-2) — this is the structural invariant that the grid
 /// enumerator maintains, and that `compute_targets` relies on.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Grid<const N: usize> {
     pub cells: [[Cell; N]; N],
 }
@@ -62,18 +60,13 @@ impl<const N: usize> Grid<N> {
         (row_targets, col_targets)
     }
 
-    /// Return `true` if this grid constitutes a valid puzzle.
-    ///
-    /// A puzzle is *valid* when the targets derived from the grid's black
-    /// placement and digit arrangement lead to exactly one solution — i.e.,
-    /// a solver given only the N target numbers can reconstruct this grid
-    /// uniquely.
-    pub fn is_valid_puzzle(&self) -> bool {
-        let (row_targets, col_targets) = self.compute_targets();
-        let puzzle = Puzzle::new(row_targets, col_targets);
-        let state = SolverState::new(puzzle);
-        state.count_solutions(2) == 1
+    /// Return a new grid with rows and columns swapped.
+    pub fn transpose(&self) -> Self {
+        Grid {
+            cells: std::array::from_fn(|r| std::array::from_fn(|c| self.cells[c][r])),
+        }
     }
+
 }
 
 /// Find the positions of the two black squares in a row (or column) of cells.
@@ -129,19 +122,4 @@ mod tests {
         assert_eq!(col_targets, [0, 0, 5, 9, 0, 4]);
     }
 
-    #[test]
-    fn is_valid_puzzle_for_known_good_grid() {
-        // Newspaper puzzle 1's solution (from the solver integration test).
-        // Blacks at: row 0 → cols 1,5; row 1 → cols 1,3; etc.
-        // We verify that it's recognised as a valid (unique-solution) puzzle.
-        let grid = make_grid(&[
-            [2, 0, 3, 1, 4, 0],
-            [1, 0, 2, 0, 3, 4],
-            [3, 4, 0, 2, 1, 0],
-            [0, 3, 1, 4, 0, 2],
-            [0, 2, 4, 3, 0, 1],
-            [4, 1, 0, 0, 2, 3],
-        ]);
-        assert!(grid.is_valid_puzzle());
-    }
 }

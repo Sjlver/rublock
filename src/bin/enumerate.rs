@@ -5,7 +5,6 @@ use std::time::Instant;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use rublock::enumerate::{PartialGrid, count_from_partial, generate_partial_grids};
-use rublock::grid::Cell;
 
 /// Count all valid 6×6 rublock grids and report how many are valid puzzles
 /// (i.e. have exactly one solution given their derived targets).
