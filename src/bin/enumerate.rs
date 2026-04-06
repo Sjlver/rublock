@@ -5,7 +5,6 @@ use std::time::Instant;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use rublock::enumerate::{PartialGrid, count_from_partial, generate_partial_grids};
-use rublock::grid::Cell;
 
 /// Count all valid 6×6 rublock grids and report how many are valid puzzles
 /// (i.e. have exactly one solution given their derived targets).
@@ -25,19 +24,7 @@ fn main() {
 
     // ── Build work queue ──────────────────────────────────────────────────────
 
-    // Counting all 6x6 grids is a bit slow for my benchmark. Thus, start with a
-    // grid that has a few cells filled already.
-    let start = PartialGrid::<6>::new()
-        .try_place(Cell::Black)
-        .and_then(|g| g.try_place(Cell::Number(1)))
-        .and_then(|g| g.try_place(Cell::Number(2)))
-        .and_then(|g| g.try_place(Cell::Number(3)))
-        .and_then(|g| g.try_place(Cell::Number(4)))
-        .and_then(|g| g.try_place(Cell::Black))
-        .and_then(|g| g.try_place(Cell::Number(1)))
-        .and_then(|g| g.try_place(Cell::Number(2)))
-        .expect("hard-coded initial placement must be valid");
-    // let start = PartialGrid::<6>::new();
+    let start = PartialGrid::<6>::new();
 
     let work_items = generate_partial_grids(start, target);
 

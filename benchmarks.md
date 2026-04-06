@@ -86,3 +86,11 @@ Benchmark 1: ./target/release/enumerate
   Time (mean ± σ):      14.7 ms ±   0.7 ms    [User: 90.5 ms, System: 4.4 ms]
   Range (min … max):    13.6 ms …  19.6 ms    184 runs
  
+Looks like this is because grids with the chosen prefix aren't canonical
+
+------------------
+
+[00:33:46] [========================================]    800/800 items  grids=done  (0s remaining)
+Total valid grids:             283046400
+Valid puzzles (unique soln):    80165380
+Time: 2026.872 seconds (139646.9 grids per second)
