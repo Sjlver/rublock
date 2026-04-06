@@ -73,3 +73,16 @@ Benchmark 1: ./target/release/enumerate
   Time (mean ± σ):     947.2 ms ±  16.7 ms    [User: 7443.7 ms, System: 9.5 ms]
   Range (min … max):   931.7 ms … 978.7 ms    10 runs
  
+
+-----------------
+Sun Apr  5 09:24:57 PM CEST 2026
+1a6f8d5 Implement symmetry optimizations.
+Work queue: 800 items (8 threads × 100 target).
+
+Total valid grids:                 32448
+Valid puzzles (unique soln):           0
+Time: 0.016 seconds (2053151.2 grids per second)
+Benchmark 1: ./target/release/enumerate
+  Time (mean ± σ):      14.7 ms ±   0.7 ms    [User: 90.5 ms, System: 4.4 ms]
+  Range (min … max):    13.6 ms …  19.6 ms    184 runs
+ 

@@ -8,4 +8,4 @@ date
 git log --oneline | head -n 1 || true
 
 cargo run --bin enumerate --release
-hyperfine ./target/release/enumerate
+hyperfine --warmup=2 ./target/release/enumerate
