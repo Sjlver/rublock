@@ -272,8 +272,9 @@ fn uniqueness_ruled_out<const N: usize>(
 
 /// Return `true` if the puzzle with the given targets has exactly one solution.
 fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N]) -> bool {
-    use crate::solver::{Puzzle, SolverState};
-    let state = SolverState::new(Puzzle::new(row_t, col_t));
+    use crate::solver::Puzzle;
+    use crate::queue_solver::QueueSolverState;
+    let state = QueueSolverState::new(Puzzle::new(row_t, col_t));
     state.count_solutions(2) == 1
 }
 

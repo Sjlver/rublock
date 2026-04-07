@@ -72,7 +72,7 @@ impl<const N: usize> SolverState<N> {
 // which is only known at runtime.
 
 #[derive(Debug)]
-struct Tables {
+pub(crate) struct Tables {
     /// For each (target, size) pair, the list of valid digit-set bitmasks.
     ///
     /// A valid digit-set for cage target `t` and size `k` is any k-element
@@ -84,13 +84,13 @@ struct Tables {
     valid_tuples: Vec<Vec<Vec<u64>>>,
 
     /// Maximum achievable cage sum (= 1 + 2 + ... + num_digits).
-    max_sum: usize,
+    pub(crate) max_sum: usize,
 }
 
 impl Tables {
     /// Build tables for a grid whose rows/columns contain `num_digits` distinct
     /// digit values (i.e. `num_digits = N - 2` for an N×N grid).
-    fn build(num_digits: usize) -> Self {
+    pub(crate) fn build(num_digits: usize) -> Self {
         // Digits are 1..=num_digits; max achievable cage sum is their total.
         let max_target: usize = (1..=num_digits).sum();
         let num_targets = max_target + 1;
@@ -118,7 +118,7 @@ impl Tables {
     }
 
     // Returns (l, t) for all valid tuples with the given `target`
-    fn valid_tuples_for_target(&self, target: usize) -> Vec<(usize, u64)> {
+    pub(crate) fn valid_tuples_for_target(&self, target: usize) -> Vec<(usize, u64)> {
         self.valid_tuples[target]
             .iter()
             .enumerate()

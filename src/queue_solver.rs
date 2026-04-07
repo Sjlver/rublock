@@ -1,0 +1,520 @@
+use std::collections::VecDeque;
+use std::sync::Arc;
+
+use crate::solver::{Puzzle, Tables};
+
+type CellDomain = u64;
+
+// ── LiveTuple ─────────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct LiveTuple {
+    start: usize,
+    pattern: Vec<u64>,
+}
+
+impl LiveTuple {
+    fn col_at(&self, p: usize, n: usize) -> usize {
+        (self.start + p) % n
+    }
+
+    fn pos_of(&self, c: usize, n: usize) -> Option<usize> {
+        (0..self.pattern.len()).find(|&p| self.col_at(p, n) == c)
+    }
+}
+
+// ── QueueSolverState ──────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct QueueSolverState<const N: usize> {
+    pub puzzle: Puzzle<N>,
+    domains: [[CellDomain; N]; N],
+    queue: VecDeque<(usize, usize, u64)>,
+
+    // ── Singleton constraint ──────────────────────────────────────────────────
+    // How many value-choices does this cell have in the row / col view?
+    row_domain_size: [[u8; N]; N],
+    col_domain_size: [[u8; N]; N],
+
+    // ── Hidden singles constraint ─────────────────────────────────────────────
+    // row_candidates[r][p] = cells in row r whose domain has bit (1 << p).
+    // col_candidates[c][p] = cells in col c whose domain has bit (1 << p).
+    // Vec length = N+3.
+    row_candidates: [Vec<u8>; N],
+    col_candidates: [Vec<u8>; N],
+
+    // ── Black consistency constraint ──────────────────────────────────────────
+    row_blacks_left: [[u8; N]; N],
+    col_blacks_left: [[u8; N]; N],
+
+    // ── General arc consistency constraint ────────────────────────────────────
+    live_tuples_row: [Vec<LiveTuple>; N],
+    live_tuples_col: [Vec<LiveTuple>; N],
+
+    // support_row[r][c][p] = number of live row-direction tuples in row r
+    //   whose pattern at column c includes bit (1 << p).
+    // Each inner Vec has length N+3.
+    tuple_support_row: [[Vec<u32>; N]; N],
+    tuple_support_col: [[Vec<u32>; N]; N],
+}
+
+impl<const N: usize> QueueSolverState<N> {
+    const BLACK1_ROW: u64 = 1u64 << (N - 1);
+    const BLACK2_ROW: u64 = 1u64 << N;
+    const BLACK1_COL: u64 = 1u64 << (N + 1);
+    const BLACK2_COL: u64 = 1u64 << (N + 2);
+
+    const ALL_DIGITS: u64 = ((1u64 << (N - 2)) - 1) << 1;
+    const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
+    const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
+    const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
+
+    pub fn new(puzzle: Puzzle<N>) -> Self {
+        let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
+        let tables = Arc::new(Tables::build(N - 2));
+
+        // Phase 1: Enumerate live tuples.
+        let mut live_row: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
+        let mut live_col: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
+
+        for r in 0..N {
+            let inside_target = puzzle.row_targets[r] as usize;
+            let outside_target = tables.max_sum - inside_target;
+
+            // Inside (non-wrapping): [BLACK1_ROW, digit..., BLACK2_ROW]
+            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK1_ROW)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK2_ROW))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() <= N {
+                        live_row[r].push(LiveTuple { start, pattern: pattern.clone() });
+                    }
+                }
+            }
+
+            // Outside (wrapping): [BLACK2_ROW, digit..., BLACK1_ROW]
+            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK2_ROW)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK1_ROW))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() > N {
+                        live_row[r].push(LiveTuple { start, pattern: pattern.clone() });
+                    }
+                }
+            }
+        }
+
+        for c in 0..N {
+            let inside_target = puzzle.col_targets[c] as usize;
+            let outside_target = tables.max_sum - inside_target;
+
+            // Inside (non-wrapping): [BLACK1_COL, digit..., BLACK2_COL]
+            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK1_COL)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK2_COL))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() <= N {
+                        live_col[c].push(LiveTuple { start, pattern: pattern.clone() });
+                    }
+                }
+            }
+
+            // Outside (wrapping): [BLACK2_COL, digit..., BLACK1_COL]
+            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK2_COL)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK1_COL))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() > N {
+                        live_col[c].push(LiveTuple { start, pattern: pattern.clone() });
+                    }
+                }
+            }
+        }
+
+        // Phase 2: Initialize support counts from live tuples.
+        let mut support_row: [[Vec<u32>; N]; N] =
+            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u32; N + 3]));
+        let mut support_col: [[Vec<u32>; N]; N] =
+            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u32; N + 3]));
+
+        for r in 0..N {
+            for t in &live_row[r] {
+                for p in 0..t.pattern.len() {
+                    let c2 = (t.start + p) % N;
+                    let mut bits = t.pattern[p];
+                    while bits != 0 {
+                        let b = bits & bits.wrapping_neg();
+                        bits &= bits - 1;
+                        support_row[r][c2][b.trailing_zeros() as usize] += 1;
+                    }
+                }
+            }
+        }
+
+        for c in 0..N {
+            for t in &live_col[c] {
+                for p in 0..t.pattern.len() {
+                    let r2 = (t.start + p) % N;
+                    let mut bits = t.pattern[p];
+                    while bits != 0 {
+                        let b = bits & bits.wrapping_neg();
+                        bits &= bits - 1;
+                        support_col[r2][c][b.trailing_zeros() as usize] += 1;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Initialize counters from the full domain (before any clear_mask).
+        let row_domain_size: [[u8; N]; N] = [[N as u8; N]; N];
+        let col_domain_size: [[u8; N]; N] = [[N as u8; N]; N];
+        let row_blacks_left: [[u8; N]; N] = [[2; N]; N];
+        let col_blacks_left: [[u8; N]; N] = [[2; N]; N];
+
+        // TODO: this can be simplified. It's [0] followed by [N; N].
+        // row_candidates[r][p] = number of cells in row r with bit (1<<p) set.
+        // All cells start with full_cell, so any bit present in full_cell is in
+        // all N cells of every row/col.
+        let row_candidates: [Vec<u8>; N] = std::array::from_fn(|_| {
+            (0..N + 3)
+                .map(|p| {
+                    let bit = 1u64 << p;
+                    if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 && full_cell & bit != 0 {
+                        N as u8
+                    } else {
+                        0
+                    }
+                })
+                .collect()
+        });
+        let col_candidates: [Vec<u8>; N] = std::array::from_fn(|_| {
+            (0..N + 3)
+                .map(|p| {
+                    let bit = 1u64 << p;
+                    if bit & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 && full_cell & bit != 0 {
+                        N as u8
+                    } else {
+                        0
+                    }
+                })
+                .collect()
+        });
+
+        let mut state = Self {
+            puzzle,
+            domains: [[full_cell; N]; N],
+            queue: VecDeque::new(),
+            row_domain_size,
+            col_domain_size,
+            row_candidates,
+            col_candidates,
+            row_blacks_left,
+            col_blacks_left,
+            live_tuples_row: live_row,
+            live_tuples_col: live_col,
+            tuple_support_row: support_row,
+            tuple_support_col: support_col,
+        };
+
+        // Phase 4: Seed queue with bits that have no support.
+        for r in 0..N {
+            for c in 0..N {
+                // Row-direction bits: digits and row-blacks.
+                let mut mask = full_cell & (Self::ALL_DIGITS | Self::ROW_BLACKS);
+                while mask != 0 {
+                    let b = mask & mask.wrapping_neg();
+                    mask &= mask - 1;
+                    if state.tuple_support_row[r][c][b.trailing_zeros() as usize] == 0 {
+                        state.clear_mask(r, c, b);
+                    }
+                }
+                // Col-direction bits: digits and col-blacks.
+                let mut mask = full_cell & (Self::ALL_DIGITS | Self::COL_BLACKS);
+                while mask != 0 {
+                    let b = mask & mask.wrapping_neg();
+                    mask &= mask - 1;
+                    if state.tuple_support_col[r][c][b.trailing_zeros() as usize] == 0 {
+                        state.clear_mask(r, c, b);
+                    }
+                }
+            }
+        }
+
+        // Phase 5: Initial propagation.
+        state.propagate();
+
+        state
+    }
+
+    // ── Core mutation primitives ──────────────────────────────────────────────
+
+    fn clear_mask(&mut self, r: usize, c: usize, mask: u64) {
+        let before = self.domains[r][c];
+        self.domains[r][c] &= !mask;
+        let removed = before & !self.domains[r][c];
+        let mut bits = removed;
+        while bits != 0 {
+            let b = bits & bits.wrapping_neg();
+            bits &= bits - 1;
+            self.queue.push_back((r, c, b));
+        }
+    }
+
+    fn set_cell(&mut self, r: usize, c: usize, bit: u64) {
+        debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
+
+        if bit & Self::ALL_DIGITS != 0 {
+            for col in (0..N).filter(|&col| col != c) {
+                self.clear_mask(r, col, bit);
+            }
+            for row in (0..N).filter(|&row| row != r) {
+                self.clear_mask(row, c, bit);
+            }
+            self.clear_mask(r, c, !bit);
+        } else if bit & Self::ROW_BLACKS != 0 {
+            for col in (0..N).filter(|&col| col != c) {
+                self.clear_mask(r, col, bit);
+            }
+            self.clear_mask(r, c, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit));
+        } else if bit & Self::COL_BLACKS != 0 {
+            for row in (0..N).filter(|&row| row != r) {
+                self.clear_mask(row, c, bit);
+            }
+            self.clear_mask(r, c, Self::ALL_DIGITS | (Self::COL_BLACKS & !bit));
+        }
+
+        if bit & Self::ALL_BLACKS != 0 {
+            for left in 0..c {
+                self.clear_mask(r, left, Self::BLACK2_ROW);
+            }
+            for right in c + 1..N {
+                self.clear_mask(r, right, Self::BLACK1_ROW);
+            }
+            for above in 0..r {
+                self.clear_mask(above, c, Self::BLACK2_COL);
+            }
+            for below in r + 1..N {
+                self.clear_mask(below, c, Self::BLACK1_COL);
+            }
+        }
+    }
+
+    // ── Update handlers ───────────────────────────────────────────────────────
+
+    fn update(&mut self, r: usize, c: usize, bit: u64) {
+        self.update_singleton(r, c, bit);
+        self.update_hidden_singles(r, c, bit);
+        self.update_black_consistency(r, c, bit);
+        self.update_arc(r, c, bit);
+    }
+
+    fn update_singleton(&mut self, r: usize, c: usize, bit: u64) {
+        if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
+            self.row_domain_size[r][c] -= 1;
+            if self.row_domain_size[r][c] == 1 {
+                let row_domain = self.domains[r][c] & (Self::ALL_DIGITS | Self::ROW_BLACKS);
+                if row_domain.count_ones() == 1 {
+                    self.set_cell(r, c, row_domain);
+                }
+            }
+        }
+
+        if bit & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 {
+            self.col_domain_size[r][c] -= 1;
+            if self.col_domain_size[r][c] == 1 {
+                let col_domain = self.domains[r][c] & (Self::ALL_DIGITS | Self::COL_BLACKS);
+                if col_domain.count_ones() == 1 {
+                    self.set_cell(r, c, col_domain);
+                }
+            }
+        }
+    }
+
+    fn update_hidden_singles(&mut self, r: usize, c: usize, bit: u64) {
+        let p = bit.trailing_zeros() as usize;
+
+        if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
+            self.row_candidates[r][p] -= 1;
+            if self.row_candidates[r][p] == 1 {
+                if let Some(c2) = (0..N).find(|&col| self.domains[r][col] & bit != 0) {
+                    self.set_cell(r, c2, bit);
+                }
+            }
+        }
+
+        if bit & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 {
+            self.col_candidates[c][p] -= 1;
+            if self.col_candidates[c][p] == 1 {
+                if let Some(r2) = (0..N).find(|&row| self.domains[row][c] & bit != 0) {
+                    self.set_cell(r2, c, bit);
+                }
+            }
+        }
+    }
+
+    fn update_black_consistency(&mut self, r: usize, c: usize, bit: u64) {
+        if bit & Self::ROW_BLACKS != 0 {
+            self.row_blacks_left[r][c] -= 1;
+            if self.row_blacks_left[r][c] == 0 {
+                self.clear_mask(r, c, Self::COL_BLACKS);
+            }
+        }
+
+        if bit & Self::COL_BLACKS != 0 {
+            self.col_blacks_left[r][c] -= 1;
+            if self.col_blacks_left[r][c] == 0 {
+                self.clear_mask(r, c, Self::ROW_BLACKS);
+            }
+        }
+    }
+
+    fn update_arc(&mut self, r: usize, c: usize, bit: u64) {
+        // Row direction: check tuples in live_row[r] that cover column c.
+        let mut i = 0;
+        while i < self.live_tuples_row[r].len() {
+            let Some(pos) = self.live_tuples_row[r][i].pos_of(c, N) else {
+                i += 1;
+                continue;
+            };
+            if self.live_tuples_row[r][i].pattern[pos] & bit == 0 {
+                i += 1;
+                continue;
+            }
+            // Check liveness: does the cell domain still support this pattern position?
+            if self.domains[r][c] & self.live_tuples_row[r][i].pattern[pos] != 0 {
+                i += 1;
+                continue;
+            }
+            // Tuple is dead: remove and update support counts.
+            let dead = self.live_tuples_row[r].swap_remove(i);
+            for p in 0..dead.pattern.len() {
+                let c2 = (dead.start + p) % N;
+                let mut bits = dead.pattern[p];
+                while bits != 0 {
+                    let b = bits & bits.wrapping_neg();
+                    bits &= bits - 1;
+                    let idx = b.trailing_zeros() as usize;
+                    self.tuple_support_row[r][c2][idx] -= 1;
+                    if self.tuple_support_row[r][c2][idx] == 0 {
+                        self.clear_mask(r, c2, b);
+                    }
+                }
+            }
+            // Don't increment i: swap_remove moved the last element here.
+        }
+
+        // Column direction: check tuples in live_col[c] that cover row r.
+        let mut i = 0;
+        while i < self.live_tuples_col[c].len() {
+            let Some(pos) = self.live_tuples_col[c][i].pos_of(r, N) else {
+                i += 1;
+                continue;
+            };
+            if self.live_tuples_col[c][i].pattern[pos] & bit == 0 {
+                i += 1;
+                continue;
+            }
+            if self.domains[r][c] & self.live_tuples_col[c][i].pattern[pos] != 0 {
+                i += 1;
+                continue;
+            }
+            let dead = self.live_tuples_col[c].swap_remove(i);
+            for p in 0..dead.pattern.len() {
+                let r2 = (dead.start + p) % N;
+                let mut bits = dead.pattern[p];
+                while bits != 0 {
+                    let b = bits & bits.wrapping_neg();
+                    bits &= bits - 1;
+                    let idx = b.trailing_zeros() as usize;
+                    self.tuple_support_col[r2][c][idx] -= 1;
+                    if self.tuple_support_col[r2][c][idx] == 0 {
+                        self.clear_mask(r2, c, b);
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Propagation ───────────────────────────────────────────────────────────
+
+    pub fn propagate(&mut self) {
+        while let Some((r, c, bit)) = self.queue.pop_front() {
+            self.update(r, c, bit);
+        }
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────────
+
+    pub fn is_contradiction(&self) -> bool {
+        self.domains.iter().flatten().any(|&d| d == 0)
+    }
+
+    pub fn is_solved(&self) -> bool {
+        self.domains.iter().flatten().all(|&d| {
+            let digits = d & Self::ALL_DIGITS;
+            let row_blacks = d & Self::ROW_BLACKS;
+            let col_blacks = d & Self::COL_BLACKS;
+            if digits != 0 {
+                digits.count_ones() == 1 && row_blacks == 0 && col_blacks == 0
+            } else {
+                row_blacks.count_ones() == 1 && col_blacks.count_ones() == 1
+            }
+        })
+    }
+
+    fn branching_bits(domain: u64) -> u64 {
+        let primary = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
+        if primary.count_ones() > 1 { primary } else { 0 }
+    }
+
+    fn pick_branching_cell(&self) -> Option<(usize, usize)> {
+        let mut best: Option<(usize, usize, u32)> = None;
+        for r in 0..N {
+            for c in 0..N {
+                let bits = Self::branching_bits(self.domains[r][c]);
+                let freedom = bits.count_ones();
+                if freedom > 1 && best.map_or(true, |b| freedom < b.2) {
+                    best = Some((r, c, freedom));
+                }
+            }
+        }
+        best.map(|(r, c, _)| (r, c))
+    }
+
+    pub fn count_solutions(&self, max: usize) -> usize {
+        if max == 0 {
+            return 0;
+        }
+
+        let mut state = self.clone();
+        state.propagate();
+
+        if state.is_contradiction() {
+            return 0;
+        }
+        if state.is_solved() {
+            return 1;
+        }
+
+        let Some((row, col)) = state.pick_branching_cell() else {
+            panic!("Propagation stalled");
+        };
+
+        let bits = Self::branching_bits(state.domains[row][col]);
+        let bit = 1 << bits.trailing_zeros();
+        let mut branch = state.clone();
+        branch.set_cell(row, col, bit);
+        let branch_solutions = branch.count_solutions(max);
+
+        state.domains[row][col] &= !bit;
+        branch_solutions + state.count_solutions(max - branch_solutions)
+    }
+}
