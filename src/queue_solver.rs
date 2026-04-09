@@ -7,7 +7,7 @@ type CellDomain = u64;
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct LiveTuple {
     start: usize,
     pattern: Vec<u64>,
@@ -25,7 +25,7 @@ impl LiveTuple {
 
 // ── QueueSolverState ──────────────────────────────────────────────────────────
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct QueueSolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
@@ -54,8 +54,8 @@ pub struct QueueSolverState<const N: usize> {
     // support_row[r][c][p] = number of live row-direction tuples in row r
     //   whose pattern at column c includes bit (1 << p).
     // Each inner Vec has length N+3.
-    tuple_support_row: [[Vec<u32>; N]; N],
-    tuple_support_col: [[Vec<u32>; N]; N],
+    tuple_support_row: [[Vec<u16>; N]; N],
+    tuple_support_col: [[Vec<u16>; N]; N],
 }
 
 impl<const N: usize> QueueSolverState<N> {
@@ -74,8 +74,8 @@ impl<const N: usize> QueueSolverState<N> {
         let tables = Arc::new(Tables::build(N - 2));
 
         // Phase 1: Enumerate live tuples.
-        let mut live_row: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
-        let mut live_col: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
+        let mut live_tuples_row: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
+        let mut live_tuples_col: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
 
         for r in 0..N {
             let inside_target = puzzle.row_targets[r] as usize;
@@ -89,7 +89,10 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() <= N {
-                        live_row[r].push(LiveTuple { start, pattern: pattern.clone() });
+                        live_tuples_row[r].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
                     }
                 }
             }
@@ -102,7 +105,10 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() > N {
-                        live_row[r].push(LiveTuple { start, pattern: pattern.clone() });
+                        live_tuples_row[r].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
                     }
                 }
             }
@@ -120,7 +126,10 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() <= N {
-                        live_col[c].push(LiveTuple { start, pattern: pattern.clone() });
+                        live_tuples_col[c].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
                     }
                 }
             }
@@ -133,41 +142,44 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() > N {
-                        live_col[c].push(LiveTuple { start, pattern: pattern.clone() });
+                        live_tuples_col[c].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
                     }
                 }
             }
         }
 
         // Phase 2: Initialize support counts from live tuples.
-        let mut support_row: [[Vec<u32>; N]; N] =
-            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u32; N + 3]));
-        let mut support_col: [[Vec<u32>; N]; N] =
-            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u32; N + 3]));
+        let mut tuple_support_row: [[Vec<u16>; N]; N] =
+            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
+        let mut tuple_support_col: [[Vec<u16>; N]; N] =
+            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
 
         for r in 0..N {
-            for t in &live_row[r] {
+            for t in &live_tuples_row[r] {
                 for p in 0..t.pattern.len() {
                     let c2 = (t.start + p) % N;
                     let mut bits = t.pattern[p];
                     while bits != 0 {
                         let b = bits & bits.wrapping_neg();
                         bits &= bits - 1;
-                        support_row[r][c2][b.trailing_zeros() as usize] += 1;
+                        tuple_support_row[r][c2][b.trailing_zeros() as usize] += 1;
                     }
                 }
             }
         }
 
         for c in 0..N {
-            for t in &live_col[c] {
+            for t in &live_tuples_col[c] {
                 for p in 0..t.pattern.len() {
                     let r2 = (t.start + p) % N;
                     let mut bits = t.pattern[p];
                     while bits != 0 {
                         let b = bits & bits.wrapping_neg();
                         bits &= bits - 1;
-                        support_col[r2][c][b.trailing_zeros() as usize] += 1;
+                        tuple_support_col[r2][c][b.trailing_zeros() as usize] += 1;
                     }
                 }
             }
@@ -179,34 +191,27 @@ impl<const N: usize> QueueSolverState<N> {
         let row_blacks_left: [[u8; N]; N] = [[2; N]; N];
         let col_blacks_left: [[u8; N]; N] = [[2; N]; N];
 
-        // TODO: this can be simplified. It's [0] followed by [N; N].
         // row_candidates[r][p] = number of cells in row r with bit (1<<p) set.
-        // All cells start with full_cell, so any bit present in full_cell is in
-        // all N cells of every row/col.
-        let row_candidates: [Vec<u8>; N] = std::array::from_fn(|_| {
-            (0..N + 3)
-                .map(|p| {
-                    let bit = 1u64 << p;
-                    if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 && full_cell & bit != 0 {
-                        N as u8
-                    } else {
-                        0
-                    }
-                })
-                .collect()
-        });
-        let col_candidates: [Vec<u8>; N] = std::array::from_fn(|_| {
-            (0..N + 3)
-                .map(|p| {
-                    let bit = 1u64 << p;
-                    if bit & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 && full_cell & bit != 0 {
-                        N as u8
-                    } else {
-                        0
-                    }
-                })
-                .collect()
-        });
+        let row_candidates_line: Vec<u8> = (0..N + 3)
+            .map(|p| {
+                if (1 << p) & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
+                    N as u8
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let row_candidates: [Vec<u8>; N] = std::array::from_fn(|_| row_candidates_line.clone());
+        let col_candidates_line: Vec<u8> = (0..N + 3)
+            .map(|p| {
+                if (1 << p) & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 {
+                    N as u8
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let col_candidates: [Vec<u8>; N] = std::array::from_fn(|_| col_candidates_line.clone());
 
         let mut state = Self {
             puzzle,
@@ -218,33 +223,33 @@ impl<const N: usize> QueueSolverState<N> {
             col_candidates,
             row_blacks_left,
             col_blacks_left,
-            live_tuples_row: live_row,
-            live_tuples_col: live_col,
-            tuple_support_row: support_row,
-            tuple_support_col: support_col,
+            live_tuples_row,
+            live_tuples_col,
+            tuple_support_row,
+            tuple_support_col,
         };
 
         // Phase 4: Seed queue with bits that have no support.
+        let mut tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
+        for r in 0..N {
+            for t in &state.live_tuples_row[r] {
+                for p in 0..t.pattern.len() {
+                    let c2 = (t.start + p) % N;
+                    tuple_supported_bits[r][c2] |= t.pattern[p];
+                }
+            }
+        }
+        for c in 0..N {
+            for t in &state.live_tuples_col[c] {
+                for p in 0..t.pattern.len() {
+                    let r2 = (t.start + p) % N;
+                    tuple_supported_bits[r2][c] |= t.pattern[p];
+                }
+            }
+        }
         for r in 0..N {
             for c in 0..N {
-                // Row-direction bits: digits and row-blacks.
-                let mut mask = full_cell & (Self::ALL_DIGITS | Self::ROW_BLACKS);
-                while mask != 0 {
-                    let b = mask & mask.wrapping_neg();
-                    mask &= mask - 1;
-                    if state.tuple_support_row[r][c][b.trailing_zeros() as usize] == 0 {
-                        state.clear_mask(r, c, b);
-                    }
-                }
-                // Col-direction bits: digits and col-blacks.
-                let mut mask = full_cell & (Self::ALL_DIGITS | Self::COL_BLACKS);
-                while mask != 0 {
-                    let b = mask & mask.wrapping_neg();
-                    mask &= mask - 1;
-                    if state.tuple_support_col[r][c][b.trailing_zeros() as usize] == 0 {
-                        state.clear_mask(r, c, b);
-                    }
-                }
+                state.clear_mask(r, c, !tuple_supported_bits[r][c]);
             }
         }
 
@@ -516,5 +521,69 @@ impl<const N: usize> QueueSolverState<N> {
 
         state.domains[row][col] &= !bit;
         branch_solutions + state.count_solutions(max - branch_solutions)
+    }
+}
+
+// ── tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_solver_state_initializes_correctly() {
+        let state = QueueSolverState::new(Puzzle::new([0; 4], [0; 4]));
+
+        let b = |cond, val| if cond { val } else { 0u64 };
+        let expected_domains: [[u64; 4]; 4] = std::array::from_fn(|r| {
+            std::array::from_fn(|c| {
+                QueueSolverState::<4>::ALL_DIGITS
+                    | b(c != 0, QueueSolverState::<4>::BLACK2_ROW)
+                    | b(c != 3, QueueSolverState::<4>::BLACK1_ROW)
+                    | b(r != 0, QueueSolverState::<4>::BLACK2_COL)
+                    | b(r != 3, QueueSolverState::<4>::BLACK1_COL)
+            })
+        });
+        assert_eq!(state.domains, expected_domains);
+
+        assert_eq!(state.row_domain_size, [[3, 4, 4, 3]; 4]);
+        assert_eq!(state.col_domain_size, [[3; 4], [4; 4], [4; 4], [3; 4]]);
+
+        assert_eq!(state.row_candidates, [[0, 4, 4, 3, 3, 0, 0]; 4]);
+        assert_eq!(state.col_candidates, [[0, 4, 4, 0, 0, 3, 3]; 4]);
+
+        assert_eq!(state.row_blacks_left, [[1, 2, 2, 1]; 4]);
+        assert_eq!(state.col_blacks_left, [[1; 4], [2; 4], [2; 4], [1; 4]]);
+    }
+
+    #[test]
+    fn black1_row_positional_bounds_target_9() {
+        // With target = 9, black-1 may only be at positions 0 and 1.
+        //   p=0: MAX_SUM[4] = 10 ≥ 9  → allowed
+        //   p=1: MAX_SUM[3] =  9 ≥ 9  → allowed
+        //   p=2: MAX_SUM[2] =  7 < 9  → forbidden
+        //   p=3: MAX_SUM[1] =  4 < 9  → forbidden
+        //   p=4: MAX_SUM[0] =  0 < 9  → forbidden
+        //   p=5: always forbidden
+        let state = QueueSolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
+        dbg!(&state);
+
+        assert_ne!(
+            state.domains[0][0] & QueueSolverState::<6>::BLACK1_ROW,
+            0,
+            "p=0 should still be allowed"
+        );
+        assert_ne!(
+            state.domains[0][1] & QueueSolverState::<6>::BLACK1_ROW,
+            0,
+            "p=1 should still be allowed"
+        );
+        for p in 2..6 {
+            assert_eq!(
+                state.domains[0][p] & QueueSolverState::<6>::BLACK1_ROW,
+                0,
+                "p={p} should be forbidden for black-1 with target 9"
+            );
+        }
     }
 }
