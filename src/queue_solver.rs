@@ -557,33 +557,26 @@ mod tests {
     }
 
     #[test]
-    fn black1_row_positional_bounds_target_9() {
+    fn propagation_target_9() {
         // With target = 9, black-1 may only be at positions 0 and 1.
-        //   p=0: MAX_SUM[4] = 10 ≥ 9  → allowed
-        //   p=1: MAX_SUM[3] =  9 ≥ 9  → allowed
-        //   p=2: MAX_SUM[2] =  7 < 9  → forbidden
-        //   p=3: MAX_SUM[1] =  4 < 9  → forbidden
-        //   p=4: MAX_SUM[0] =  0 < 9  → forbidden
-        //   p=5: always forbidden
+        // Similarly, the value 1 must be in the outside cage.
         let state = QueueSolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
-        dbg!(&state);
 
-        assert_ne!(
-            state.domains[0][0] & QueueSolverState::<6>::BLACK1_ROW,
-            0,
-            "p=0 should still be allowed"
-        );
-        assert_ne!(
-            state.domains[0][1] & QueueSolverState::<6>::BLACK1_ROW,
-            0,
-            "p=1 should still be allowed"
-        );
-        for p in 2..6 {
-            assert_eq!(
-                state.domains[0][p] & QueueSolverState::<6>::BLACK1_ROW,
+        assert_eq!(
+            state.domains[0].map(|d| d & QueueSolverState::<6>::ROW_BLACKS),
+            [
+                QueueSolverState::<6>::BLACK1_ROW,
+                QueueSolverState::<6>::BLACK1_ROW,
                 0,
-                "p={p} should be forbidden for black-1 with target 9"
-            );
-        }
+                0,
+                QueueSolverState::<6>::BLACK2_ROW,
+                QueueSolverState::<6>::BLACK2_ROW,
+            ]
+        );
+        let bit1 = 1<<1;
+        assert_eq!(
+            state.domains[0].map(|d| d & bit1),
+            [bit1, bit1, 0, 0, bit1, bit1]
+        );
     }
 }
