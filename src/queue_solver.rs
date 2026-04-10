@@ -505,12 +505,12 @@ impl<const N: usize> QueueSolverState<N> {
             // We check two things here: the tuple might be dead because the current
             // cell no longer supports it, or because there is no more cell that
             // has `bit`.
-            let support = (self.domains[r][c] & t.pattern[pos] != 0)
+            if (self.domains[r][c] & t.pattern[pos] != 0)
                 && (0..t.pattern.len()).any(|i| {
                     let c2 = (t.start + i) % N;
                     self.domains[r][c2] & bit != 0
-                });
-            if support {
+                })
+            {
                 i += 1;
                 continue;
             }
@@ -553,7 +553,12 @@ impl<const N: usize> QueueSolverState<N> {
                 i += 1;
                 continue;
             }
-            if self.domains[r][c] & t.pattern[pos] != 0 {
+            if (self.domains[r][c] & t.pattern[pos] != 0)
+                && (0..t.pattern.len()).any(|i| {
+                    let r2 = (t.start + i) % N;
+                    self.domains[r2][c] & bit != 0
+                })
+            {
                 i += 1;
                 continue;
             }
