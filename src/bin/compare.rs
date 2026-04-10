@@ -1,6 +1,5 @@
 /// Runs both solvers on a set of known puzzles and asserts they agree on
 /// the solution count.
-
 use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, SolverState};
 

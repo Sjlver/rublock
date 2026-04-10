@@ -657,7 +657,7 @@ impl<const N: usize> SolverState<N> {
 
         // For the remaining values, remove bit from the state,
         // then count the remaining solutions.
-        state.domains[row][col] &= !bit;
+        Self::clear_mask(&mut state.domains, row, col, bit);
         branch_solutions + state.count_solutions(max - branch_solutions)
     }
 }

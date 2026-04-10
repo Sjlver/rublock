@@ -211,12 +211,12 @@ fn d4_orbit<const N: usize>(row: [u8; N], col: [u8; N]) -> [([u8; N], [u8; N]); 
     [
         (row, col),
         (col, row),
-        (rr,  col),
-        (row,  rc),
-        (rr,   rc),
-        (rc,  row),
-        (col,  rr),
-        (rc,   rr),
+        (rr, col),
+        (row, rc),
+        (rr, rc),
+        (rc, row),
+        (col, rr),
+        (rc, rr),
     ]
 }
 
@@ -225,7 +225,9 @@ fn d4_orbit<const N: usize>(row: [u8; N], col: [u8; N]) -> [([u8; N], [u8; N]); 
 /// Only canonical puzzles are solved; their orbit size is used as a multiplier
 /// to recover the total count.
 fn is_canonical<const N: usize>(row: [u8; N], col: [u8; N]) -> bool {
-    d4_orbit(row, col).iter().all(|&(r, c)| (row, col) <= (r, c))
+    d4_orbit(row, col)
+        .iter()
+        .all(|&(r, c)| (row, col) <= (r, c))
 }
 
 /// Count distinct elements in the D4 orbit, i.e. the number of symmetrically
@@ -245,11 +247,7 @@ fn orbit_size<const N: usize>(row: [u8; N], col: [u8; N]) -> u64 {
 /// Therefore palindromic row/col targets immediately imply two solutions.
 ///
 /// For N ≤ 3 this shortcut is skipped (degenerate cases).
-fn uniqueness_ruled_out<const N: usize>(
-    grid: &Grid<N>,
-    row_t: [u8; N],
-    col_t: [u8; N],
-) -> bool {
+fn uniqueness_ruled_out<const N: usize>(grid: &Grid<N>, row_t: [u8; N], col_t: [u8; N]) -> bool {
     if N <= 3 {
         return false;
     }
@@ -271,8 +269,8 @@ fn uniqueness_ruled_out<const N: usize>(
 }
 
 /// Return `true` if the puzzle with the given targets has exactly one solution.
+use crate::solver::Puzzle;
 fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N]) -> bool {
-    use crate::solver::Puzzle;
     use crate::queue_solver::QueueSolverState;
     let state = QueueSolverState::new(Puzzle::new(row_t, col_t));
     state.count_solutions(2) == 1
@@ -296,7 +294,9 @@ pub fn count_from_partial<const N: usize>(partial: &PartialGrid<N>) -> (u64, u64
 fn dfs<const N: usize>(partial: &PartialGrid<N>, total: &mut u64, valid: &mut u64) {
     if partial.is_complete() {
         *total += 1;
-        let grid = Grid { cells: partial.cells };
+        let grid = Grid {
+            cells: partial.cells,
+        };
         let (row_t, col_t) = grid.compute_targets();
         if is_canonical(row_t, col_t)
             && !uniqueness_ruled_out(&grid, row_t, col_t)

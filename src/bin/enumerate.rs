@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use indicatif::{ProgressBar, ProgressStyle};
+use rand::seq::SliceRandom;
 use rayon::prelude::*;
 use rublock::enumerate::{PartialGrid, count_from_partial, generate_partial_grids};
 
@@ -26,7 +27,8 @@ fn main() {
 
     let start = PartialGrid::<6>::new();
 
-    let work_items = generate_partial_grids(start, target);
+    let mut work_items = generate_partial_grids(start, target);
+    work_items.shuffle(&mut rand::rng());
 
     println!(
         "Work queue: {} items ({} threads × 100 target).",

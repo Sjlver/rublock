@@ -66,7 +66,6 @@ impl<const N: usize> Grid<N> {
             cells: std::array::from_fn(|r| std::array::from_fn(|c| self.cells[c][r])),
         }
     }
-
 }
 
 /// Find the positions of the two black squares in a row (or column) of cells.
@@ -121,5 +120,4 @@ mod tests {
         assert_eq!(row_targets, [8, 2, 3, 8, 9, 0]);
         assert_eq!(col_targets, [0, 0, 5, 9, 0, 4]);
     }
-
 }

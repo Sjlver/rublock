@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
+use tracing::{instrument, trace};
+
 use crate::solver::{Puzzle, Tables};
 
 type CellDomain = u64;
@@ -8,24 +10,25 @@ type CellDomain = u64;
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
-struct LiveTuple {
+struct LiveTuple<const N: usize> {
     start: usize,
     pattern: Vec<u64>,
 }
 
-impl LiveTuple {
-    fn col_at(&self, p: usize, n: usize) -> usize {
-        (self.start + p) % n
-    }
-
-    fn pos_of(&self, c: usize, n: usize) -> Option<usize> {
-        (0..self.pattern.len()).find(|&p| self.col_at(p, n) == c)
+impl<const N: usize> LiveTuple<N> {
+    fn pos_of(&self, c: usize) -> Option<usize> {
+        let pos = (c + N - self.start) % N;
+        if pos < self.pattern.len() {
+            Some(pos)
+        } else {
+            None
+        }
     }
 }
 
 // ── QueueSolverState ──────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct QueueSolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
@@ -48,14 +51,57 @@ pub struct QueueSolverState<const N: usize> {
     col_blacks_left: [[u8; N]; N],
 
     // ── General arc consistency constraint ────────────────────────────────────
-    live_tuples_row: [Vec<LiveTuple>; N],
-    live_tuples_col: [Vec<LiveTuple>; N],
+    live_tuples_row: [Vec<LiveTuple<N>>; N],
+    live_tuples_col: [Vec<LiveTuple<N>>; N],
 
     // support_row[r][c][p] = number of live row-direction tuples in row r
     //   whose pattern at column c includes bit (1 << p).
     // Each inner Vec has length N+3.
     tuple_support_row: [[Vec<u16>; N]; N],
     tuple_support_col: [[Vec<u16>; N]; N],
+}
+
+struct BitName<const N: usize>(u64);
+
+impl<const N: usize> std::fmt::Display for BitName<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let b = self.0;
+        if b == QueueSolverState::<N>::BLACK1_ROW {
+            write!(f, "BLACK1_ROW")
+        } else if b == QueueSolverState::<N>::BLACK2_ROW {
+            write!(f, "BLACK2_ROW")
+        } else if b == QueueSolverState::<N>::BLACK1_COL {
+            write!(f, "BLACK1_COL")
+        } else if b == QueueSolverState::<N>::BLACK2_COL {
+            write!(f, "BLACK2_COL")
+        } else if b & QueueSolverState::<N>::ALL_DIGITS != 0 {
+            write!(f, "DIGIT_{}", b.trailing_zeros())
+        } else {
+            panic!("BitName: {b:#b} is not a valid single bit")
+        }
+    }
+}
+
+impl<const N: usize> std::fmt::Debug for QueueSolverState<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "QueueSolverState {{")?;
+        writeln!(
+            f,
+            "  puzzle = {:?} {:?}",
+            self.puzzle.row_targets, self.puzzle.col_targets
+        )?;
+        writeln!(f, "  domains =")?;
+        for r in 0..N {
+            write!(f, "   ")?;
+            for c in 0..N {
+                write!(f, " ")?;
+                write!(f, "{:0width$b}", self.domains[r][c], width = N + 3)?;
+            }
+            writeln!(f)?;
+        }
+        writeln!(f, "}}")?;
+        Ok(())
+    }
 }
 
 impl<const N: usize> QueueSolverState<N> {
@@ -69,13 +115,14 @@ impl<const N: usize> QueueSolverState<N> {
     const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
     const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
 
+    #[instrument(skip(puzzle))]
     pub fn new(puzzle: Puzzle<N>) -> Self {
         let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
         let tables = Arc::new(Tables::build(N - 2));
 
         // Phase 1: Enumerate live tuples.
-        let mut live_tuples_row: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
-        let mut live_tuples_col: [Vec<LiveTuple>; N] = std::array::from_fn(|_| Vec::new());
+        let mut live_tuples_row: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
+        let mut live_tuples_col: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
 
         for r in 0..N {
             let inside_target = puzzle.row_targets[r] as usize;
@@ -89,6 +136,16 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() <= N {
+                        trace!(
+                            row = r,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "inside row tuple live"
+                        );
                         live_tuples_row[r].push(LiveTuple {
                             start,
                             pattern: pattern.clone(),
@@ -105,6 +162,16 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() > N {
+                        trace!(
+                            row = r,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "outside row tuple live"
+                        );
                         live_tuples_row[r].push(LiveTuple {
                             start,
                             pattern: pattern.clone(),
@@ -126,6 +193,16 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() <= N {
+                        trace!(
+                            col = c,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "inside col tuple live"
+                        );
                         live_tuples_col[c].push(LiveTuple {
                             start,
                             pattern: pattern.clone(),
@@ -142,6 +219,16 @@ impl<const N: usize> QueueSolverState<N> {
                     .collect();
                 for start in 0..N {
                     if start + pattern.len() > N {
+                        trace!(
+                            col = c,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "outside row tuple live"
+                        );
                         live_tuples_col[c].push(LiveTuple {
                             start,
                             pattern: pattern.clone(),
@@ -230,26 +317,32 @@ impl<const N: usize> QueueSolverState<N> {
         };
 
         // Phase 4: Seed queue with bits that have no support.
-        let mut tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
+        let mut row_tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
         for r in 0..N {
             for t in &state.live_tuples_row[r] {
                 for p in 0..t.pattern.len() {
                     let c2 = (t.start + p) % N;
-                    tuple_supported_bits[r][c2] |= t.pattern[p];
+                    row_tuple_supported_bits[r][c2] |= t.pattern[p];
                 }
             }
         }
+        let mut col_tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
         for c in 0..N {
             for t in &state.live_tuples_col[c] {
                 for p in 0..t.pattern.len() {
                     let r2 = (t.start + p) % N;
-                    tuple_supported_bits[r2][c] |= t.pattern[p];
+                    col_tuple_supported_bits[r2][c] |= t.pattern[p];
                 }
             }
         }
         for r in 0..N {
             for c in 0..N {
-                state.clear_mask(r, c, !tuple_supported_bits[r][c]);
+                let supported = (row_tuple_supported_bits[r][c] & Self::ROW_BLACKS)
+                    | (col_tuple_supported_bits[r][c] & Self::COL_BLACKS)
+                    | (row_tuple_supported_bits[r][c]
+                        & col_tuple_supported_bits[r][c]
+                        & Self::ALL_DIGITS);
+                state.clear_mask(r, c, !supported & full_cell);
             }
         }
 
@@ -261,6 +354,7 @@ impl<const N: usize> QueueSolverState<N> {
 
     // ── Core mutation primitives ──────────────────────────────────────────────
 
+    #[instrument(skip(self), fields(mask = format_args!("{mask:0width$b}", width = N + 3)))]
     fn clear_mask(&mut self, r: usize, c: usize, mask: u64) {
         let before = self.domains[r][c];
         self.domains[r][c] &= !mask;
@@ -269,12 +363,15 @@ impl<const N: usize> QueueSolverState<N> {
         while bits != 0 {
             let b = bits & bits.wrapping_neg();
             bits &= bits - 1;
+            trace!(b = format_args!("{}", BitName::<N>(b)), "bit removed");
             self.queue.push_back((r, c, b));
         }
     }
 
+    #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
     fn set_cell(&mut self, r: usize, c: usize, bit: u64) {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
+        trace!(bit = format_args!("{}", BitName::<N>(bit)), "setting cell");
 
         if bit & Self::ALL_DIGITS != 0 {
             for col in (0..N).filter(|&col| col != c) {
@@ -315,12 +412,19 @@ impl<const N: usize> QueueSolverState<N> {
     // ── Update handlers ───────────────────────────────────────────────────────
 
     fn update(&mut self, r: usize, c: usize, bit: u64) {
+        trace!(
+            r = r,
+            c = c,
+            bit = format_args!("{}", BitName::<N>(bit)),
+            "update"
+        );
         self.update_singleton(r, c, bit);
         self.update_hidden_singles(r, c, bit);
         self.update_black_consistency(r, c, bit);
         self.update_arc(r, c, bit);
     }
 
+    #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
     fn update_singleton(&mut self, r: usize, c: usize, bit: u64) {
         if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
             self.row_domain_size[r][c] -= 1;
@@ -343,6 +447,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
+    #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
     fn update_hidden_singles(&mut self, r: usize, c: usize, bit: u64) {
         let p = bit.trailing_zeros() as usize;
 
@@ -365,6 +470,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
+    #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
     fn update_black_consistency(&mut self, r: usize, c: usize, bit: u64) {
         if bit & Self::ROW_BLACKS != 0 {
             self.row_blacks_left[r][c] -= 1;
@@ -381,24 +487,43 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
+    #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
     fn update_arc(&mut self, r: usize, c: usize, bit: u64) {
         // Row direction: check tuples in live_row[r] that cover column c.
         let mut i = 0;
         while i < self.live_tuples_row[r].len() {
-            let Some(pos) = self.live_tuples_row[r][i].pos_of(c, N) else {
+            let t = &self.live_tuples_row[r][i];
+            let Some(pos) = t.pos_of(c) else {
                 i += 1;
                 continue;
             };
-            if self.live_tuples_row[r][i].pattern[pos] & bit == 0 {
+            if t.pattern[pos] & bit == 0 {
                 i += 1;
                 continue;
             }
-            // Check liveness: does the cell domain still support this pattern position?
-            if self.domains[r][c] & self.live_tuples_row[r][i].pattern[pos] != 0 {
+            // Check liveness: do the cell domains still support this pattern?
+            // We check two things here: the tuple might be dead because the current
+            // cell no longer supports it, or because there is no more cell that
+            // has `bit`.
+            let support = (self.domains[r][c] & t.pattern[pos] != 0)
+                && (0..t.pattern.len()).any(|i| {
+                    let c2 = (t.start + i) % N;
+                    self.domains[r][c2] & bit != 0
+                });
+            if support {
                 i += 1;
                 continue;
             }
             // Tuple is dead: remove and update support counts.
+            trace!(
+                start = t.start,
+                bits = format_args!(
+                    "{:0width$b}",
+                    if t.pattern.len() > 2 { t.pattern[1] } else { 0 },
+                    width = N + 3
+                ),
+                "row tuple killed"
+            );
             let dead = self.live_tuples_row[r].swap_remove(i);
             for p in 0..dead.pattern.len() {
                 let c2 = (dead.start + p) % N;
@@ -419,18 +544,28 @@ impl<const N: usize> QueueSolverState<N> {
         // Column direction: check tuples in live_col[c] that cover row r.
         let mut i = 0;
         while i < self.live_tuples_col[c].len() {
-            let Some(pos) = self.live_tuples_col[c][i].pos_of(r, N) else {
+            let t = &self.live_tuples_col[c][i];
+            let Some(pos) = t.pos_of(r) else {
                 i += 1;
                 continue;
             };
-            if self.live_tuples_col[c][i].pattern[pos] & bit == 0 {
+            if t.pattern[pos] & bit == 0 {
                 i += 1;
                 continue;
             }
-            if self.domains[r][c] & self.live_tuples_col[c][i].pattern[pos] != 0 {
+            if self.domains[r][c] & t.pattern[pos] != 0 {
                 i += 1;
                 continue;
             }
+            trace!(
+                start = t.start,
+                bits = format_args!(
+                    "{:0width$b}",
+                    if t.pattern.len() > 2 { t.pattern[1] } else { 0 },
+                    width = N + 3
+                ),
+                "col tuple killed"
+            );
             let dead = self.live_tuples_col[c].swap_remove(i);
             for p in 0..dead.pattern.len() {
                 let r2 = (dead.start + p) % N;
@@ -452,6 +587,11 @@ impl<const N: usize> QueueSolverState<N> {
 
     pub fn propagate(&mut self) {
         while let Some((r, c, bit)) = self.queue.pop_front() {
+            // Return early if a contradiction is detected
+            if self.domains[r][c] == 0 {
+                return;
+            }
+
             self.update(r, c, bit);
         }
     }
@@ -510,6 +650,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
 
         let Some((row, col)) = state.pick_branching_cell() else {
+            dbg!(state);
             panic!("Propagation stalled");
         };
 
@@ -519,7 +660,7 @@ impl<const N: usize> QueueSolverState<N> {
         branch.set_cell(row, col, bit);
         let branch_solutions = branch.count_solutions(max);
 
-        state.domains[row][col] &= !bit;
+        state.clear_mask(row, col, bit);
         branch_solutions + state.count_solutions(max - branch_solutions)
     }
 }
@@ -531,7 +672,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn live_tuple_pos_at_works() {
+        let t0 = LiveTuple::<6> {
+            start: 0,
+            pattern: vec![
+                QueueSolverState::<6>::BLACK1_ROW,
+                QueueSolverState::<6>::BLACK2_ROW,
+            ],
+        };
+        assert_eq!(t0.pos_of(0), Some(0));
+        assert_eq!(t0.pos_of(1), Some(1));
+        assert_eq!(t0.pos_of(2), None);
+        assert_eq!(t0.pos_of(3), None);
+        assert_eq!(t0.pos_of(4), None);
+        assert_eq!(t0.pos_of(5), None);
+    }
+
+    #[test]
+    fn live_tuple_pos_at_works_with_wrapping() {
+        let t0 = LiveTuple::<6> {
+            start: 5,
+            pattern: vec![
+                QueueSolverState::<6>::BLACK2_ROW,
+                1 << 1,
+                QueueSolverState::<6>::BLACK1_ROW,
+            ],
+        };
+        assert_eq!(t0.pos_of(0), Some(1));
+        assert_eq!(t0.pos_of(1), Some(2));
+        assert_eq!(t0.pos_of(2), None);
+        assert_eq!(t0.pos_of(3), None);
+        assert_eq!(t0.pos_of(4), None);
+        assert_eq!(t0.pos_of(5), Some(0));
+    }
+
+    #[test]
     fn queue_solver_state_initializes_correctly() {
+        let _ = tracing_subscriber::fmt::try_init();
         let state = QueueSolverState::new(Puzzle::new([0; 4], [0; 4]));
 
         let b = |cond, val| if cond { val } else { 0u64 };
@@ -558,8 +735,9 @@ mod tests {
 
     #[test]
     fn propagation_target_9() {
+        let _ = tracing_subscriber::fmt::try_init();
         // With target = 9, black-1 may only be at positions 0 and 1.
-        // Similarly, the value 1 must be in the outside cage.
+        // Similarly, the value 1 must be in the outside cage at the end of the row.
         let state = QueueSolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
 
         assert_eq!(
@@ -573,10 +751,23 @@ mod tests {
                 QueueSolverState::<6>::BLACK2_ROW,
             ]
         );
-        let bit1 = 1<<1;
-        assert_eq!(
-            state.domains[0].map(|d| d & bit1),
-            [bit1, bit1, 0, 0, bit1, bit1]
-        );
+        let bit1 = 1 << 1;
+        assert_eq!(state.domains[0].map(|d| d & bit1), [bit1, 0, 0, 0, 0, bit1]);
+    }
+
+    #[test]
+    fn sample_puzzle() {
+        // puzzle = [5, 7, 4, 0, 0, 6] [6, 0, 0, 7, 0, 6]
+        // used to stall at:
+        // domains =
+        //   000010000 010100000 010100000 000000100 011000000 011000000
+        //   010100000 110100000 110100000 011000000 101000000 011000000
+        //   010100000 110100000 111000000 011000000 000000100 000000010
+        //   000000010 100100000 101000000 000001000 010100000 101000000
+        //   000000100 000000010 000001000 100000000 111000000 101000000
+        //   100100000 000001000 000000100 101000000 101000000 000010000
+
+        let state = QueueSolverState::new(Puzzle::new([5, 7, 4, 0, 0, 6], [6, 0, 0, 7, 0, 6]));
+        assert_eq!(state.count_solutions(2), 2);
     }
 }
