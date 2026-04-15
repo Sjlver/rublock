@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, SolverState};
 
@@ -32,13 +32,19 @@ fn bench_solver(c: &mut Criterion) {
     for (i, &(row_t, col_t)) in PUZZLES.iter().enumerate() {
         group.bench_function(format!("basic/{i}"), |b| {
             b.iter(|| {
-                SolverState::new(black_box(Puzzle::new(row_t, col_t))).count_solutions(2)
+                assert_eq!(
+                    SolverState::new(black_box(Puzzle::new(row_t, col_t))).count_solutions(2),
+                    1
+                );
             })
         });
 
         group.bench_function(format!("queue/{i}"), |b| {
             b.iter(|| {
-                QueueSolverState::new(black_box(Puzzle::new(row_t, col_t))).count_solutions(2)
+                assert_eq!(
+                    QueueSolverState::new(black_box(Puzzle::new(row_t, col_t))).count_solutions(2),
+                    1
+                );
             })
         });
     }

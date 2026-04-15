@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::sync::Arc;
 
 use tracing::{instrument, trace};
 
@@ -118,161 +117,8 @@ impl<const N: usize> QueueSolverState<N> {
     #[instrument(skip(puzzle))]
     pub fn new(puzzle: Puzzle<N>) -> Self {
         let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
-        let tables = Arc::new(Tables::build(N - 2));
 
-        // Phase 1: Enumerate live tuples.
-        let mut live_tuples_row: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
-        let mut live_tuples_col: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
-
-        for r in 0..N {
-            let inside_target = puzzle.row_targets[r] as usize;
-            let outside_target = tables.max_sum - inside_target;
-
-            // Inside (non-wrapping): [BLACK1_ROW, digit..., BLACK2_ROW]
-            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
-                let pattern: Vec<u64> = std::iter::once(Self::BLACK1_ROW)
-                    .chain(std::iter::repeat_n(digit_mask, len))
-                    .chain(std::iter::once(Self::BLACK2_ROW))
-                    .collect();
-                for start in 0..N {
-                    if start + pattern.len() <= N {
-                        trace!(
-                            row = r,
-                            start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if pattern.len() > 2 { pattern[1] } else { 0 },
-                                width = N + 3
-                            ),
-                            "inside row tuple live"
-                        );
-                        live_tuples_row[r].push(LiveTuple {
-                            start,
-                            pattern: pattern.clone(),
-                        });
-                    }
-                }
-            }
-
-            // Outside (wrapping): [BLACK2_ROW, digit..., BLACK1_ROW]
-            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
-                let pattern: Vec<u64> = std::iter::once(Self::BLACK2_ROW)
-                    .chain(std::iter::repeat_n(digit_mask, len))
-                    .chain(std::iter::once(Self::BLACK1_ROW))
-                    .collect();
-                for start in 0..N {
-                    if start + pattern.len() > N {
-                        trace!(
-                            row = r,
-                            start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if pattern.len() > 2 { pattern[1] } else { 0 },
-                                width = N + 3
-                            ),
-                            "outside row tuple live"
-                        );
-                        live_tuples_row[r].push(LiveTuple {
-                            start,
-                            pattern: pattern.clone(),
-                        });
-                    }
-                }
-            }
-        }
-
-        for c in 0..N {
-            let inside_target = puzzle.col_targets[c] as usize;
-            let outside_target = tables.max_sum - inside_target;
-
-            // Inside (non-wrapping): [BLACK1_COL, digit..., BLACK2_COL]
-            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
-                let pattern: Vec<u64> = std::iter::once(Self::BLACK1_COL)
-                    .chain(std::iter::repeat_n(digit_mask, len))
-                    .chain(std::iter::once(Self::BLACK2_COL))
-                    .collect();
-                for start in 0..N {
-                    if start + pattern.len() <= N {
-                        trace!(
-                            col = c,
-                            start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if pattern.len() > 2 { pattern[1] } else { 0 },
-                                width = N + 3
-                            ),
-                            "inside col tuple live"
-                        );
-                        live_tuples_col[c].push(LiveTuple {
-                            start,
-                            pattern: pattern.clone(),
-                        });
-                    }
-                }
-            }
-
-            // Outside (wrapping): [BLACK2_COL, digit..., BLACK1_COL]
-            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
-                let pattern: Vec<u64> = std::iter::once(Self::BLACK2_COL)
-                    .chain(std::iter::repeat_n(digit_mask, len))
-                    .chain(std::iter::once(Self::BLACK1_COL))
-                    .collect();
-                for start in 0..N {
-                    if start + pattern.len() > N {
-                        trace!(
-                            col = c,
-                            start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if pattern.len() > 2 { pattern[1] } else { 0 },
-                                width = N + 3
-                            ),
-                            "outside row tuple live"
-                        );
-                        live_tuples_col[c].push(LiveTuple {
-                            start,
-                            pattern: pattern.clone(),
-                        });
-                    }
-                }
-            }
-        }
-
-        // Phase 2: Initialize support counts from live tuples.
-        let mut tuple_support_row: [[Vec<u16>; N]; N] =
-            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
-        let mut tuple_support_col: [[Vec<u16>; N]; N] =
-            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
-
-        for r in 0..N {
-            for t in &live_tuples_row[r] {
-                for p in 0..t.pattern.len() {
-                    let c2 = (t.start + p) % N;
-                    let mut bits = t.pattern[p];
-                    while bits != 0 {
-                        let b = bits & bits.wrapping_neg();
-                        bits &= bits - 1;
-                        tuple_support_row[r][c2][b.trailing_zeros() as usize] += 1;
-                    }
-                }
-            }
-        }
-
-        for c in 0..N {
-            for t in &live_tuples_col[c] {
-                for p in 0..t.pattern.len() {
-                    let r2 = (t.start + p) % N;
-                    let mut bits = t.pattern[p];
-                    while bits != 0 {
-                        let b = bits & bits.wrapping_neg();
-                        bits &= bits - 1;
-                        tuple_support_col[r2][c][b.trailing_zeros() as usize] += 1;
-                    }
-                }
-            }
-        }
-
-        // Phase 3: Initialize counters from the full domain (before any clear_mask).
+        // Initialize counters from the full domain (before any clear_mask).
         let row_domain_size: [[u8; N]; N] = [[N as u8; N]; N];
         let col_domain_size: [[u8; N]; N] = [[N as u8; N]; N];
         let row_blacks_left: [[u8; N]; N] = [[2; N]; N];
@@ -300,6 +146,14 @@ impl<const N: usize> QueueSolverState<N> {
             .collect();
         let col_candidates: [Vec<u8>; N] = std::array::from_fn(|_| col_candidates_line.clone());
 
+        let live_tuples_row: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
+        let live_tuples_col: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
+
+        let tuple_support_row: [[Vec<u16>; N]; N] =
+            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
+        let tuple_support_col: [[Vec<u16>; N]; N] =
+            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
+
         let mut state = Self {
             puzzle,
             domains: [[full_cell; N]; N],
@@ -316,10 +170,167 @@ impl<const N: usize> QueueSolverState<N> {
             tuple_support_col,
         };
 
-        // Phase 4: Seed queue with bits that have no support.
+        state.init_live_tuples();
+        state.seed_queue();
+
+        state
+    }
+
+    /// Enumerate the live tuples
+    fn init_live_tuples(&mut self) {
+        let tables = Tables::build(N - 2);
+
+        for r in 0..N {
+            let inside_target = self.puzzle.row_targets[r] as usize;
+            let outside_target = tables.max_sum - inside_target;
+
+            // Inside (non-wrapping): [BLACK1_ROW, digit..., BLACK2_ROW]
+            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK1_ROW)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK2_ROW))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() <= N {
+                        trace!(
+                            row = r,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "inside row tuple live"
+                        );
+                        self.live_tuples_row[r].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
+                    }
+                }
+            }
+
+            // Outside (wrapping): [BLACK2_ROW, digit..., BLACK1_ROW]
+            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK2_ROW)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK1_ROW))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() > N {
+                        trace!(
+                            row = r,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "outside row tuple live"
+                        );
+                        self.live_tuples_row[r].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        for c in 0..N {
+            let inside_target = self.puzzle.col_targets[c] as usize;
+            let outside_target = tables.max_sum - inside_target;
+
+            // Inside (non-wrapping): [BLACK1_COL, digit..., BLACK2_COL]
+            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK1_COL)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK2_COL))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() <= N {
+                        trace!(
+                            col = c,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "inside col tuple live"
+                        );
+                        self.live_tuples_col[c].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
+                    }
+                }
+            }
+
+            // Outside (wrapping): [BLACK2_COL, digit..., BLACK1_COL]
+            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
+                let pattern: Vec<u64> = std::iter::once(Self::BLACK2_COL)
+                    .chain(std::iter::repeat_n(digit_mask, len))
+                    .chain(std::iter::once(Self::BLACK1_COL))
+                    .collect();
+                for start in 0..N {
+                    if start + pattern.len() > N {
+                        trace!(
+                            col = c,
+                            start = start,
+                            bits = format_args!(
+                                "{:0width$b}",
+                                if pattern.len() > 2 { pattern[1] } else { 0 },
+                                width = N + 3
+                            ),
+                            "outside row tuple live"
+                        );
+                        self.live_tuples_col[c].push(LiveTuple {
+                            start,
+                            pattern: pattern.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Initialize support counts from live tuples.
+        for r in 0..N {
+            for t in &self.live_tuples_row[r] {
+                for p in 0..t.pattern.len() {
+                    let c2 = (t.start + p) % N;
+                    let mut bits = t.pattern[p];
+                    while bits != 0 {
+                        let b = bits & bits.wrapping_neg();
+                        bits &= bits - 1;
+                        self.tuple_support_row[r][c2][b.trailing_zeros() as usize] += 1;
+                    }
+                }
+            }
+        }
+
+        for c in 0..N {
+            for t in &self.live_tuples_col[c] {
+                for p in 0..t.pattern.len() {
+                    let r2 = (t.start + p) % N;
+                    let mut bits = t.pattern[p];
+                    while bits != 0 {
+                        let b = bits & bits.wrapping_neg();
+                        bits &= bits - 1;
+                        self.tuple_support_col[r2][c][b.trailing_zeros() as usize] += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Seed queue with bits that have no support.
+    fn seed_queue(&mut self) {
+        let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
+
         let mut row_tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
         for r in 0..N {
-            for t in &state.live_tuples_row[r] {
+            for t in &self.live_tuples_row[r] {
                 for p in 0..t.pattern.len() {
                     let c2 = (t.start + p) % N;
                     row_tuple_supported_bits[r][c2] |= t.pattern[p];
@@ -328,7 +339,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
         let mut col_tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
         for c in 0..N {
-            for t in &state.live_tuples_col[c] {
+            for t in &self.live_tuples_col[c] {
                 for p in 0..t.pattern.len() {
                     let r2 = (t.start + p) % N;
                     col_tuple_supported_bits[r2][c] |= t.pattern[p];
@@ -342,14 +353,9 @@ impl<const N: usize> QueueSolverState<N> {
                     | (row_tuple_supported_bits[r][c]
                         & col_tuple_supported_bits[r][c]
                         & Self::ALL_DIGITS);
-                state.clear_mask(r, c, !supported & full_cell);
+                self.clear_mask(r, c, !supported & full_cell);
             }
         }
-
-        // Phase 5: Initial propagation.
-        state.propagate();
-
-        state
     }
 
     // ── Core mutation primitives ──────────────────────────────────────────────
