@@ -53,11 +53,19 @@ pub struct QueueSolverState<const N: usize> {
     live_tuples_row: [Vec<LiveTuple<N>>; N],
     live_tuples_col: [Vec<LiveTuple<N>>; N],
 
-    // support_row[r][c][p] = number of live row-direction tuples in row r
-    //   whose pattern at column c includes bit (1 << p).
-    // Each inner Vec has length N+3.
-    tuple_support_row: [[Vec<u16>; N]; N],
-    tuple_support_col: [[Vec<u16>; N]; N],
+    // tuple_support_row_digit[r][c][p] = number of live row-direction tuples in row r
+    //   whose pattern at column c includes digit bit (1 << p). p = trailing_zeros.
+    // tuple_support_row_black[r][c][k] = same for row-black bits:
+    //   k = 0 for BLACK1_ROW, k = 1 for BLACK2_ROW.
+    // Analogously for col (BLACK1_COL / BLACK2_COL).
+    //
+    // This could be a single array indexed by p; however, that would have size N+3,
+    // which stable Rust does not allow. The original implementation used a Vec of
+    // size N+3; the current version handles black bits separately.
+    tuple_support_row_digit: [[[u16; N]; N]; N],
+    tuple_support_row_black: [[[u16; 2]; N]; N],
+    tuple_support_col_digit: [[[u16; N]; N]; N],
+    tuple_support_col_black: [[[u16; 2]; N]; N],
 }
 
 struct BitName<const N: usize>(u64);
@@ -149,10 +157,10 @@ impl<const N: usize> QueueSolverState<N> {
         let live_tuples_row: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
         let live_tuples_col: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
 
-        let tuple_support_row: [[Vec<u16>; N]; N] =
-            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
-        let tuple_support_col: [[Vec<u16>; N]; N] =
-            std::array::from_fn(|_| std::array::from_fn(|_| vec![0u16; N + 3]));
+        let tuple_support_row_digit: [[[u16; N]; N]; N] = [[[0u16; N]; N]; N];
+        let tuple_support_row_black: [[[u16; 2]; N]; N] = [[[0u16; 2]; N]; N];
+        let tuple_support_col_digit: [[[u16; N]; N]; N] = [[[0u16; N]; N]; N];
+        let tuple_support_col_black: [[[u16; 2]; N]; N] = [[[0u16; 2]; N]; N];
 
         let mut state = Self {
             puzzle,
@@ -166,8 +174,10 @@ impl<const N: usize> QueueSolverState<N> {
             col_blacks_left,
             live_tuples_row,
             live_tuples_col,
-            tuple_support_row,
-            tuple_support_col,
+            tuple_support_row_digit,
+            tuple_support_row_black,
+            tuple_support_col_digit,
+            tuple_support_col_black,
         };
 
         state.init_live_tuples();
@@ -297,31 +307,37 @@ impl<const N: usize> QueueSolverState<N> {
 
         // Initialize support counts from live tuples.
         for r in 0..N {
-            for t in &self.live_tuples_row[r] {
+            // Temporarily move self.live_tuples_row[r]. This prevents a borrow,
+            // which is incompatible with the self.tuple_support_row call below.
+            let live_tuples = std::mem::take(&mut self.live_tuples_row[r]);
+            for t in &live_tuples {
                 for p in 0..t.pattern.len() {
                     let c2 = (t.start + p) % N;
                     let mut bits = t.pattern[p];
                     while bits != 0 {
                         let b = bits & bits.wrapping_neg();
                         bits &= bits - 1;
-                        self.tuple_support_row[r][c2][b.trailing_zeros() as usize] += 1;
+                        *self.tuple_support_row(r, c2, b) += 1;
                     }
                 }
             }
+            self.live_tuples_row[r] = live_tuples;
         }
 
         for c in 0..N {
-            for t in &self.live_tuples_col[c] {
+            let live_tuples = std::mem::take(&mut self.live_tuples_col[c]);
+            for t in &live_tuples {
                 for p in 0..t.pattern.len() {
                     let r2 = (t.start + p) % N;
                     let mut bits = t.pattern[p];
                     while bits != 0 {
                         let b = bits & bits.wrapping_neg();
                         bits &= bits - 1;
-                        self.tuple_support_col[r2][c][b.trailing_zeros() as usize] += 1;
+                        *self.tuple_support_col(r2, c, b) += 1;
                     }
                 }
             }
+            self.live_tuples_col[c] = live_tuples;
         }
     }
 
@@ -413,6 +429,24 @@ impl<const N: usize> QueueSolverState<N> {
             for below in r + 1..N {
                 self.clear_mask(below, c, Self::BLACK1_COL);
             }
+        }
+    }
+
+    // ── Support count accessors ───────────────────────────────────────────────
+
+    fn tuple_support_row(&mut self, r: usize, c: usize, b: u64) -> &mut u16 {
+        if b & Self::ALL_DIGITS != 0 {
+            &mut self.tuple_support_row_digit[r][c][b.trailing_zeros() as usize]
+        } else {
+            &mut self.tuple_support_row_black[r][c][(b == Self::BLACK2_ROW) as usize]
+        }
+    }
+
+    fn tuple_support_col(&mut self, r: usize, c: usize, b: u64) -> &mut u16 {
+        if b & Self::ALL_DIGITS != 0 {
+            &mut self.tuple_support_col_digit[r][c][b.trailing_zeros() as usize]
+        } else {
+            &mut self.tuple_support_col_black[r][c][(b == Self::BLACK2_COL) as usize]
         }
     }
 
@@ -538,9 +572,8 @@ impl<const N: usize> QueueSolverState<N> {
                 while bits != 0 {
                     let b = bits & bits.wrapping_neg();
                     bits &= bits - 1;
-                    let idx = b.trailing_zeros() as usize;
-                    self.tuple_support_row[r][c2][idx] -= 1;
-                    if self.tuple_support_row[r][c2][idx] == 0 {
+                    *self.tuple_support_row(r, c2, b) -= 1;
+                    if *self.tuple_support_row(r, c2, b) == 0 {
                         self.clear_mask(r, c2, b);
                     }
                 }
@@ -585,9 +618,8 @@ impl<const N: usize> QueueSolverState<N> {
                 while bits != 0 {
                     let b = bits & bits.wrapping_neg();
                     bits &= bits - 1;
-                    let idx = b.trailing_zeros() as usize;
-                    self.tuple_support_col[r2][c][idx] -= 1;
-                    if self.tuple_support_col[r2][c][idx] == 0 {
+                    *self.tuple_support_col(r2, c, b) -= 1;
+                    if *self.tuple_support_col(r2, c, b) == 0 {
                         self.clear_mask(r2, c, b);
                     }
                 }
