@@ -172,6 +172,7 @@ impl<const N: usize> QueueSolverState<N> {
 
         state.init_live_tuples();
         state.seed_queue();
+        state.propagate();
 
         state
     }
