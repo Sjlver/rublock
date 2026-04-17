@@ -1,16 +1,19 @@
-//! Debug-only propagation statistics.
+//! Propagation statistics.
 //!
 //! These counters help answer questions like "how often do we backtrack?" and
-//! "which rule is pulling its weight?".  They live entirely behind
-//! `#[cfg(debug_assertions)]`, the same switch that drives `debug_assert!`.
-//! In a `--release` build everything in this module collapses to zero:
+//! "which rule is pulling its weight?".  Most of them live behind
+//! `#[cfg(debug_assertions)]`, the same switch that drives `debug_assert!`,
+//! so that the rich per-rule breakdown stays out of release builds.
 //!
-//! - `Stats` has no fields, so `size_of::<Stats>() == 0`.
-//! - `StatsHandle` is a unit struct (no `Rc`, no allocation).
-//! - Every method body is empty and `#[inline]`, so calls disappear entirely.
+//! The single exception is `search_nodes`: it's always present, because the
+//! `gen_puzzle` binary uses it as a difficulty signal and needs release-mode
+//! speed to find hard puzzles in reasonable time.  In a `--release` build:
 //!
-//! That lets us leave the stats plumbing in hot paths like
-//! `enumerate.rs::count_from_partial` without paying a runtime cost.
+//! - `Stats` has just the one `search_nodes: u64` field.
+//! - `StatsHandle` holds an `Rc<Cell<Stats>>` (one allocation per top-level
+//!   solve; clones during backtracking just bump the refcount).
+//! - The per-rule `incr_bits` path is still empty and inlined away, so the
+//!   hot per-bit accounting in `clear_mask` costs nothing in release.
 //!
 //! ## Why `Rc<Cell<Stats>>`?
 //!
@@ -47,11 +50,10 @@ pub enum Rule {
     Backtracking,
 }
 
-/// Tallies collected during one solve.  All fields are gated so a release
-/// build sees an empty (zero-sized) struct.
+/// Tallies collected during one solve.  `search_nodes` is always present;
+/// the per-rule `bits_*` fields are debug-only.
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Stats {
-    #[cfg(debug_assertions)]
     pub search_nodes: u64,
     #[cfg(debug_assertions)]
     pub bits_arc_consistency: u64,
@@ -71,11 +73,7 @@ pub struct Stats {
 /// same underlying counters, so incrementing from any branch of the
 /// backtracking search updates a single shared tally.
 #[derive(Clone, Default)]
-pub struct StatsHandle(
-    // The field is only present in debug builds.  In release this becomes a
-    // tuple struct with zero fields — effectively a unit struct.
-    #[cfg(debug_assertions)] std::rc::Rc<std::cell::Cell<Stats>>,
-);
+pub struct StatsHandle(std::rc::Rc<std::cell::Cell<Stats>>);
 
 impl StatsHandle {
     pub fn new() -> Self {
@@ -104,26 +102,15 @@ impl StatsHandle {
 
     /// Record one search-tree node (one entry into the recursive solve).
     #[inline]
-    #[cfg(debug_assertions)]
     pub fn incr_node(&self) {
         let mut s = self.0.get();
         s.search_nodes += 1;
         self.0.set(s);
     }
 
-    #[inline]
-    #[cfg(not(debug_assertions))]
-    pub fn incr_node(&self) {}
-
     /// Return a copy of the current tallies.  Cheap: `Stats: Copy`.
-    #[cfg(debug_assertions)]
     pub fn snapshot(&self) -> Stats {
         self.0.get()
-    }
-
-    #[cfg(not(debug_assertions))]
-    pub fn snapshot(&self) -> Stats {
-        Stats::default()
     }
 }
 
@@ -141,7 +128,7 @@ impl std::fmt::Display for Stats {
 
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(stats disabled in release build)")
+        write!(f, "search nodes: {}", self.search_nodes)
     }
 }
 
@@ -171,14 +158,6 @@ mod tests {
         h.incr_node();
         h.incr_node();
         h.incr_node();
-        #[cfg(debug_assertions)]
         assert_eq!(h.snapshot().search_nodes, 3);
-    }
-
-    #[test]
-    #[cfg(not(debug_assertions))]
-    fn stats_is_zero_sized_in_release() {
-        assert_eq!(std::mem::size_of::<Stats>(), 0);
-        assert_eq!(std::mem::size_of::<StatsHandle>(), 0);
     }
 }
