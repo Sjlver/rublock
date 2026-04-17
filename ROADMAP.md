@@ -1,150 +1,235 @@
-# Rublock roadmap
+# Performance Roadmap
 
-Rublock is a small puzzle solving project, to learn Rust. See README.md for the puzzle rules and the goals of the project.
+Ideas for improving `QueueSolverState` performance, roughly ordered by
+expected impact. All measurements should be done with `cargo bench` against
+the standard enumeration workload.
 
-## A second, work queue based solver
+---
 
-Add a second solver in a separate file (`queue_solver.rs`), keeping the original `solver.rs` intact so the two can be compared.
+## Idea 1: Fixed-size array for `LiveTuple::pattern`
 
-The new solver is structured around a **work queue** and a set of **constraint systems**. The shared state is the same domain representation as the original solver: each cell holds a `CellDomain` bitmask with digit bits (1..=N-2), two row-black bits (BLACK1\_ROW, BLACK2\_ROW), and two col-black bits (BLACK1\_COL, BLACK2\_COL).
+**Priority: High**
 
-### The work queue
+`LiveTuple::pattern` is a `Vec<u64>`, so every tuple owns a separate heap
+allocation. A live state contains O(N × tuples_per_row) tuples. Every clone
+— one per backtracking step — must walk and clone all of them.
 
-The queue holds `(row, col, bit)` triples, one per removed domain bit. It is fed by `clear_mask`, which enqueues a triple whenever it actually clears a bit (i.e. the domain shrank). Because `clear_mask` only fires on genuine shrinkage and domains only ever shrink, each `(row, col, bit)` triple is enqueued **at most once** — no deduplication is needed.
+**Fix:** Replace with a fixed-size `[u64; N]` plus a `len: u8` field. Patterns
+are at most N elements long (one element per column/row), so this is always
+safe. The `start` field can also shrink to `u8`.
 
-Each constraint system exposes an `update(row, col, bit)` method that is called when a bit is dequeued. Handlers may call `clear_mask`, which enqueues further triples. Propagation runs until the queue is empty.
+```rust
+struct LiveTuple<const N: usize> {
+    start: u8,
+    len:   u8,
+    pattern: [u64; N],
+}
+```
 
-### Initialization
+All iteration over `pattern` changes from `0..self.pattern.len()` to
+`0..self.len as usize`. With this change, `live_tuples_row` and
+`live_tuples_col` become `Vec<LiveTuple<N>>` where each element is
+plain-old-data — no pointer chasing — and `clone()` reduces to a `memcpy`
+over those Vecs.
 
-When a `QueueSolverState` is constructed:
+---
 
-1. **Enumerate live tuples.** For each row and each column, compute the full set of tuples that are consistent with the row/col target. A tuple has the form `[BLACK1, d₁, d₂, …, dₖ, BLACK2]` where the digits sum to the inside target (non-wrapping) or outside target (wrapping). Only tuples that physically fit in the row are kept. This gives the initial `live_row[r]` and `live_col[c]` sets.
+## Idea 2: Fixed-size arrays for `row_candidates` / `col_candidates`
 
-2. **Compute initial support.** For each cell `(r, c)`, compute the union of all pattern bits from every live tuple in row `r` that covers column `c`. This union is the set of row-direction bits that are actually supported at `(r, c)`. Do the same in the column direction. Any domain bit not present in either union is already dead.
+**Priority: High**
 
-3. **Seed the queue.** Call `clear_mask` for every unsupported bit found in step 2. This produces the initial queue entries and bootstraps propagation.
+`row_candidates: [Vec<u8>; N]` and `col_candidates: [Vec<u8>; N]` are
+currently 2N tiny heap allocations (one per row/column) each holding N+3
+bytes. That is 12 allocations for N=6, multiplied by every backtracking clone.
 
-### Constraint systems
+The same problem was already solved for `tuple_support_row` by splitting it
+into separate digit and black arrays. Do the same here:
 
-Each constraint system holds auxiliary counters that are derived from, and kept consistent with, the domain state. They are updated incrementally via `update`.
+```rust
+row_candidates_digit: [[u8; N]; N],  // [row][trailing_zeros of digit bit]
+row_candidates_black: [[u8; 2]; N],  // [row][0 = BLACK1, 1 = BLACK2]
+col_candidates_digit: [[u8; N]; N],
+col_candidates_black: [[u8; 2]; N],
+```
 
-#### 1. Singleton constraints
+Add a pair of helper methods analogous to `tuple_support_row` / `tuple_support_col`:
 
-Equivalent to `apply_singleton_rule`.
+```rust
+fn row_candidates_for(&mut self, r: usize, bit: u64) -> &mut u8 { ... }
+fn col_candidates_for(&mut self, c: usize, bit: u64) -> &mut u8 { ... }
+```
 
-A cell's **row domain** is `domain & (ALL_DIGITS | ROW_BLACKS)` and its **col domain** is `domain & (ALL_DIGITS | COL_BLACKS)`. Each cell carries two counters:
+This keeps all call sites readable and mirrors the existing convention.
 
-- `row_count[r][c]` — number of bits set in the cell's row domain.
-- `col_count[r][c]` — number of bits set in the cell's col domain.
+---
 
-Digit bits appear in both domains and decrement both counters. Row-black bits decrement only `row_count`; col-black bits decrement only `col_count`.
+## Idea 3: Shrink `CellDomain` from `u64` to `u16`
 
-**`update(r, c, bit)`:** Decrement the appropriate counter(s). If `row_count[r][c]` reaches 1, pass the remaining row domain directly to `set_cell(r, c, domain & (ALL_DIGITS | ROW_BLACKS))` — it already has exactly one bit, so no extraction is needed. Same for `col_count`.
+**Priority: Medium**
 
-#### 2. Hidden singles constraints
+The maximum practical grid size is N=11 (anything larger would require
+hexadecimal digits in the puzzle display). The bits needed for N=11 are:
+digits 1–9 (bits 1–9), BLACK1\_ROW (bit 10), BLACK2\_ROW (bit 11),
+BLACK1\_COL (bit 12), BLACK2\_COL (bit 13) — 13 bits total. A `u16` holds
+16, so it fits for all supported grid sizes.
 
-Equivalent to `apply_hidden_single_rule`.
+**What shrinks:**
 
-Two counter tables:
+| Field | N=6 before | N=6 after | N=11 before | N=11 after |
+|---|---|---|---|---|
+| `domains: [[CellDomain; N]; N]` | 288 B | 72 B | 968 B | 242 B |
+| `LiveTuple::pattern: [CellDomain; N]` (after Idea 1) | 48 B/tuple | 12 B/tuple | 88 B/tuple | 22 B/tuple |
 
-- `count_row[r][bit]` — number of cells in row `r` whose domain contains `bit`.
-- `count_col[c][bit]` — number of cells in column `c` whose domain contains `bit`.
+The four `tuple_support_*` arrays are already `u16` — no change there.
 
-At construction, initialise from the full domains.
+**Struct size effect for N=6:** `domains` shrinks from 288 to 72 bytes.
+The support arrays dominate the struct at ~1152 bytes and are unchanged, so
+the overall struct shrinks by roughly 13%. The cache benefit is modest at N=6
+but grows at larger N where `domains` is proportionally larger.
 
-**`update(r, c, bit)`:**
-- If `bit` is a digit or row-black bit: decrement `count_row[r][bit]`. If it reaches 1, scan row `r` to find the surviving cell `c'` that still has `bit`, then call `set_cell(r, c', bit)`.
-- If `bit` is a digit or col-black bit: decrement `count_col[c][bit]`. If it reaches 1, scan column `c` to find the surviving cell `r'`, then call `set_cell(r', c, bit)`.
+**Queue entries:** `(usize, usize, u64)` → `(usize, usize, u16)`. On 64-bit
+targets, alignment padding keeps the entry at 24 bytes regardless — no savings
+without also shrinking the index types.
 
-Digit bits trigger both branches.
+**Bitwise op cost:** Negligible. x86-64 `POPCNT`, `TZCNT`, and `BLSI` all
+operate on 16-bit registers without penalty.
 
-#### 3. Black consistency constraints
+**Implementation effort:** Very low. Change the type alias:
 
-Equivalent to `apply_black_consistency_rule`.
+```rust
+type CellDomain = u16;
+```
 
-Each cell carries:
+and update the const definitions (replace `1u64` literals with `1u16` in
+`ALL_DIGITS`, `BLACK1_ROW`, etc.). The rest compiles unchanged.
 
-- `row_black_count[r][c]` — number of row-black bits (BLACK1\_ROW, BLACK2\_ROW) still set in the domain; starts at 2.
-- `col_black_count[r][c]` — same for col-black bits; starts at 2.
+**Estimated speedup:** ~10–15% for N=6; potentially more for N=9–11 where
+`domains` is a larger fraction of the struct. Stacks with Idea 1: smaller
+tuple patterns + smaller domains means more of the working set fits in L1.
 
-**`update(r, c, bit)`:**
-- If `bit` is a row-black bit: decrement `row_black_count[r][c]`. If it reaches 0, call `clear_mask` on both BLACK1\_COL and BLACK2\_COL for cell `(r, c)`.
-- If `bit` is a col-black bit: decrement `col_black_count[r][c]`. If it reaches 0, call `clear_mask` on both row-black bits for cell `(r, c)`.
+**Related: shrinking index types.** Row and column indices never exceed N=11,
+so `u8` would be sufficient. The only place this would affect *memory* is the
+queue entry `(usize, usize, u64)` → `(u8, u8, u16)`, saving 20 bytes per
+entry (24 → 4 bytes). Everywhere else — function parameters, local variables,
+loop counters — indices live in registers and their type has no memory impact.
+The problem is that `usize` is Rust's canonical index type: array indexing
+(`self.domains[r][c]`), `for i in 0..N`, and the entire standard library all
+work in `usize`. Storing `u8` indices means writing `r as usize` at every
+index site, which Clippy discourages and which adds noise without benefit. Not
+worth it; keep `usize` for indices throughout.
 
-The resulting `update` calls from `clear_mask` are harmless: by the time they are processed, the target bits are already gone.
+---
 
-#### 4. General arc consistency constraints
+## Idea 4: Replace `VecDeque` with `Vec` (stack discipline)
 
-Equivalent to `apply_general_arc_consistency`. This is the most complex constraint system.
+**Priority: Low / benchmark first**
 
-##### Tuples
+The propagation queue is a `VecDeque<(usize, usize, u64)>` used FIFO. Queue
+order doesn't affect correctness — propagation reaches the same fixpoint
+regardless of order — so LIFO (a plain `Vec` with `push`/`pop`) is equally
+correct.
 
-A **tuple** represents one valid placement of the cage pattern within a row (or column). It records:
+A `Vec` avoids the two-pointer wrap-around bookkeeping of `VecDeque` and
+keeps the hot end at a single memory location, which is friendlier to the
+CPU cache.
 
-- `start` — the column (or row) index of the first cell in the span.
-- `pattern` — an array of bitmasks (one per cell in the span), of the form `[BLACK1_bit, digit_mask, …, digit_mask, BLACK2_bit]` for an inside tuple, or `[BLACK2_bit, digit_mask, …, digit_mask, BLACK1_bit]` for an outside (wrapping) tuple. The `digit_mask` is the union of all digit bits belonging to the digit subset for this tuple.
+**Plan:** Replace `queue: VecDeque<...>` with `queue: Vec<...>`, `push_back`
+→ `push`, `pop_front` → `pop`. Commit this change in isolation, then run
+`cargo bench` to see whether it makes any difference in practice before
+keeping or reverting it.
 
-The column for position `p` is `(start + p) % N`. Whether a tuple wraps is implicit: it wraps iff `start + pattern.len() > N`. There is no need to store a `wrap` field.
+---
 
-A tuple is **live** if, for every position `p` in its span, `domain[row][(start + p) % N] & pattern[p] != 0`. This is a **conservative over-approximation**: it checks per-cell compatibility (condition A) but not that every pattern bit is covered by at least one cell (condition B). For example, the target-7 tuple `[BLACK1, {3,4}, {3,4}, BLACK2]` would remain live even if both intermediate cells have only `{4}` in their domain — digit 3 is uncoverable but condition A still holds. The existing solver's `is_pattern_supported` catches both conditions; the queue solver catches only condition A.
+## Idea 5: Early exit in `pick_branching_cell`
 
-This means some dead tuples linger in the live set longer, producing a weaker propagation. The solver remains correct (no valid bits are ever removed), just less aggressive at pruning. The support-count mechanism described below still removes bits that reach zero support, which closes some — but not all — of the gap.
+**Priority: Trivial**
 
-When `update(row, col, bit)` is called, any live tuple covering `col` with `bit` present in its pattern at the position corresponding to `col` must be rechecked: if `domain[row][col] & pattern[pos] == 0`, the tuple has died.
+The current implementation always scans all N² = 36 cells, even after
+finding a cell with exactly 2 choices — the minimum possible for any
+undecided cell (`branching_bits` returns 0 for fully-determined cells).
 
-##### Support counts
+```rust
+if freedom == 2 {
+    return Some((r, c));
+}
+```
 
-To propagate the effect of a dead tuple back onto the domains, each cell position maintains a support count per domain bit:
+This is a one-line change with zero risk. At backtracking nodes near the
+leaves of the search tree, most cells are already determined, so the first
+2-choice cell is found near the beginning of the scan.
 
-- `support_row[r][c][bit]` — number of live tuples in row `r` whose pattern at column `c` includes `bit`.
-- `support_col[r][c][bit]` — same for column direction.
+---
 
-These are initialised at construction from the initial live tuple sets.
+## Idea 6: Experiment — disable individual propagation rules
 
-When a tuple dies, decrement `support_row[r][c'][bit']` (or `support_col`) for every `(c', bit')` in its span. If any counter reaches 0, call `clear_mask(r, c', bit')`, which enqueues the removal.
+**Priority: Experimental**
 
-##### Variant A — scan (simple)
+Each propagation rule reduces the search tree but adds per-node overhead.
+The history in `benchmarks.md` already shows one surprising result: adding
+the general arc-consistency rule made the solver *slower* overall (1.231 s
+vs 0.532 s), even though it prunes more.
 
-Live tuples for a row are stored in a plain `Vec<Tuple>` (`live_row[r]`). Column tuples go in `live_col[c]`.
+The question is whether the same is true for the other rules in
+`QueueSolverState`.
 
-**`update(r, c, bit)`:**
-1. Iterate `live_row[r]`. For each tuple T:
-   - Skip if T does not cover column `c`.
-   - Skip if `bit` is not in T's pattern at the position corresponding to `c`.
-   - Recheck liveness: if `domain[r][c] & T.pattern[pos] == 0`, T is dead.
-     - Swap-remove T from `live_row[r]`.
-     - For every position `(c', bit')` in T's span, decrement `support_row[r][c'][bit']`; if 0, call `clear_mask`.
-2. Repeat for `live_col[c]` in the column direction.
+Suggested experiments, from cheapest to most invasive:
 
-**Properties:**
-- Data structures are simple `Vec`s — easy to implement, easy to clone for backtracking.
-- Each call scans all live tuples for a row. For N=6 there are at most ~96 tuples per row/col in the worst case, so this is fast in practice.
-- Swap-remove makes deletion O(1) but does not preserve order (order does not matter here).
+1. **Disable `update_black_consistency`**: remove the call and its associated
+   `row_blacks_left` / `col_blacks_left` state. How much does the search tree
+   grow?
 
-##### Variant B — bidirectional links (complex)
+2. **Disable `update_hidden_singles`**: remove the call and `row_candidates` /
+   `col_candidates`. Hidden singles are O(N) per removed bit; are they worth it?
 
-Tuples are stored in a pool and referenced by `TupleId`. Two reverse indices are maintained:
+3. **Disable `update_arc`** entirely: the arc-consistency machinery is the
+   most expensive rule (O(live_tuples) per removed bit, plus all the support
+   count bookkeeping). Try running with just `update_singleton` +
+   `update_hidden_singles` + `update_black_consistency`.
 
-- `cell_to_tuples_row[r][c][bit]` — list of `TupleId`s of live row-tuples in row `r` whose pattern at column `c` includes `bit`.
-- `cell_to_tuples_col[r][c][bit]` — same for column tuples.
+4. **Pure backtracking baseline**: no propagation at all — only branch and
+   check for contradiction. This gives a lower bound on overhead and an
+   upper bound on search-tree benefit.
 
-**`update(r, c, bit)`:**
-1. Look up `cell_to_tuples_row[r][c][bit]`. For each `TupleId` in that list:
-   - If the tuple has already been removed, skip.
-   - Recheck liveness at position `c`: if `domain[r][c] & T.pattern[pos] == 0`, T is dead.
-     - Mark T as removed.
-     - For every `(c', bit')` in T's span, remove T from `cell_to_tuples_row[r][c'][bit']`, decrement `support_row[r][c'][bit']`; if 0, call `clear_mask`.
-2. Repeat for the column direction.
+The cleanest implementation is to gate each rule behind a const generic bool
+parameter (e.g., `QueueSolverState<N, ARC_CONSISTENCY>`). With a `false`
+const, the entire rule — including state fields and bookkeeping — can be
+compiled away with `if ARC_CONSISTENCY { ... }` blocks, making comparisons
+apples-to-apples.
 
-**Properties:**
-- Only checks tuples that specifically include the removed bit — avoids scanning unrelated tuples.
-- Much more bookkeeping: the reverse index must be updated on every tuple removal, and must be correctly cloned for backtracking.
-- For N=6 the scan in Variant A is cheap enough that the extra complexity of Variant B is unlikely to be worthwhile.
+---
 
-**Decision:** Start with Variant A. The live-tuple list per row/col is at most a few dozen entries, making the linear scan negligible. Variant B can be revisited if profiling shows the scan is a bottleneck.
+## Idea 7: Reverse-index tuples by cell (re-assessed, lower priority)
 
-### Backtracking
+**Priority: Low**
 
-Backtracking works identically to the existing solver: clone the entire `QueueSolverState` (including all counters, live-tuple vecs, support-count arrays, and the queue itself) before committing to a branch. If a branch fails, discard it and continue with the saved snapshot.
+`update_arc` scans all of `live_tuples_row[r]` to find tuples covering
+column `c`. A reverse index — `cells_to_row_tuples[r][c]: Vec<usize>` —
+would restrict the scan to only the tuples that actually cover cell `(r, c)`.
 
-The queue is empty at the point of branching (propagation runs to fixpoint first), so the clone captures a clean, fully-propagated state.
+However, the total number of live tuples per row is small. A typical target
+has only 1–2 valid digit-set patterns (e.g., target 5 → {1,4} or {2,3}).
+Each pattern yields at most N starting positions, and each tuple covers at
+most N cells. So the live tuple count is at most ~4 × N = 24 for N=6.
+The current scan is therefore already short in practice.
+
+A reverse index adds non-trivial bookkeeping: when `swap_remove(i)` moves
+the last tuple to slot `i`, the reverse index entries for every cell that
+last tuple covers must be updated from `len` to `i`. Implement this only if
+profiling shows `update_arc`'s linear scan is a genuine bottleneck.
+
+---
+
+## Non-idea: liveness check in `update_arc`
+
+The `.any()` loop in `update_arc`:
+
+```rust
+(0..t.pattern.len()).any(|i| {
+    let c2 = (t.start + i) % N;
+    self.domains[r][c2] & bit != 0
+})
+```
+
+could be re-considered. It makes the liveness check a bit stricter (although it
+is still an over-approximation). However, the cost of the scan might not be
+worth it.
