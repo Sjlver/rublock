@@ -59,11 +59,12 @@ pub struct QueueSolverState<const N: usize> {
     col_domain_size: [[u8; N]; N],
 
     // ── Hidden singles constraint ─────────────────────────────────────────────
-    // row_candidates[r][p] = cells in row r whose domain has bit (1 << p).
-    // col_candidates[c][p] = cells in col c whose domain has bit (1 << p).
-    // Vec length = N+3.
-    row_candidates: [Vec<u8>; N],
-    col_candidates: [Vec<u8>; N],
+    // Number of cells in row r (col c) whose domain has a given bit set.
+    // Split into digit and black arrays, analogous to tuple_support_*.
+    row_candidates_digit: [[u8; N]; N],
+    row_candidates_black: [[u8; 2]; N],
+    col_candidates_digit: [[u8; N]; N],
+    col_candidates_black: [[u8; 2]; N],
 
     // ── Black consistency constraint ──────────────────────────────────────────
     row_blacks_left: [[u8; N]; N],
@@ -152,27 +153,14 @@ impl<const N: usize> QueueSolverState<N> {
         let row_blacks_left: [[u8; N]; N] = [[2; N]; N];
         let col_blacks_left: [[u8; N]; N] = [[2; N]; N];
 
-        // row_candidates[r][p] = number of cells in row r with bit (1<<p) set.
-        let row_candidates_line: Vec<u8> = (0..N + 3)
-            .map(|p| {
-                if (1 << p) & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
-                    N as u8
-                } else {
-                    0
-                }
-            })
-            .collect();
-        let row_candidates: [Vec<u8>; N] = std::array::from_fn(|_| row_candidates_line.clone());
-        let col_candidates_line: Vec<u8> = (0..N + 3)
-            .map(|p| {
-                if (1 << p) & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 {
-                    N as u8
-                } else {
-                    0
-                }
-            })
-            .collect();
-        let col_candidates: [Vec<u8>; N] = std::array::from_fn(|_| col_candidates_line.clone());
+        // Digit indices 1..=N-2 are valid; 0 and N-1 are not digit bits.
+        let candidates_digit_line: [u8; N] = std::array::from_fn(|p| {
+            if p >= 1 && p <= N - 2 { N as u8 } else { 0 }
+        });
+        let row_candidates_digit: [[u8; N]; N] = [candidates_digit_line; N];
+        let row_candidates_black: [[u8; 2]; N] = [[N as u8; 2]; N];
+        let col_candidates_digit: [[u8; N]; N] = [candidates_digit_line; N];
+        let col_candidates_black: [[u8; 2]; N] = [[N as u8; 2]; N];
 
         let live_tuples_row: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
         let live_tuples_col: [Vec<LiveTuple<N>>; N] = std::array::from_fn(|_| Vec::new());
@@ -188,8 +176,10 @@ impl<const N: usize> QueueSolverState<N> {
             queue: VecDeque::new(),
             row_domain_size,
             col_domain_size,
-            row_candidates,
-            col_candidates,
+            row_candidates_digit,
+            row_candidates_black,
+            col_candidates_digit,
+            col_candidates_black,
             row_blacks_left,
             col_blacks_left,
             live_tuples_row,
@@ -464,6 +454,22 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
+    fn row_candidates_for(&mut self, r: usize, bit: u64) -> &mut u8 {
+        if bit & Self::ALL_DIGITS != 0 {
+            &mut self.row_candidates_digit[r][bit.trailing_zeros() as usize]
+        } else {
+            &mut self.row_candidates_black[r][(bit == Self::BLACK2_ROW) as usize]
+        }
+    }
+
+    fn col_candidates_for(&mut self, c: usize, bit: u64) -> &mut u8 {
+        if bit & Self::ALL_DIGITS != 0 {
+            &mut self.col_candidates_digit[c][bit.trailing_zeros() as usize]
+        } else {
+            &mut self.col_candidates_black[c][(bit == Self::BLACK2_COL) as usize]
+        }
+    }
+
     // ── Update handlers ───────────────────────────────────────────────────────
 
     fn update(&mut self, r: usize, c: usize, bit: u64) {
@@ -504,11 +510,9 @@ impl<const N: usize> QueueSolverState<N> {
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
     fn update_hidden_singles(&mut self, r: usize, c: usize, bit: u64) {
-        let p = bit.trailing_zeros() as usize;
-
         if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
-            self.row_candidates[r][p] -= 1;
-            if self.row_candidates[r][p] == 1 {
+            *self.row_candidates_for(r, bit) -= 1;
+            if *self.row_candidates_for(r, bit) == 1 {
                 if let Some(c2) = (0..N).find(|&col| self.domains[r][col] & bit != 0) {
                     self.set_cell(r, c2, bit);
                 }
@@ -516,8 +520,8 @@ impl<const N: usize> QueueSolverState<N> {
         }
 
         if bit & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 {
-            self.col_candidates[c][p] -= 1;
-            if self.col_candidates[c][p] == 1 {
+            *self.col_candidates_for(c, bit) -= 1;
+            if *self.col_candidates_for(c, bit) == 1 {
                 if let Some(r2) = (0..N).find(|&row| self.domains[row][c] & bit != 0) {
                     self.set_cell(r2, c, bit);
                 }
@@ -818,8 +822,12 @@ mod tests {
         assert_eq!(state.row_domain_size, [[3, 4, 4, 3]; 4]);
         assert_eq!(state.col_domain_size, [[3; 4], [4; 4], [4; 4], [3; 4]]);
 
-        assert_eq!(state.row_candidates, [[0, 4, 4, 3, 3, 0, 0]; 4]);
-        assert_eq!(state.col_candidates, [[0, 4, 4, 0, 0, 3, 3]; 4]);
+        // row_candidates: digits 1,2 have 4 candidates each; blacks have 3,3
+        assert_eq!(state.row_candidates_digit, [[0, 4, 4, 0]; 4]);
+        assert_eq!(state.row_candidates_black, [[3, 3]; 4]);
+        // col_candidates: digits 1,2 have 4 candidates each; blacks have 3,3
+        assert_eq!(state.col_candidates_digit, [[0, 4, 4, 0]; 4]);
+        assert_eq!(state.col_candidates_black, [[3, 3]; 4]);
 
         assert_eq!(state.row_blacks_left, [[1, 2, 2, 1]; 4]);
         assert_eq!(state.col_blacks_left, [[1; 4], [2; 4], [2; 4], [1; 4]]);
