@@ -4,7 +4,7 @@ use tracing::{instrument, trace};
 
 use crate::solver::{Puzzle, Tables};
 
-type CellDomain = u64;
+type CellDomain = u16;
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 
@@ -12,12 +12,12 @@ type CellDomain = u64;
 struct LiveTuple<const N: usize> {
     start: u8,
     len: u8,
-    pattern: [u64; N],
+    pattern: [CellDomain; N],
 }
 
 impl<const N: usize> LiveTuple<N> {
-    fn new(start: usize, len: usize, digit_mask: u64, black1: u64, black2: u64) -> Self {
-        let mut pattern = [0u64; N];
+    fn new(start: usize, len: usize, digit_mask: CellDomain, black1: CellDomain, black2: CellDomain) -> Self {
+        let mut pattern = [0 as CellDomain; N];
         pattern[0] = black1;
         for i in 1..=len {
             pattern[i] = digit_mask;
@@ -40,7 +40,7 @@ impl<const N: usize> LiveTuple<N> {
     }
 
     /// Yields (position_in_grid, pattern_value) for each slot.
-    fn cells(&self) -> impl Iterator<Item = (usize, u64)> + '_ {
+    fn cells(&self) -> impl Iterator<Item = (usize, CellDomain)> + '_ {
         (0..self.len as usize).map(move |p| ((self.start as usize + p) % N, self.pattern[p]))
     }
 }
@@ -51,7 +51,7 @@ impl<const N: usize> LiveTuple<N> {
 pub struct QueueSolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
-    queue: VecDeque<(usize, usize, u64)>,
+    queue: VecDeque<(usize, usize, CellDomain)>,
 
     // ── Singleton constraint ──────────────────────────────────────────────────
     // How many value-choices does this cell have in the row / col view?
@@ -89,7 +89,7 @@ pub struct QueueSolverState<const N: usize> {
     tuple_support_col_black: [[[u16; 2]; N]; N],
 }
 
-struct BitName<const N: usize>(u64);
+struct BitName<const N: usize>(CellDomain);
 
 impl<const N: usize> std::fmt::Display for BitName<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -133,15 +133,15 @@ impl<const N: usize> std::fmt::Debug for QueueSolverState<N> {
 }
 
 impl<const N: usize> QueueSolverState<N> {
-    const BLACK1_ROW: u64 = 1u64 << (N - 1);
-    const BLACK2_ROW: u64 = 1u64 << N;
-    const BLACK1_COL: u64 = 1u64 << (N + 1);
-    const BLACK2_COL: u64 = 1u64 << (N + 2);
+    const BLACK1_ROW: CellDomain = 1 << (N - 1);
+    const BLACK2_ROW: CellDomain = 1 << N;
+    const BLACK1_COL: CellDomain = 1 << (N + 1);
+    const BLACK2_COL: CellDomain = 1 << (N + 2);
 
-    const ALL_DIGITS: u64 = ((1u64 << (N - 2)) - 1) << 1;
-    const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
-    const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
-    const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
+    const ALL_DIGITS: CellDomain = ((1 << (N - 2)) - 1) << 1;
+    const ROW_BLACKS: CellDomain = Self::BLACK1_ROW | Self::BLACK2_ROW;
+    const COL_BLACKS: CellDomain = Self::BLACK1_COL | Self::BLACK2_COL;
+    const ALL_BLACKS: CellDomain = Self::ROW_BLACKS | Self::COL_BLACKS;
 
     #[instrument(skip(puzzle))]
     pub fn new(puzzle: Puzzle<N>) -> Self {
@@ -351,7 +351,7 @@ impl<const N: usize> QueueSolverState<N> {
     fn seed_queue(&mut self) {
         let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
 
-        let mut row_tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
+        let mut row_tuple_supported_bits: [[CellDomain; N]; N] = [[0; N]; N];
         for r in 0..N {
             for t in &self.live_tuples_row[r] {
                 for (c2, pat) in t.cells() {
@@ -359,7 +359,7 @@ impl<const N: usize> QueueSolverState<N> {
                 }
             }
         }
-        let mut col_tuple_supported_bits: [[u64; N]; N] = [[0; N]; N];
+        let mut col_tuple_supported_bits: [[CellDomain; N]; N] = [[0; N]; N];
         for c in 0..N {
             for t in &self.live_tuples_col[c] {
                 for (r2, pat) in t.cells() {
@@ -382,7 +382,7 @@ impl<const N: usize> QueueSolverState<N> {
     // ── Core mutation primitives ──────────────────────────────────────────────
 
     #[instrument(skip(self), fields(mask = format_args!("{mask:0width$b}", width = N + 3)))]
-    fn clear_mask(&mut self, r: usize, c: usize, mask: u64) {
+    fn clear_mask(&mut self, r: usize, c: usize, mask: CellDomain) {
         let before = self.domains[r][c];
         self.domains[r][c] &= !mask;
         let removed = before & !self.domains[r][c];
@@ -396,7 +396,7 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn set_cell(&mut self, r: usize, c: usize, bit: u64) {
+    fn set_cell(&mut self, r: usize, c: usize, bit: CellDomain) {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
         trace!(bit = format_args!("{}", BitName::<N>(bit)), "setting cell");
 
@@ -438,7 +438,7 @@ impl<const N: usize> QueueSolverState<N> {
 
     // ── Support count accessors ───────────────────────────────────────────────
 
-    fn tuple_support_row(&mut self, r: usize, c: usize, b: u64) -> &mut u16 {
+    fn tuple_support_row(&mut self, r: usize, c: usize, b: CellDomain) -> &mut u16 {
         if b & Self::ALL_DIGITS != 0 {
             &mut self.tuple_support_row_digit[r][c][b.trailing_zeros() as usize]
         } else {
@@ -446,7 +446,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
-    fn tuple_support_col(&mut self, r: usize, c: usize, b: u64) -> &mut u16 {
+    fn tuple_support_col(&mut self, r: usize, c: usize, b: CellDomain) -> &mut u16 {
         if b & Self::ALL_DIGITS != 0 {
             &mut self.tuple_support_col_digit[r][c][b.trailing_zeros() as usize]
         } else {
@@ -454,7 +454,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
-    fn row_candidates_for(&mut self, r: usize, bit: u64) -> &mut u8 {
+    fn row_candidates_for(&mut self, r: usize, bit: CellDomain) -> &mut u8 {
         if bit & Self::ALL_DIGITS != 0 {
             &mut self.row_candidates_digit[r][bit.trailing_zeros() as usize]
         } else {
@@ -462,7 +462,7 @@ impl<const N: usize> QueueSolverState<N> {
         }
     }
 
-    fn col_candidates_for(&mut self, c: usize, bit: u64) -> &mut u8 {
+    fn col_candidates_for(&mut self, c: usize, bit: CellDomain) -> &mut u8 {
         if bit & Self::ALL_DIGITS != 0 {
             &mut self.col_candidates_digit[c][bit.trailing_zeros() as usize]
         } else {
@@ -472,7 +472,7 @@ impl<const N: usize> QueueSolverState<N> {
 
     // ── Update handlers ───────────────────────────────────────────────────────
 
-    fn update(&mut self, r: usize, c: usize, bit: u64) {
+    fn update(&mut self, r: usize, c: usize, bit: CellDomain) {
         trace!(
             r = r,
             c = c,
@@ -486,7 +486,7 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn update_singleton(&mut self, r: usize, c: usize, bit: u64) {
+    fn update_singleton(&mut self, r: usize, c: usize, bit: CellDomain) {
         if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
             self.row_domain_size[r][c] -= 1;
             if self.row_domain_size[r][c] == 1 {
@@ -509,7 +509,7 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn update_hidden_singles(&mut self, r: usize, c: usize, bit: u64) {
+    fn update_hidden_singles(&mut self, r: usize, c: usize, bit: CellDomain) {
         if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
             *self.row_candidates_for(r, bit) -= 1;
             if *self.row_candidates_for(r, bit) == 1 {
@@ -530,7 +530,7 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn update_black_consistency(&mut self, r: usize, c: usize, bit: u64) {
+    fn update_black_consistency(&mut self, r: usize, c: usize, bit: CellDomain) {
         if bit & Self::ROW_BLACKS != 0 {
             self.row_blacks_left[r][c] -= 1;
             if self.row_blacks_left[r][c] == 0 {
@@ -547,7 +547,7 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn update_arc(&mut self, r: usize, c: usize, bit: u64) {
+    fn update_arc(&mut self, r: usize, c: usize, bit: CellDomain) {
         // Row direction: check tuples in live_row[r] that cover column c.
         let mut i = 0;
         while i < self.live_tuples_row[r].len() {
@@ -667,7 +667,7 @@ impl<const N: usize> QueueSolverState<N> {
         })
     }
 
-    fn branching_bits(domain: u64) -> u64 {
+    fn branching_bits(domain: CellDomain) -> CellDomain {
         let primary = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
         if primary.count_ones() > 1 { primary } else { 0 }
     }
@@ -807,8 +807,8 @@ mod tests {
         let _ = tracing_subscriber::fmt::try_init();
         let state = QueueSolverState::new(Puzzle::new([0; 4], [0; 4]));
 
-        let b = |cond, val| if cond { val } else { 0u64 };
-        let expected_domains: [[u64; 4]; 4] = std::array::from_fn(|r| {
+        let b = |cond, val: CellDomain| if cond { val } else { 0 };
+        let expected_domains: [[CellDomain; 4]; 4] = std::array::from_fn(|r| {
             std::array::from_fn(|c| {
                 QueueSolverState::<4>::ALL_DIGITS
                     | b(c != 0, QueueSolverState::<4>::BLACK2_ROW)

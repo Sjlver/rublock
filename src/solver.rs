@@ -33,7 +33,7 @@ impl<const N: usize> Puzzle<N> {
 // We distinguish between various values for black. Black 1 means the first
 // black entry in a row (or column), and black 2 is the second.
 
-type CellDomain = u64;
+type CellDomain = u16;
 
 // ── SolverState ───────────────────────────────────────────────────────────────
 //
@@ -53,7 +53,7 @@ pub struct SolverState<const N: usize> {
 impl<const N: usize> SolverState<N> {
     pub fn new(puzzle: Puzzle<N>) -> Self {
         // All value bits set: bit 1 through bit N+2.
-        let full_cell: CellDomain = ((1u64 << (N + 2)) - 1) << 1;
+        let full_cell: CellDomain = ((1 << (N + 2)) - 1) << 1;
         Self {
             puzzle,
             domains: [[full_cell; N]; N],
@@ -77,11 +77,11 @@ pub(crate) struct Tables {
     ///
     /// A valid digit-set for cage target `t` and size `k` is any k-element
     /// subset of the digit set whose elements sum to `t`.  Each set is encoded
-    /// as a `u64` with bit `d` set (i.e. `1 << d`) if digit `d` belongs to
+    /// as a `CellDomain` with bit `d` set (i.e. `1 << d`) if digit `d` belongs to
     /// the set — the same layout used for cell domains.
     ///
     /// Indexed as `valid_tuples[target][size]`.
-    valid_tuples: Vec<Vec<Vec<u64>>>,
+    valid_tuples: Vec<Vec<Vec<CellDomain>>>,
 
     /// Maximum achievable cage sum (= 1 + 2 + ... + num_digits).
     pub(crate) max_sum: usize,
@@ -96,12 +96,13 @@ impl Tables {
         let num_targets = max_target + 1;
 
         // valid_tuples[target][size]: one Vec per (target, size) pair.
-        let mut valid_tuples: Vec<Vec<Vec<u64>>> = vec![vec![vec![]; num_digits + 1]; num_targets];
+        let mut valid_tuples: Vec<Vec<Vec<CellDomain>>> =
+            vec![vec![vec![]; num_digits + 1]; num_targets];
 
         // Iterate over every subset of the digit set {1, …, num_digits}.
         // For each subset, its size and sum determine exactly which slot it
         // belongs in — no inner loops or filtering needed.
-        for subset in 0u64..(1u64 << num_digits) {
+        for subset in 0 as CellDomain..(1 as CellDomain) << num_digits {
             let size = subset.count_ones() as usize;
             let target: usize = (0..num_digits)
                 .filter(|&b| subset & (1 << b) != 0)
@@ -121,7 +122,7 @@ impl Tables {
     pub(crate) fn valid_tuples_for_target(
         &self,
         target: usize,
-    ) -> impl Iterator<Item = (usize, u64)> {
+    ) -> impl Iterator<Item = (usize, CellDomain)> {
         self.valid_tuples[target]
             .iter()
             .enumerate()
@@ -133,18 +134,18 @@ impl Tables {
 
 impl<const N: usize> SolverState<N> {
     // Bit positions for the "black" value variants.
-    const BLACK1_ROW: u64 = 1u64 << (N - 1);
-    const BLACK2_ROW: u64 = 1u64 << N;
-    const BLACK1_COL: u64 = 1u64 << (N + 1);
-    const BLACK2_COL: u64 = 1u64 << (N + 2);
+    const BLACK1_ROW: CellDomain = 1 << (N - 1);
+    const BLACK2_ROW: CellDomain = 1 << N;
+    const BLACK1_COL: CellDomain = 1 << (N + 1);
+    const BLACK2_COL: CellDomain = 1 << (N + 2);
 
     // Composite masks for common groups of bits.
     // Digit bits occupy positions 1..=(N-2); ALL_DIGITS sets exactly those bits.
-    const ALL_DIGITS: u64 = ((1u64 << (N - 2)) - 1) << 1;
+    const ALL_DIGITS: CellDomain = ((1 << (N - 2)) - 1) << 1;
 
-    const ROW_BLACKS: u64 = Self::BLACK1_ROW | Self::BLACK2_ROW;
-    const COL_BLACKS: u64 = Self::BLACK1_COL | Self::BLACK2_COL;
-    const ALL_BLACKS: u64 = Self::ROW_BLACKS | Self::COL_BLACKS;
+    const ROW_BLACKS: CellDomain = Self::BLACK1_ROW | Self::BLACK2_ROW;
+    const COL_BLACKS: CellDomain = Self::BLACK1_COL | Self::BLACK2_COL;
+    const ALL_BLACKS: CellDomain = Self::ROW_BLACKS | Self::COL_BLACKS;
 
     /// Clear all bits in `mask` from a cell's domain.  Returns a `ChangeSet`
     /// with the cell's row and column set iff any bit was actually cleared (i.e.
@@ -153,7 +154,7 @@ impl<const N: usize> SolverState<N> {
         domains: &mut [[CellDomain; N]; N],
         row: usize,
         col: usize,
-        mask: u64,
+        mask: CellDomain,
     ) -> ChangeSet {
         let mut cs = ChangeSet::default();
         let before = domains[row][col];
@@ -177,7 +178,7 @@ impl<const N: usize> SolverState<N> {
     /// **Black bit** - Clear the bit from its row (if it's a row black) or
     /// column. Clear BLACK 1 from cells to the left and above, and BLACK 2
     /// from cells to the right.
-    fn set_cell(&mut self, row: usize, col: usize, bit: u64) -> ChangeSet {
+    fn set_cell(&mut self, row: usize, col: usize, bit: CellDomain) -> ChangeSet {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
         let mut changed = ChangeSet::default();
 
@@ -244,10 +245,10 @@ impl<const N: usize> SolverState<N> {
     /// Returns true if the given `pattern` has support in `cells`, meaning
     /// that each cell is compatible with the pattern, and any bit in pattern
     /// is supported by at least one cell.
-    fn is_pattern_supported(&self, pattern: &[u64], cells: &[(usize, usize)]) -> bool {
+    fn is_pattern_supported(&self, pattern: &[CellDomain], cells: &[(usize, usize)]) -> bool {
         debug_assert_eq!(pattern.len(), cells.len());
-        let pattern_bits = pattern.iter().fold(0u64, |acc, &b| acc | b);
-        let mut supported = 0u64;
+        let pattern_bits = pattern.iter().fold(0 as CellDomain, |acc, &b| acc | b);
+        let mut supported: CellDomain = 0;
         for (&p, &(r, c)) in pattern.iter().zip(cells) {
             let s = self.domains[r][c] & p;
             if s == 0 {
@@ -259,14 +260,14 @@ impl<const N: usize> SolverState<N> {
     }
 
     /// Update `mask` with bits supported by `pattern` placed at `cells` (row scan).
-    fn mark_row_pattern_supported(mask: &mut [u64], pattern: &[u64], cells: &[(usize, usize)]) {
+    fn mark_row_pattern_supported(mask: &mut [CellDomain], pattern: &[CellDomain], cells: &[(usize, usize)]) {
         for (&p, &(_, c)) in pattern.iter().zip(cells) {
             mask[c] |= p;
         }
     }
 
     /// Update `mask` with bits supported by `pattern` placed at `cells` (col scan).
-    fn mark_col_pattern_supported(mask: &mut [u64], pattern: &[u64], cells: &[(usize, usize)]) {
+    fn mark_col_pattern_supported(mask: &mut [CellDomain], pattern: &[CellDomain], cells: &[(usize, usize)]) {
         for (&p, &(r, _)) in pattern.iter().zip(cells) {
             mask[r] |= p;
         }
@@ -318,7 +319,7 @@ impl<const N: usize> SolverState<N> {
             let inside_target = self.puzzle.row_targets[row] as usize;
             let outside_target = self.tables.max_sum - inside_target;
 
-            let patterns: Vec<(Vec<u64>, bool)> =
+            let patterns: Vec<(Vec<CellDomain>, bool)> =
                 self.tables
                     .valid_tuples_for_target(inside_target)
                     .map(|(len, tuple)| {
@@ -368,7 +369,7 @@ impl<const N: usize> SolverState<N> {
             let inside_target = self.puzzle.col_targets[col] as usize;
             let outside_target = self.tables.max_sum - inside_target;
 
-            let patterns: Vec<(Vec<u64>, bool)> =
+            let patterns: Vec<(Vec<CellDomain>, bool)> =
                 self.tables
                     .valid_tuples_for_target(inside_target)
                     .map(|(len, tuple)| {
@@ -502,7 +503,7 @@ impl<const N: usize> SolverState<N> {
 
     /// Return the unique position in row `r` where `bit` appears in the domain,
     /// or `None` if no such position exists or more than one does.
-    fn singleton_in_row(&self, r: usize, bit: u64) -> Option<usize> {
+    fn singleton_in_row(&self, r: usize, bit: CellDomain) -> Option<usize> {
         let mut found = None;
         for c in 0..N {
             if self.domains[r][c] & bit != 0 {
@@ -517,7 +518,7 @@ impl<const N: usize> SolverState<N> {
 
     /// Return the unique position in column `c` where `bit` appears in the domain,
     /// or `None` if no such position exists or more than one does.
-    fn singleton_in_col(&self, c: usize, bit: u64) -> Option<usize> {
+    fn singleton_in_col(&self, c: usize, bit: CellDomain) -> Option<usize> {
         let mut found = None;
         for r in 0..N {
             if self.domains[r][c] & bit != 0 {
@@ -583,7 +584,7 @@ impl<const N: usize> SolverState<N> {
     /// To avoid double-counting solutions, we use only row blacks when branching.
     ///
     /// Returns `0` when the cell is fully determined (no branching needed).
-    fn branching_bits(domain: u64) -> u64 {
+    fn branching_bits(domain: CellDomain) -> CellDomain {
         let primary = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
         if primary.count_ones() > 1 {
             return primary;
