@@ -677,6 +677,9 @@ impl<const N: usize> QueueSolverState<N> {
                 let bits = Self::branching_bits(self.domains[r][c]);
                 let freedom = bits.count_ones();
                 if freedom > 1 && best.map_or(true, |b| freedom < b.2) {
+                    if freedom == 2 {
+                        return Some((r, c));
+                    }
                     best = Some((r, c, freedom));
                 }
             }
