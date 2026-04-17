@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use tracing::{instrument, trace};
 
 use crate::solver::{Puzzle, Tables};
@@ -51,7 +49,7 @@ impl<const N: usize> LiveTuple<N> {
 pub struct QueueSolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
-    queue: VecDeque<(usize, usize, CellDomain)>,
+    queue: Vec<(usize, usize, CellDomain)>,
 
     // ── Singleton constraint ──────────────────────────────────────────────────
     // How many value-choices does this cell have in the row / col view?
@@ -173,7 +171,7 @@ impl<const N: usize> QueueSolverState<N> {
         let mut state = Self {
             puzzle,
             domains: [[full_cell; N]; N],
-            queue: VecDeque::new(),
+            queue: Vec::new(),
             row_domain_size,
             col_domain_size,
             row_candidates_digit,
@@ -391,7 +389,7 @@ impl<const N: usize> QueueSolverState<N> {
             let b = bits & bits.wrapping_neg();
             bits &= bits - 1;
             trace!(b = format_args!("{}", BitName::<N>(b)), "bit removed");
-            self.queue.push_back((r, c, b));
+            self.queue.push((r, c, b));
         }
     }
 
@@ -638,7 +636,7 @@ impl<const N: usize> QueueSolverState<N> {
     // ── Propagation ───────────────────────────────────────────────────────────
 
     pub fn propagate(&mut self) {
-        while let Some((r, c, bit)) = self.queue.pop_front() {
+        while let Some((r, c, bit)) = self.queue.pop() {
             // Return early if a contradiction is detected
             if self.domains[r][c] == 0 {
                 return;
