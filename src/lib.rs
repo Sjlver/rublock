@@ -3,3 +3,4 @@ pub mod enumerate;
 pub mod grid;
 pub mod queue_solver;
 pub mod solver;
+pub mod stats;

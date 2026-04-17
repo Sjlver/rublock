@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::changeset::ChangeSet;
+use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── Puzzle ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,23 @@ impl<const N: usize> Puzzle<N> {
             col_targets,
         }
     }
+}
+
+// ── SolveOutcome ──────────────────────────────────────────────────────────────
+
+/// The result of a `solve()` call on a solver state.
+///
+/// Generic over the state type so both `SolverState` and `QueueSolverState`
+/// can use it.  When there are multiple solutions, we return the **first**
+/// one found — enough for display, while still flagging non-uniqueness.
+#[derive(Debug, Clone)]
+pub enum SolveOutcome<S> {
+    /// No assignment satisfies every constraint.
+    Unsolvable,
+    /// Exactly one solution exists.
+    Unique(S),
+    /// At least two solutions exist; the enclosed state is the first one found.
+    Multiple(S),
 }
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -43,11 +61,14 @@ type CellDomain = u64;
 // snapshot before committing to a guess). Copy is intentionally absent —
 // accidental copies of this large struct would silently produce stale state.
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
     tables: Arc<Tables>,
+    /// Debug-only propagation statistics.  In release builds this is a
+    /// zero-sized handle; cloning it costs nothing.  See `stats.rs`.
+    stats: StatsHandle,
 }
 
 impl<const N: usize> SolverState<N> {
@@ -58,7 +79,25 @@ impl<const N: usize> SolverState<N> {
             puzzle,
             domains: [[full_cell; N]; N],
             tables: Arc::new(Tables::build(N - 2)),
+            stats: StatsHandle::new(),
         }
+    }
+
+    /// Return a snapshot of the stats collected so far.
+    pub fn stats(&self) -> Stats {
+        self.stats.snapshot()
+    }
+}
+
+// We implement `Debug` manually because `StatsHandle` deliberately avoids a
+// derived `Debug` in release (it's a unit struct).  Showing the domain grid
+// and puzzle targets is all we need here.
+impl<const N: usize> fmt::Debug for SolverState<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SolverState")
+            .field("puzzle", &self.puzzle)
+            .field("domains", &self.domains)
+            .finish()
     }
 }
 
@@ -150,16 +189,17 @@ impl<const N: usize> SolverState<N> {
     /// Clear all bits in `mask` from a cell's domain.  Returns a `ChangeSet`
     /// with the cell's row and column set iff any bit was actually cleared (i.e.
     /// the domain shrank); otherwise returns an empty `ChangeSet`.
-    fn clear_mask(
-        domains: &mut [[CellDomain; N]; N],
-        row: usize,
-        col: usize,
-        mask: CellDomain,
-    ) -> ChangeSet {
+    ///
+    /// The `rule` tag is used to attribute the bits removed here to the
+    /// propagation rule that triggered the call (debug-only; see `stats.rs`).
+    fn clear_mask(&mut self, row: usize, col: usize, mask: CellDomain, rule: Rule) -> ChangeSet {
         let mut cs = ChangeSet::default();
-        let before = domains[row][col];
-        domains[row][col] = before & !mask;
-        if domains[row][col] != before {
+        let before = self.domains[row][col];
+        let after = before & !mask;
+        self.domains[row][col] = after;
+        if after != before {
+            // XOR isolates the bits that actually changed (popped from 1 to 0).
+            self.stats.incr_bits(rule, (before ^ after).count_ones());
             cs.set_row(row);
             cs.set_col(col);
         }
@@ -178,62 +218,57 @@ impl<const N: usize> SolverState<N> {
     /// **Black bit** - Clear the bit from its row (if it's a row black) or
     /// column. Clear BLACK 1 from cells to the left and above, and BLACK 2
     /// from cells to the right.
-    fn set_cell(&mut self, row: usize, col: usize, bit: CellDomain) -> ChangeSet {
+    ///
+    /// `set_cell` is a helper used by several rules, so the caller passes the
+    /// `rule` tag it wants to attribute these removals to.
+    fn set_cell(&mut self, row: usize, col: usize, bit: CellDomain, rule: Rule) -> ChangeSet {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
         let mut changed = ChangeSet::default();
 
         if bit & Self::ALL_DIGITS != 0 {
             // Remove this digit from every other cell in the row and column.
             for c in (0..N).filter(|&c| c != col) {
-                changed |= Self::clear_mask(&mut self.domains, row, c, bit);
+                changed |= self.clear_mask(row, c, bit, rule);
             }
             for r in (0..N).filter(|&r| r != row) {
-                changed |= Self::clear_mask(&mut self.domains, r, col, bit);
+                changed |= self.clear_mask(r, col, bit, rule);
             }
             // Fix this cell: keep only this digit.
-            changed |= Self::clear_mask(&mut self.domains, row, col, !bit);
+            changed |= self.clear_mask(row, col, !bit, rule);
         } else if bit & Self::ROW_BLACKS != 0 {
             // Each row-black variant appears once per row.
             for c in (0..N).filter(|&c| c != col) {
-                changed |= Self::clear_mask(&mut self.domains, row, c, bit);
+                changed |= self.clear_mask(row, c, bit, rule);
             }
 
             // Cell is black: drop digits and the other row-black variant.
-            changed |= Self::clear_mask(
-                &mut self.domains,
-                row,
-                col,
-                Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit),
-            );
+            changed |=
+                self.clear_mask(row, col, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit), rule);
         } else if bit & Self::COL_BLACKS != 0 {
             // Each col-black variant appears once per column.
             for r in (0..N).filter(|&r| r != row) {
-                changed |= Self::clear_mask(&mut self.domains, r, col, bit);
+                changed |= self.clear_mask(r, col, bit, rule);
             }
 
             // Cell is black: drop digits and the other col-black variant.
-            changed |= Self::clear_mask(
-                &mut self.domains,
-                row,
-                col,
-                Self::ALL_DIGITS | (Self::COL_BLACKS & !bit),
-            );
+            changed |=
+                self.clear_mask(row, col, Self::ALL_DIGITS | (Self::COL_BLACKS & !bit), rule);
         }
 
         if bit & Self::ALL_BLACKS != 0 {
             // Enforce ordering: clear all BLACK2 from cells above and to the
             // left, and clear BLACK1 from cells below and to the right.
             for left in 0..col {
-                changed |= Self::clear_mask(&mut self.domains, row, left, Self::BLACK2_ROW)
+                changed |= self.clear_mask(row, left, Self::BLACK2_ROW, rule);
             }
             for right in col + 1..N {
-                changed |= Self::clear_mask(&mut self.domains, row, right, Self::BLACK1_ROW)
+                changed |= self.clear_mask(row, right, Self::BLACK1_ROW, rule);
             }
             for above in 0..row {
-                changed |= Self::clear_mask(&mut self.domains, above, col, Self::BLACK2_COL)
+                changed |= self.clear_mask(above, col, Self::BLACK2_COL, rule);
             }
             for below in row + 1..N {
-                changed |= Self::clear_mask(&mut self.domains, below, col, Self::BLACK1_COL)
+                changed |= self.clear_mask(below, col, Self::BLACK1_COL, rule);
             }
         }
 
@@ -260,14 +295,22 @@ impl<const N: usize> SolverState<N> {
     }
 
     /// Update `mask` with bits supported by `pattern` placed at `cells` (row scan).
-    fn mark_row_pattern_supported(mask: &mut [CellDomain], pattern: &[CellDomain], cells: &[(usize, usize)]) {
+    fn mark_row_pattern_supported(
+        mask: &mut [CellDomain],
+        pattern: &[CellDomain],
+        cells: &[(usize, usize)],
+    ) {
         for (&p, &(_, c)) in pattern.iter().zip(cells) {
             mask[c] |= p;
         }
     }
 
     /// Update `mask` with bits supported by `pattern` placed at `cells` (col scan).
-    fn mark_col_pattern_supported(mask: &mut [CellDomain], pattern: &[CellDomain], cells: &[(usize, usize)]) {
+    fn mark_col_pattern_supported(
+        mask: &mut [CellDomain],
+        pattern: &[CellDomain],
+        cells: &[(usize, usize)],
+    ) {
         for (&p, &(r, _)) in pattern.iter().zip(cells) {
             mask[r] |= p;
         }
@@ -361,7 +404,7 @@ impl<const N: usize> SolverState<N> {
 
             // Now, mask is the union of all patterns that could possibly match this row.
             for (c, &m) in mask.iter().enumerate() {
-                changed |= Self::clear_mask(&mut self.domains, row, c, !m)
+                changed |= self.clear_mask(row, c, !m, Rule::ArcConsistency);
             }
         }
 
@@ -408,7 +451,7 @@ impl<const N: usize> SolverState<N> {
             }
 
             for (r, &m) in mask.iter().enumerate() {
-                changed |= Self::clear_mask(&mut self.domains, r, col, !m)
+                changed |= self.clear_mask(r, col, !m, Rule::ArcConsistency);
             }
         }
 
@@ -428,9 +471,9 @@ impl<const N: usize> SolverState<N> {
                 let row_domain = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
                 let col_domain = domain & (Self::ALL_DIGITS | Self::COL_BLACKS);
                 if row_domain.count_ones() == 1 {
-                    changed |= self.set_cell(r, c, row_domain);
+                    changed |= self.set_cell(r, c, row_domain, Rule::Singleton);
                 } else if col_domain.count_ones() == 1 {
-                    changed |= self.set_cell(r, c, col_domain);
+                    changed |= self.set_cell(r, c, col_domain, Rule::Singleton);
                 }
             }
         }
@@ -455,7 +498,7 @@ impl<const N: usize> SolverState<N> {
                 let bit = mask & mask.wrapping_neg();
                 mask &= mask - 1;
                 if let Some(only_col) = self.singleton_in_row(r, bit) {
-                    changed |= self.set_cell(r, only_col, bit);
+                    changed |= self.set_cell(r, only_col, bit, Rule::HiddenSingle);
                 }
             }
         }
@@ -467,7 +510,7 @@ impl<const N: usize> SolverState<N> {
                 let bit = mask & mask.wrapping_neg();
                 mask &= mask - 1;
                 if let Some(only_row) = self.singleton_in_col(c, bit) {
-                    changed |= self.set_cell(only_row, c, bit);
+                    changed |= self.set_cell(only_row, c, bit, Rule::HiddenSingle);
                 }
             }
         }
@@ -488,10 +531,10 @@ impl<const N: usize> SolverState<N> {
             for c in prev.iter_cols() {
                 let domain = self.domains[r][c];
                 if domain & Self::ROW_BLACKS == 0 {
-                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::COL_BLACKS);
+                    changed |= self.clear_mask(r, c, Self::COL_BLACKS, Rule::BlackConsistency);
                 }
                 if domain & Self::COL_BLACKS == 0 {
-                    changed |= Self::clear_mask(&mut self.domains, r, c, Self::ROW_BLACKS);
+                    changed |= self.clear_mask(r, c, Self::ROW_BLACKS, Rule::BlackConsistency);
                 }
             }
         }
@@ -627,6 +670,8 @@ impl<const N: usize> SolverState<N> {
             return 0;
         }
 
+        self.stats.incr_node();
+
         let mut state = self.clone();
         state.propagate();
 
@@ -647,13 +692,73 @@ impl<const N: usize> SolverState<N> {
         let bits = Self::branching_bits(state.domains[row][col]);
         let bit = 1 << bits.trailing_zeros();
         let mut branch = state.clone();
-        branch.set_cell(row, col, bit);
+        // Both the commit and the complement are branching decisions, not
+        // deductions of any real rule, so we tag them `Backtracking`.
+        branch.set_cell(row, col, bit, Rule::Backtracking);
         let branch_solutions = branch.count_solutions(max);
 
-        // For the remaining values, remove bit from the state,
-        // then count the remaining solutions.
-        Self::clear_mask(&mut state.domains, row, col, bit);
+        // For the remaining values, remove `bit` from this cell and recurse.
+        state.clear_mask(row, col, bit, Rule::Backtracking);
         branch_solutions + state.count_solutions(max - branch_solutions)
+    }
+
+    /// Run backtracking search and fill `out` with up to `limit` solved states.
+    ///
+    /// Same shape as `count_solutions`, but keeps the solved states around so
+    /// the caller can display them.  Stops as soon as `out.len() == limit`.
+    fn collect_solutions(&self, limit: usize, out: &mut Vec<Self>) {
+        if out.len() >= limit {
+            return;
+        }
+
+        self.stats.incr_node();
+
+        let mut state = self.clone();
+        state.propagate();
+
+        if state.is_contradiction() {
+            return;
+        }
+        if state.is_solved() {
+            out.push(state);
+            return;
+        }
+
+        let Some((row, col)) = state.pick_branching_cell() else {
+            panic!("Propagation stalled");
+        };
+
+        let bits = Self::branching_bits(state.domains[row][col]);
+        let bit = 1 << bits.trailing_zeros();
+
+        let mut branch = state.clone();
+        branch.set_cell(row, col, bit, Rule::Backtracking);
+        branch.collect_solutions(limit, out);
+
+        if out.len() >= limit {
+            return;
+        }
+
+        state.clear_mask(row, col, bit, Rule::Backtracking);
+        state.collect_solutions(limit, out);
+    }
+
+    /// Solve the puzzle, reporting uniqueness.
+    ///
+    /// Searches for up to two solutions so the outcome can distinguish
+    /// `Unique` from `Multiple` without enumerating the whole solution space.
+    pub fn solve(&self) -> SolveOutcome<Self> {
+        let mut found: Vec<Self> = Vec::with_capacity(2);
+        self.collect_solutions(2, &mut found);
+
+        // Destructure the Vec via an iterator — idiomatic Rust for "give me
+        // up to the first two elements".
+        let mut it = found.into_iter();
+        match (it.next(), it.next()) {
+            (None, _) => SolveOutcome::Unsolvable,
+            (Some(s), None) => SolveOutcome::Unique(s),
+            (Some(s), Some(_)) => SolveOutcome::Multiple(s),
+        }
     }
 }
 
@@ -872,7 +977,7 @@ mod tests {
         // Manually place digit 3 at (0, 0) and check it is removed from the
         // rest of row 0 and column 0, while other cells are untouched.
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.set_cell(0, 0, 1 << 3);
+        state.set_cell(0, 0, 1 << 3, Rule::Singleton);
 
         // The cell itself holds only digit 3.
         assert_eq!(state.domains[0][0], 1 << 3);
@@ -892,7 +997,7 @@ mod tests {
     #[test]
     fn set_cell_row_black_propagates() {
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.set_cell(2, 1, SolverState::<6>::BLACK1_ROW);
+        state.set_cell(2, 1, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
 
         // The assigned cell keeps BLACK1_ROW and both col-black bits, but
         // loses digits and BLACK2_ROW.
@@ -935,7 +1040,7 @@ mod tests {
         // (they are left of black-1 and can't be black-2).  Positions 4 and 5
         // keep BLACK2_ROW (black-2 still possible there).
         let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.set_cell(0, 3, SolverState::<6>::BLACK1_ROW);
+        state.set_cell(0, 3, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
 
         for c in 0..3 {
             assert_eq!(
@@ -1031,8 +1136,8 @@ mod tests {
         // The only inside cell is col 2; the only feasible tuple is {3}, so
         // the cage rule must narrow that cell's digit domain to just digit 3.
         let mut state = SolverState::new(Puzzle::new([3, 0, 0, 0, 0, 0], [0; 6]));
-        state.set_cell(0, 1, SolverState::<6>::BLACK1_ROW);
-        state.set_cell(0, 3, SolverState::<6>::BLACK2_ROW);
+        state.set_cell(0, 1, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
+        state.set_cell(0, 3, SolverState::<6>::BLACK2_ROW, Rule::Singleton);
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
@@ -1048,10 +1153,10 @@ mod tests {
         // Inside: cols 1, 2, 3.  Col 1 = digit 2, col 3 = digit 1.
         // Only feasible inside tuple: {1, 2, 3}, so col 2 must be digit 3.
         let mut state = SolverState::new(Puzzle::new([6, 0, 0, 0, 0, 0], [0; 6]));
-        state.set_cell(0, 0, SolverState::<6>::BLACK1_ROW);
-        state.set_cell(0, 4, SolverState::<6>::BLACK2_ROW);
-        state.set_cell(0, 1, 1 << 2); // digit 2
-        state.set_cell(0, 3, 1 << 1); // digit 1
+        state.set_cell(0, 0, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
+        state.set_cell(0, 4, SolverState::<6>::BLACK2_ROW, Rule::Singleton);
+        state.set_cell(0, 1, 1 << 2, Rule::Singleton); // digit 2
+        state.set_cell(0, 3, 1 << 1, Rule::Singleton); // digit 1
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
@@ -1076,7 +1181,7 @@ mod tests {
 
         // If we set col 0 to be 3, then the 3,4 tuple can no longer be inside.
         // The rule should clear BLACK1 from col 2.
-        state.set_cell(0, 0, 1 << 3);
+        state.set_cell(0, 0, 1 << 3, Rule::Singleton);
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
@@ -1116,7 +1221,7 @@ mod tests {
 
         // If we set col 5 to be 3, then the 3,4 tuple can no longer be inside.
         // This completely determines the blacks
-        state.set_cell(0, 5, 1 << 3);
+        state.set_cell(0, 5, 1 << 3, Rule::Singleton);
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
             (0..6)
@@ -1158,7 +1263,7 @@ mod tests {
 
         // If we set col 0 to be 1, then the inside must be the 3,4 tuple.
         // However, there are still two possibilities for the blacks.
-        state.set_cell(0, 0, 1 << 1);
+        state.set_cell(0, 0, 1 << 1, Rule::Singleton);
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
@@ -1219,6 +1324,68 @@ mod tests {
         // gap in every row and column, which is impossible to satisfy globally.
         let state = SolverState::new(Puzzle::new([1; 6], [1; 6]));
         assert_eq!(state.count_solutions(1), 0);
+    }
+
+    // ── solve() tests ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn solve_returns_unique_for_newspaper_puzzle() {
+        let state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        match state.solve() {
+            SolveOutcome::Unique(s) => assert!(s.is_solved()),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn solve_returns_multiple_for_underconstrained_puzzle() {
+        // This puzzle is known to have many solutions (see
+        // `solver_finds_known_solutions` above, which counts 32).
+        let state = SolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
+        match state.solve() {
+            SolveOutcome::Multiple(s) => assert!(s.is_solved()),
+            other => panic!("expected Multiple, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn solve_returns_unsolvable_for_impossible_puzzle() {
+        let state = SolverState::new(Puzzle::new([1; 6], [1; 6]));
+        assert!(matches!(state.solve(), SolveOutcome::Unsolvable));
+    }
+
+    // ── Stats tests ───────────────────────────────────────────────────────────
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn stats_track_bits_removed_and_search_nodes() {
+        // Solve a known-unique puzzle and check the counters are populated.
+        let state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let _ = state.solve();
+        let s = state.stats();
+        // One top-level search call at minimum; a uniquely-solvable puzzle
+        // with good propagation typically takes 1 node.
+        assert!(s.search_nodes >= 1, "search_nodes = {}", s.search_nodes);
+        // Arc-consistency does the heavy lifting for this puzzle.
+        assert!(
+            s.bits_arc_consistency > 0,
+            "bits_arc_consistency = {}",
+            s.bits_arc_consistency
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn stats_count_backtracks_on_underconstrained_puzzle() {
+        // Multiple solutions → the search has to branch, so search_nodes > 1.
+        let state = SolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
+        let _ = state.solve();
+        let s = state.stats();
+        assert!(
+            s.search_nodes > 1,
+            "expected branching, got search_nodes = {}",
+            s.search_nodes
+        );
     }
 
     // ── Newspaper puzzles ─────────────────────────────────────────────────────

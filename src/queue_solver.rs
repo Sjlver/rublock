@@ -1,6 +1,7 @@
 use tracing::{instrument, trace};
 
-use crate::solver::{Puzzle, Tables};
+use crate::solver::{Puzzle, SolveOutcome, Tables};
+use crate::stats::{Rule, Stats, StatsHandle};
 
 type CellDomain = u64;
 
@@ -14,7 +15,13 @@ struct LiveTuple<const N: usize> {
 }
 
 impl<const N: usize> LiveTuple<N> {
-    fn new(start: usize, len: usize, digit_mask: CellDomain, black1: CellDomain, black2: CellDomain) -> Self {
+    fn new(
+        start: usize,
+        len: usize,
+        digit_mask: CellDomain,
+        black1: CellDomain,
+        black2: CellDomain,
+    ) -> Self {
         let mut pattern = [0 as CellDomain; N];
         pattern[0] = black1;
         for i in 1..=len {
@@ -85,6 +92,9 @@ pub struct QueueSolverState<const N: usize> {
     tuple_support_row_black: [[[u16; 2]; N]; N],
     tuple_support_col_digit: [[[u16; N]; N]; N],
     tuple_support_col_black: [[[u16; 2]; N]; N],
+
+    /// Debug-only propagation statistics.  See `stats.rs`.
+    stats: StatsHandle,
 }
 
 struct BitName<const N: usize>(CellDomain);
@@ -152,9 +162,8 @@ impl<const N: usize> QueueSolverState<N> {
         let col_blacks_left: [[u8; N]; N] = [[2; N]; N];
 
         // Digit indices 1..=N-2 are valid; 0 and N-1 are not digit bits.
-        let candidates_digit_line: [u8; N] = std::array::from_fn(|p| {
-            if p >= 1 && p <= N - 2 { N as u8 } else { 0 }
-        });
+        let candidates_digit_line: [u8; N] =
+            std::array::from_fn(|p| if p >= 1 && p <= N - 2 { N as u8 } else { 0 });
         let row_candidates_digit: [[u8; N]; N] = [candidates_digit_line; N];
         let row_candidates_black: [[u8; 2]; N] = [[N as u8; 2]; N];
         let col_candidates_digit: [[u8; N]; N] = [candidates_digit_line; N];
@@ -186,6 +195,7 @@ impl<const N: usize> QueueSolverState<N> {
             tuple_support_row_black,
             tuple_support_col_digit,
             tuple_support_col_black,
+            stats: StatsHandle::new(),
         };
 
         state.init_live_tuples();
@@ -193,6 +203,11 @@ impl<const N: usize> QueueSolverState<N> {
         state.propagate();
 
         state
+    }
+
+    /// Return a snapshot of the stats collected so far.
+    pub fn stats(&self) -> Stats {
+        self.stats.snapshot()
     }
 
     /// Enumerate the live tuples
@@ -372,7 +387,9 @@ impl<const N: usize> QueueSolverState<N> {
                     | (row_tuple_supported_bits[r][c]
                         & col_tuple_supported_bits[r][c]
                         & Self::ALL_DIGITS);
-                self.clear_mask(r, c, !supported & full_cell);
+                // Seeding is driven by live-tuple support, so attribute these
+                // removals to the arc-consistency rule.
+                self.clear_mask(r, c, !supported & full_cell, Rule::ArcConsistency);
             }
         }
     }
@@ -380,10 +397,13 @@ impl<const N: usize> QueueSolverState<N> {
     // ── Core mutation primitives ──────────────────────────────────────────────
 
     #[instrument(skip(self), fields(mask = format_args!("{mask:0width$b}", width = N + 3)))]
-    fn clear_mask(&mut self, r: usize, c: usize, mask: CellDomain) {
+    fn clear_mask(&mut self, r: usize, c: usize, mask: CellDomain, rule: Rule) {
         let before = self.domains[r][c];
         self.domains[r][c] &= !mask;
         let removed = before & !self.domains[r][c];
+        if removed != 0 {
+            self.stats.incr_bits(rule, removed.count_ones());
+        }
         let mut bits = removed;
         while bits != 0 {
             let b = bits & bits.wrapping_neg();
@@ -394,42 +414,42 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn set_cell(&mut self, r: usize, c: usize, bit: CellDomain) {
+    fn set_cell(&mut self, r: usize, c: usize, bit: CellDomain, rule: Rule) {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
         trace!(bit = format_args!("{}", BitName::<N>(bit)), "setting cell");
 
         if bit & Self::ALL_DIGITS != 0 {
             for col in (0..N).filter(|&col| col != c) {
-                self.clear_mask(r, col, bit);
+                self.clear_mask(r, col, bit, rule);
             }
             for row in (0..N).filter(|&row| row != r) {
-                self.clear_mask(row, c, bit);
+                self.clear_mask(row, c, bit, rule);
             }
-            self.clear_mask(r, c, !bit);
+            self.clear_mask(r, c, !bit, rule);
         } else if bit & Self::ROW_BLACKS != 0 {
             for col in (0..N).filter(|&col| col != c) {
-                self.clear_mask(r, col, bit);
+                self.clear_mask(r, col, bit, rule);
             }
-            self.clear_mask(r, c, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit));
+            self.clear_mask(r, c, Self::ALL_DIGITS | (Self::ROW_BLACKS & !bit), rule);
         } else if bit & Self::COL_BLACKS != 0 {
             for row in (0..N).filter(|&row| row != r) {
-                self.clear_mask(row, c, bit);
+                self.clear_mask(row, c, bit, rule);
             }
-            self.clear_mask(r, c, Self::ALL_DIGITS | (Self::COL_BLACKS & !bit));
+            self.clear_mask(r, c, Self::ALL_DIGITS | (Self::COL_BLACKS & !bit), rule);
         }
 
         if bit & Self::ALL_BLACKS != 0 {
             for left in 0..c {
-                self.clear_mask(r, left, Self::BLACK2_ROW);
+                self.clear_mask(r, left, Self::BLACK2_ROW, rule);
             }
             for right in c + 1..N {
-                self.clear_mask(r, right, Self::BLACK1_ROW);
+                self.clear_mask(r, right, Self::BLACK1_ROW, rule);
             }
             for above in 0..r {
-                self.clear_mask(above, c, Self::BLACK2_COL);
+                self.clear_mask(above, c, Self::BLACK2_COL, rule);
             }
             for below in r + 1..N {
-                self.clear_mask(below, c, Self::BLACK1_COL);
+                self.clear_mask(below, c, Self::BLACK1_COL, rule);
             }
         }
     }
@@ -490,7 +510,7 @@ impl<const N: usize> QueueSolverState<N> {
             if self.row_domain_size[r][c] == 1 {
                 let row_domain = self.domains[r][c] & (Self::ALL_DIGITS | Self::ROW_BLACKS);
                 if row_domain.count_ones() == 1 {
-                    self.set_cell(r, c, row_domain);
+                    self.set_cell(r, c, row_domain, Rule::Singleton);
                 }
             }
         }
@@ -500,7 +520,7 @@ impl<const N: usize> QueueSolverState<N> {
             if self.col_domain_size[r][c] == 1 {
                 let col_domain = self.domains[r][c] & (Self::ALL_DIGITS | Self::COL_BLACKS);
                 if col_domain.count_ones() == 1 {
-                    self.set_cell(r, c, col_domain);
+                    self.set_cell(r, c, col_domain, Rule::Singleton);
                 }
             }
         }
@@ -512,7 +532,7 @@ impl<const N: usize> QueueSolverState<N> {
             *self.row_candidates_for(r, bit) -= 1;
             if *self.row_candidates_for(r, bit) == 1 {
                 if let Some(c2) = (0..N).find(|&col| self.domains[r][col] & bit != 0) {
-                    self.set_cell(r, c2, bit);
+                    self.set_cell(r, c2, bit, Rule::HiddenSingle);
                 }
             }
         }
@@ -521,7 +541,7 @@ impl<const N: usize> QueueSolverState<N> {
             *self.col_candidates_for(c, bit) -= 1;
             if *self.col_candidates_for(c, bit) == 1 {
                 if let Some(r2) = (0..N).find(|&row| self.domains[row][c] & bit != 0) {
-                    self.set_cell(r2, c, bit);
+                    self.set_cell(r2, c, bit, Rule::HiddenSingle);
                 }
             }
         }
@@ -532,14 +552,14 @@ impl<const N: usize> QueueSolverState<N> {
         if bit & Self::ROW_BLACKS != 0 {
             self.row_blacks_left[r][c] -= 1;
             if self.row_blacks_left[r][c] == 0 {
-                self.clear_mask(r, c, Self::COL_BLACKS);
+                self.clear_mask(r, c, Self::COL_BLACKS, Rule::BlackConsistency);
             }
         }
 
         if bit & Self::COL_BLACKS != 0 {
             self.col_blacks_left[r][c] -= 1;
             if self.col_blacks_left[r][c] == 0 {
-                self.clear_mask(r, c, Self::ROW_BLACKS);
+                self.clear_mask(r, c, Self::ROW_BLACKS, Rule::BlackConsistency);
             }
         }
     }
@@ -585,7 +605,7 @@ impl<const N: usize> QueueSolverState<N> {
                     bits &= bits - 1;
                     *self.tuple_support_row(r, c2, b) -= 1;
                     if *self.tuple_support_row(r, c2, b) == 0 {
-                        self.clear_mask(r, c2, b);
+                        self.clear_mask(r, c2, b, Rule::ArcConsistency);
                     }
                 }
             }
@@ -626,7 +646,7 @@ impl<const N: usize> QueueSolverState<N> {
                     bits &= bits - 1;
                     *self.tuple_support_col(r2, c, b) -= 1;
                     if *self.tuple_support_col(r2, c, b) == 0 {
-                        self.clear_mask(r2, c, b);
+                        self.clear_mask(r2, c, b, Rule::ArcConsistency);
                     }
                 }
             }
@@ -692,6 +712,8 @@ impl<const N: usize> QueueSolverState<N> {
             return 0;
         }
 
+        self.stats.incr_node();
+
         let mut state = self.clone();
         state.propagate();
 
@@ -710,11 +732,65 @@ impl<const N: usize> QueueSolverState<N> {
         let bits = Self::branching_bits(state.domains[row][col]);
         let bit = 1 << bits.trailing_zeros();
         let mut branch = state.clone();
-        branch.set_cell(row, col, bit);
+        // Both the commit and the complement are branching decisions, not
+        // deductions of any real rule, so we tag them `Backtracking`.
+        branch.set_cell(row, col, bit, Rule::Backtracking);
         let branch_solutions = branch.count_solutions(max);
 
-        state.clear_mask(row, col, bit);
+        state.clear_mask(row, col, bit, Rule::Backtracking);
         branch_solutions + state.count_solutions(max - branch_solutions)
+    }
+
+    /// Run backtracking search and fill `out` with up to `limit` solved states.
+    fn collect_solutions(&self, limit: usize, out: &mut Vec<Self>) {
+        if out.len() >= limit {
+            return;
+        }
+
+        self.stats.incr_node();
+
+        let mut state = self.clone();
+        state.propagate();
+
+        if state.is_contradiction() {
+            return;
+        }
+        if state.is_solved() {
+            out.push(state);
+            return;
+        }
+
+        let Some((row, col)) = state.pick_branching_cell() else {
+            dbg!(state);
+            panic!("Propagation stalled");
+        };
+
+        let bits = Self::branching_bits(state.domains[row][col]);
+        let bit = 1 << bits.trailing_zeros();
+
+        let mut branch = state.clone();
+        branch.set_cell(row, col, bit, Rule::Backtracking);
+        branch.collect_solutions(limit, out);
+
+        if out.len() >= limit {
+            return;
+        }
+
+        state.clear_mask(row, col, bit, Rule::Backtracking);
+        state.collect_solutions(limit, out);
+    }
+
+    /// Solve the puzzle, reporting uniqueness.  See `SolverState::solve`.
+    pub fn solve(&self) -> SolveOutcome<Self> {
+        let mut found: Vec<Self> = Vec::with_capacity(2);
+        self.collect_solutions(2, &mut found);
+
+        let mut it = found.into_iter();
+        match (it.next(), it.next()) {
+            (None, _) => SolveOutcome::Unsolvable,
+            (Some(s), None) => SolveOutcome::Unique(s),
+            (Some(s), Some(_)) => SolveOutcome::Multiple(s),
+        }
     }
 }
 
@@ -870,5 +946,47 @@ mod tests {
 
         let state = QueueSolverState::new(Puzzle::new([5, 7, 4, 0, 0, 6], [6, 0, 0, 7, 0, 6]));
         assert_eq!(state.count_solutions(2), 2);
+    }
+
+    // ── solve() tests ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn solve_returns_unique_for_newspaper_puzzle() {
+        let state = QueueSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        match state.solve() {
+            SolveOutcome::Unique(s) => assert!(s.is_solved()),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn solve_returns_multiple_for_underconstrained_puzzle() {
+        let state = QueueSolverState::new(Puzzle::new([5, 7, 4, 0, 0, 6], [6, 0, 0, 7, 0, 6]));
+        match state.solve() {
+            SolveOutcome::Multiple(s) => assert!(s.is_solved()),
+            other => panic!("expected Multiple, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn solve_returns_unsolvable_for_impossible_puzzle() {
+        let state = QueueSolverState::new(Puzzle::new([1; 6], [1; 6]));
+        assert!(matches!(state.solve(), SolveOutcome::Unsolvable));
+    }
+
+    // ── Stats tests ───────────────────────────────────────────────────────────
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn stats_track_bits_removed_and_search_nodes() {
+        let state = QueueSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let _ = state.solve();
+        let s = state.stats();
+        assert!(s.search_nodes >= 1, "search_nodes = {}", s.search_nodes);
+        assert!(
+            s.bits_arc_consistency > 0,
+            "bits_arc_consistency = {}",
+            s.bits_arc_consistency
+        );
     }
 }

@@ -1,6 +1,7 @@
 use rublock::enumerate::SolverChoice;
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolverState};
+use rublock::solver::{Puzzle, SolveOutcome, SolverState};
+use rublock::stats::Stats;
 
 fn usage() -> ! {
     eprintln!("Usage: rublock [--solver=basic|queue] <2N numbers>");
@@ -37,20 +38,41 @@ fn parse_args() -> (SolverChoice, Vec<u8>) {
     (solver, nums)
 }
 
+/// Print the solve result followed by a one-line status and the stats
+/// collected during the search.  Kept generic over the solver state so the
+/// two backends share the same reporting path.
+fn report<S: std::fmt::Display>(outcome: SolveOutcome<S>, stats: Stats) {
+    match outcome {
+        SolveOutcome::Unsolvable => {
+            println!("no solution");
+        }
+        SolveOutcome::Unique(state) => {
+            println!("{state}");
+            println!("unique solution");
+        }
+        SolveOutcome::Multiple(state) => {
+            println!("{state}");
+            println!("multiple solutions (showing one)");
+        }
+    }
+    println!();
+    println!("{stats}");
+}
+
 fn run<const N: usize>(nums: &[u8], solver: SolverChoice) {
     let row_t: [u8; N] = nums[..N].try_into().unwrap();
     let col_t: [u8; N] = nums[N..].try_into().unwrap();
     let puzzle = Puzzle::new(row_t, col_t);
     match solver {
         SolverChoice::Basic => {
-            let mut state = SolverState::new(puzzle);
-            state.propagate();
-            println!("{state}");
+            let state = SolverState::new(puzzle);
+            let outcome = state.solve();
+            report(outcome, state.stats());
         }
         SolverChoice::Queue => {
-            let mut state = QueueSolverState::new(puzzle);
-            state.propagate();
-            println!("{state}");
+            let state = QueueSolverState::new(puzzle);
+            let outcome = state.solve();
+            report(outcome, state.stats());
         }
     }
 }
