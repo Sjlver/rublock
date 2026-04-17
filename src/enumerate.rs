@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
 
 use crate::grid::{Cell, Grid};
+use crate::queue_solver::QueueSolverState;
+use crate::solver::{Puzzle, SolverState};
 
 // ── PartialGrid ───────────────────────────────────────────────────────────────
 
@@ -268,12 +270,29 @@ fn uniqueness_ruled_out<const N: usize>(grid: &Grid<N>, row_t: [u8; N], col_t: [
     false
 }
 
+/// Which solver backend to use when checking puzzle uniqueness.
+#[derive(Clone, Copy)]
+pub enum SolverChoice {
+    Basic,
+    Queue,
+}
+
+impl std::fmt::Display for SolverChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SolverChoice::Basic => f.write_str("basic"),
+            SolverChoice::Queue => f.write_str("queue"),
+        }
+    }
+}
+
 /// Return `true` if the puzzle with the given targets has exactly one solution.
-use crate::solver::Puzzle;
-fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N]) -> bool {
-    use crate::queue_solver::QueueSolverState;
-    let state = QueueSolverState::new(Puzzle::new(row_t, col_t));
-    state.count_solutions(2) == 1
+fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N], solver: SolverChoice) -> bool {
+    let puzzle = Puzzle::new(row_t, col_t);
+    match solver {
+        SolverChoice::Basic => SolverState::new(puzzle).count_solutions(2) == 1,
+        SolverChoice::Queue => QueueSolverState::new(puzzle).count_solutions(2) == 1,
+    }
 }
 
 // ── Per-work-item DFS ─────────────────────────────────────────────────────────
@@ -284,14 +303,22 @@ fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N]) -> bool {
 ///
 /// This is the unit of parallel work: call it from `par_iter` on the items
 /// returned by `generate_partial_grids`.
-pub fn count_from_partial<const N: usize>(partial: &PartialGrid<N>) -> (u64, u64) {
+pub fn count_from_partial<const N: usize>(
+    partial: &PartialGrid<N>,
+    solver: SolverChoice,
+) -> (u64, u64) {
     let mut total = 0u64;
     let mut valid = 0u64;
-    dfs(partial, &mut total, &mut valid);
+    dfs(partial, &mut total, &mut valid, solver);
     (total, valid)
 }
 
-fn dfs<const N: usize>(partial: &PartialGrid<N>, total: &mut u64, valid: &mut u64) {
+fn dfs<const N: usize>(
+    partial: &PartialGrid<N>,
+    total: &mut u64,
+    valid: &mut u64,
+    solver: SolverChoice,
+) {
     if partial.is_complete() {
         *total += 1;
         let grid = Grid {
@@ -300,7 +327,7 @@ fn dfs<const N: usize>(partial: &PartialGrid<N>, total: &mut u64, valid: &mut u6
         let (row_t, col_t) = grid.compute_targets();
         if is_canonical(row_t, col_t)
             && !uniqueness_ruled_out(&grid, row_t, col_t)
-            && is_valid_puzzle(row_t, col_t)
+            && is_valid_puzzle(row_t, col_t, solver)
         {
             *valid += orbit_size(row_t, col_t);
         }
@@ -309,7 +336,7 @@ fn dfs<const N: usize>(partial: &PartialGrid<N>, total: &mut u64, valid: &mut u6
 
     for value in candidates::<N>() {
         if let Some(next) = partial.try_place(value) {
-            dfs(&next, total, valid);
+            dfs(&next, total, valid, solver);
         }
     }
 }
@@ -449,7 +476,7 @@ mod tests {
         let brute_force_valid: u64 = by_targets.values().filter(|&&c| c == 1).count() as u64;
 
         // New code: count_from_partial with D4 symmetry multiplier.
-        let (_, valid) = count_from_partial(&PartialGrid::<N>::new());
+        let (_, valid) = count_from_partial(&PartialGrid::<N>::new(), SolverChoice::Queue);
 
         assert_eq!(
             valid, brute_force_valid,

@@ -5,33 +5,56 @@ use std::time::Instant;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
-use rublock::enumerate::{PartialGrid, count_from_partial, generate_partial_grids};
+use rublock::enumerate::{PartialGrid, SolverChoice, count_from_partial, generate_partial_grids};
 
-/// Count all valid 6×6 rublock grids and report how many are valid puzzles
-/// (i.e. have exactly one solution given their derived targets).
-///
-/// Strategy:
-/// 1. BFS to produce a work queue of partial grids — enough items for good
-///    parallel load distribution.  Target: 100 items per CPU core, so that
-///    `rayon`'s work-stealing scheduler can handle uneven subtree sizes
-///    while maintaining roughly linear progress.
-/// 2. Process each work item in parallel using atomic counters to track the
-///    running totals, so the progress bar can show live counts.
-/// 3. Display a progress bar while work is in flight.
-fn main() {
+fn usage() -> ! {
+    eprintln!("Usage: enumerate [--size=N] [--solver=basic|queue]");
+    eprintln!("  --size    grid side length, 3–11 (default: 6)");
+    eprintln!("  --solver  basic or queue (default: queue)");
+    std::process::exit(1);
+}
+
+fn parse_args() -> (usize, SolverChoice) {
+    let mut size = 6usize;
+    let mut solver = SolverChoice::Queue;
+
+    for arg in std::env::args().skip(1) {
+        if let Some(val) = arg.strip_prefix("--size=") {
+            size = val.parse().unwrap_or_else(|_| usage());
+        } else if let Some(val) = arg.strip_prefix("--solver=") {
+            solver = match val {
+                "basic" => SolverChoice::Basic,
+                "queue" => SolverChoice::Queue,
+                _ => usage(),
+            };
+        } else {
+            usage();
+        }
+    }
+
+    if !(3..=11).contains(&size) {
+        eprintln!("--size must be between 3 and 11");
+        std::process::exit(1);
+    }
+
+    (size, solver)
+}
+
+fn run<const N: usize>(solver: SolverChoice) {
     let started_at = Instant::now();
     let num_threads = rayon::current_num_threads();
-    let target = num_threads * 100;
+    let target = num_threads * 1000;
 
     // ── Build work queue ──────────────────────────────────────────────────────
 
-    let start = PartialGrid::<6>::new();
+    let start = PartialGrid::<N>::new();
 
     let mut work_items = generate_partial_grids(start, target);
     work_items.shuffle(&mut rand::rng());
 
+    println!("Enumerating grids of size {} using {} solver", N, solver);
     println!(
-        "Work queue: {} items ({} threads × 100 target).",
+        "Work queue: {} items ({} threads × 1000 target).",
         work_items.len(),
         num_threads,
     );
@@ -57,6 +80,11 @@ fn main() {
         .unwrap()
         .progress_chars("=> "),
     );
+    pb.set_message(format!(
+        "{} ({} valid)",
+        total_grids.load(Ordering::Relaxed),
+        valid_puzzles.load(Ordering::Relaxed),
+    ));
 
     // ── Parallel enumeration ──────────────────────────────────────────────────
     //
@@ -68,7 +96,7 @@ fn main() {
     let valid_puzzles_ref = Arc::clone(&valid_puzzles);
 
     work_items.par_iter().for_each(|partial| {
-        let (t, v) = count_from_partial(partial);
+        let (t, v) = count_from_partial(partial, solver);
         total_grids_ref.fetch_add(t, Ordering::Relaxed);
         valid_puzzles_ref.fetch_add(v, Ordering::Relaxed);
         // Update message with live counts before incrementing the bar.
@@ -93,4 +121,20 @@ fn main() {
     let elapsed_s = started_at.elapsed().as_secs_f64();
     let grids_per_s = (total as f64) / elapsed_s.max(f64::EPSILON);
     println!("Time: {elapsed_s:.3} seconds ({grids_per_s:.1} grids per second)");
+}
+
+fn main() {
+    let (size, solver) = parse_args();
+    match size {
+        3 => run::<3>(solver),
+        4 => run::<4>(solver),
+        5 => run::<5>(solver),
+        6 => run::<6>(solver),
+        7 => run::<7>(solver),
+        8 => run::<8>(solver),
+        9 => run::<9>(solver),
+        10 => run::<10>(solver),
+        11 => run::<11>(solver),
+        _ => unreachable!(), // validated in parse_args
+    }
 }

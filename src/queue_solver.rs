@@ -709,6 +709,49 @@ impl<const N: usize> QueueSolverState<N> {
     }
 }
 
+impl<const N: usize> std::fmt::Display for QueueSolverState<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ct = &self.puzzle.col_targets;
+        write!(f, "    ")?;
+        for c in 0..N {
+            if c > 0 {
+                write!(f, "  ")?;
+            }
+            write!(f, "{:2}", ct[c])?;
+        }
+        writeln!(f)?;
+        let sep = format!("   +{}", "---+".repeat(N));
+        writeln!(f, "{}", sep)?;
+        for r in 0..N {
+            write!(f, "{:2} |", self.puzzle.row_targets[r])?;
+            for c in 0..N {
+                let domain = self.domains[r][c];
+                if domain & Self::ALL_DIGITS == 0 && domain != 0 {
+                    write!(f, " # |")?;
+                } else if domain.count_ones() == 1 {
+                    write!(f, "{:2} |", domain.trailing_zeros())?;
+                } else {
+                    let sym = match domain.count_ones() {
+                        0 => " X ",
+                        2 => " ⠃ ",
+                        3 => " ⠇ ",
+                        4 => " ⡇ ",
+                        5 => " ⡏ ",
+                        6 => " ⡟ ",
+                        7 => " ⡿ ",
+                        8 => " ⣿ ",
+                        _ => " ? ",
+                    };
+                    write!(f, "{}|", sym)?;
+                }
+            }
+            writeln!(f)?;
+            writeln!(f, "{}", sep)?;
+        }
+        Ok(())
+    }
+}
+
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
