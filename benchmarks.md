@@ -94,3 +94,12 @@ Looks like this is because grids with the chosen prefix aren't canonical
 Total valid grids:             283046400
 Valid puzzles (unique soln):    80165380
 Time: 2026.872 seconds (139646.9 grids per second)
+
+------------------
+
+Enumerating grids of size 6 using queue solver
+Work queue: 8000 items (8 threads × 1000 target).
+[00:29:26] [========================================]   8000/8000 items  grids=done  (0s remaining)
+Total valid grids:             283046400
+Valid puzzles (unique soln):    80165380
+Time: 1766.200 seconds (160257.3 grids per second)

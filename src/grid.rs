@@ -72,14 +72,20 @@ impl<const N: usize> Grid<N> {
 ///
 /// Panics if the row does not contain exactly two `Black` cells.
 fn black_pair_in_row<const N: usize>(cells: &[Cell; N], index: usize) -> (usize, usize) {
-    let blacks: Vec<usize> = (0..N).filter(|&i| cells[i] == Cell::Black).collect();
+    let mut iter = (0..N).filter(|&i| cells[i] == Cell::Black);
+    let b1 = iter
+        .next()
+        .expect("Expected a black square in row/col {index}");
+    let b2 = iter
+        .next()
+        .expect("Expected a second black square in row/col {index}");
     assert_eq!(
-        blacks.len(),
-        2,
-        "row/col {index}: expected 2 black squares, found {}",
-        blacks.len()
+        iter.next(),
+        None,
+        "Expected two black squares in row/col {index}"
     );
-    (blacks[0], blacks[1])
+
+    (b1, b2)
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────

@@ -118,12 +118,14 @@ impl Tables {
     }
 
     // Returns (l, t) for all valid tuples with the given `target`
-    pub(crate) fn valid_tuples_for_target(&self, target: usize) -> Vec<(usize, u64)> {
+    pub(crate) fn valid_tuples_for_target(
+        &self,
+        target: usize,
+    ) -> impl Iterator<Item = (usize, u64)> {
         self.valid_tuples[target]
             .iter()
             .enumerate()
             .flat_map(|(l, ts)| ts.iter().map(move |&t| (l, t)))
-            .collect()
     }
 }
 
@@ -316,24 +318,20 @@ impl<const N: usize> SolverState<N> {
             let inside_target = self.puzzle.row_targets[row] as usize;
             let outside_target = self.tables.max_sum - inside_target;
 
-            let patterns: Vec<(Vec<u64>, bool)> = self
-                .tables
-                .valid_tuples_for_target(inside_target)
-                .iter()
-                .map(|&(len, tuple)| {
-                    (
-                        std::iter::once(Self::BLACK1_ROW)
-                            .chain(std::iter::repeat_n(tuple, len))
-                            .chain(std::iter::once(Self::BLACK2_ROW))
-                            .collect(),
-                        false,
-                    )
-                })
-                .chain(
-                    self.tables
-                        .valid_tuples_for_target(outside_target)
-                        .iter()
-                        .map(|&(len, tuple)| {
+            let patterns: Vec<(Vec<u64>, bool)> =
+                self.tables
+                    .valid_tuples_for_target(inside_target)
+                    .map(|(len, tuple)| {
+                        (
+                            std::iter::once(Self::BLACK1_ROW)
+                                .chain(std::iter::repeat_n(tuple, len))
+                                .chain(std::iter::once(Self::BLACK2_ROW))
+                                .collect(),
+                            false,
+                        )
+                    })
+                    .chain(self.tables.valid_tuples_for_target(outside_target).map(
+                        |(len, tuple)| {
                             (
                                 std::iter::once(Self::BLACK2_ROW)
                                     .chain(std::iter::repeat_n(tuple, len))
@@ -341,9 +339,9 @@ impl<const N: usize> SolverState<N> {
                                     .collect(),
                                 true,
                             )
-                        }),
-                )
-                .collect();
+                        },
+                    ))
+                    .collect();
 
             // Accumulate bits supported by at least one pattern. Note that we don't touch
             // column blacks, only row bits.
@@ -370,24 +368,20 @@ impl<const N: usize> SolverState<N> {
             let inside_target = self.puzzle.col_targets[col] as usize;
             let outside_target = self.tables.max_sum - inside_target;
 
-            let patterns: Vec<(Vec<u64>, bool)> = self
-                .tables
-                .valid_tuples_for_target(inside_target)
-                .iter()
-                .map(|&(len, tuple)| {
-                    (
-                        std::iter::once(Self::BLACK1_COL)
-                            .chain(std::iter::repeat_n(tuple, len))
-                            .chain(std::iter::once(Self::BLACK2_COL))
-                            .collect(),
-                        false,
-                    )
-                })
-                .chain(
-                    self.tables
-                        .valid_tuples_for_target(outside_target)
-                        .iter()
-                        .map(|&(len, tuple)| {
+            let patterns: Vec<(Vec<u64>, bool)> =
+                self.tables
+                    .valid_tuples_for_target(inside_target)
+                    .map(|(len, tuple)| {
+                        (
+                            std::iter::once(Self::BLACK1_COL)
+                                .chain(std::iter::repeat_n(tuple, len))
+                                .chain(std::iter::once(Self::BLACK2_COL))
+                                .collect(),
+                            false,
+                        )
+                    })
+                    .chain(self.tables.valid_tuples_for_target(outside_target).map(
+                        |(len, tuple)| {
                             (
                                 std::iter::once(Self::BLACK2_COL)
                                     .chain(std::iter::repeat_n(tuple, len))
@@ -395,9 +389,9 @@ impl<const N: usize> SolverState<N> {
                                     .collect(),
                                 true,
                             )
-                        }),
-                )
-                .collect();
+                        },
+                    ))
+                    .collect();
 
             let mut mask = [Self::ROW_BLACKS; N];
 
@@ -787,8 +781,6 @@ mod tests {
         //   p=5: always forbidden
         let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
-        println!("{state}");
-        // dbg!(&state);
 
         assert_ne!(
             state.domains[0][0] & SolverState::<6>::BLACK1_ROW,
@@ -1074,7 +1066,6 @@ mod tests {
         // isn't clear whether col 2 could be BLACK1. It could be for the
         // shorter target.
         let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
-        println!("Initial state with target 7");
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_ne!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
@@ -1085,7 +1076,6 @@ mod tests {
         // If we set col 0 to be 3, then the 3,4 tuple can no longer be inside.
         // The rule should clear BLACK1 from col 2.
         state.set_cell(0, 0, 1 << 3);
-        println!("Cell 0 is set to 3");
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
             state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
@@ -1168,7 +1158,6 @@ mod tests {
         // If we set col 0 to be 1, then the inside must be the 3,4 tuple.
         // However, there are still two possibilities for the blacks.
         state.set_cell(0, 0, 1 << 1);
-        println!("Col 0 set to 1");
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
@@ -1191,7 +1180,6 @@ mod tests {
         // quite find this though; it needs a pass of the singleton rule to fix
         // black2, and then another arc consistency pass.
         state.domains[0][5] &= !(1 << 2);
-        println!("Col 5 can no longer be 2");
         state.apply_general_arc_consistency(ChangeSet::all(6));
         state.apply_singleton_rule(ChangeSet::all(6));
         state.apply_general_arc_consistency(ChangeSet::all(6));
