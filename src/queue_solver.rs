@@ -2,7 +2,7 @@ use tracing::{instrument, trace};
 
 use crate::solver::{Puzzle, Tables};
 
-type CellDomain = u16;
+type CellDomain = u64;
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 

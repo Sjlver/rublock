@@ -33,7 +33,7 @@ impl<const N: usize> Puzzle<N> {
 // We distinguish between various values for black. Black 1 means the first
 // black entry in a row (or column), and black 2 is the second.
 
-type CellDomain = u16;
+type CellDomain = u64;
 
 // ── SolverState ───────────────────────────────────────────────────────────────
 //
