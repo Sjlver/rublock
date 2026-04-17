@@ -27,3 +27,26 @@ Write a solver in Rust that, given the 12 target numbers (6 for rows, 6 for colu
 This project is primarily a vehicle for learning Rust — exploring ownership, iterators, enums, pattern matching, and more.
 
 Because of that, I prefer code that is simple over code that maximizes performance at all costs. I also want code that is highly idiomatic and corresponds to best practices.
+
+There are multiple solvers, accessible via `src/main.rs`.
+
+There is a generator for puzzles of varying difficulty, in `src/bin/gen_puzzle.rs`. Here's the hardest puzzle it has found so far:
+
+0 4 3 8 4 3 0 0 0 0 4 0
+
+     0   0   0   0   4   0
+   +---+---+---+---+---+---+
+ 0 | 3 | 1 | 2 | 4 | # | # |
+   +---+---+---+---+---+---+
+ 4 | 4 | 2 | # | 1 | 3 | # |
+   +---+---+---+---+---+---+
+ 3 | # | 3 | # | 2 | 1 | 4 |
+   +---+---+---+---+---+---+
+ 8 | # | 4 | 1 | 3 | # | 2 |
+   +---+---+---+---+---+---+
+ 4 | 1 | # | 4 | # | 2 | 3 |
+   +---+---+---+---+---+---+
+ 3 | 2 | # | 3 | # | 4 | 1 |
+   +---+---+---+---+---+---+
+
+search nodes: 323  (after 3119192 attempts)
