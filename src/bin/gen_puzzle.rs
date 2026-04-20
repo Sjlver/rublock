@@ -33,7 +33,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
@@ -110,6 +110,7 @@ fn main() {
 
 fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
     let grids = AtomicU64::new(0);
+    let valid_puzzles = AtomicU64::new(0);
     // Sentinel values: min starts at `u64::MAX` so `fetch_min` lowers it on
     // first observation; max starts at `0` so `fetch_max` raises it.  The
     // main thread renders them as "—" until at least one unique-solution
@@ -117,16 +118,18 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
     let min_nodes_seen = AtomicU64::new(u64::MAX);
     let max_nodes_seen = AtomicU64::new(0);
     let done = AtomicBool::new(false);
+    let start = Instant::now();
 
     let pb = ProgressBar::new_spinner();
     // `{pos}` is indicatif's built-in counter (updated via `set_position`),
-    // and `{msg}` is the free-form string we update with the observed node
-    // range.  Thread count is constant for this run, so we bake it straight
-    // into the template rather than reaching for `{prefix}`.
+    // and `{msg}` is the free-form string we update with the valid-puzzle
+    // count and observed node range.  Thread count is constant for this
+    // run, so we bake it straight into the template rather than reaching
+    // for `{prefix}`.
     let template =
-        format!("{{spinner}} tried {{pos}} grids on {num_threads} threads, nodes seen: {{msg}}");
+        format!("{{spinner}} tried {{pos}} grids on {num_threads} threads, {{msg}}");
     pb.set_style(ProgressStyle::with_template(&template).unwrap());
-    pb.set_message("—");
+    pb.set_message(format_status(0, u64::MAX, 0));
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let (tx, rx) = mpsc::channel::<([u8; N], [u8; N], u64)>();
@@ -142,6 +145,7 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
             let tx = tx.clone();
             // Borrow shared state by reference; lifetimes are tied to `s`.
             let grids = &grids;
+            let valid_puzzles = &valid_puzzles;
             let min_nodes_seen = &min_nodes_seen;
             let max_nodes_seen = &max_nodes_seen;
             let done = &done;
@@ -150,6 +154,7 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
                     min_nodes,
                     max_nodes,
                     grids,
+                    valid_puzzles,
                     min_nodes_seen,
                     max_nodes_seen,
                     done,
@@ -175,7 +180,8 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
                     // loads are racy (workers may be mid-update), which is
                     // fine for a UI counter.
                     pb.set_position(grids.load(Ordering::Relaxed));
-                    pb.set_message(format_range(
+                    pb.set_message(format_status(
+                        valid_puzzles.load(Ordering::Relaxed),
                         min_nodes_seen.load(Ordering::Relaxed),
                         max_nodes_seen.load(Ordering::Relaxed),
                     ));
@@ -189,6 +195,8 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
 
     if let Some((row_targets, col_targets, nodes)) = winner {
         let total_grids = grids.load(Ordering::Relaxed);
+        let total_valid = valid_puzzles.load(Ordering::Relaxed);
+        let elapsed = start.elapsed();
         // Re-solve on the main thread to obtain a printable state.  See the
         // module-level note on why we don't ship `QueueSolverState` across
         // threads.
@@ -196,16 +204,26 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
             SolveOutcome::Unique(s) => s,
             _ => unreachable!("worker just generated this puzzle as Unique"),
         };
-        report::<N>(&row_targets, &col_targets, &solved, nodes, total_grids);
+        report::<N>(
+            &row_targets,
+            &col_targets,
+            &solved,
+            nodes,
+            total_grids,
+            total_valid,
+            elapsed,
+        );
     }
 }
 
-fn format_range(min: u64, max: u64) -> String {
-    // Sentinel: nothing has been recorded yet.
-    if min == u64::MAX && max == 0 {
-        return "—".to_string();
-    }
-    format!("{min}..={max}")
+fn format_status(valid_puzzles: u64, min: u64, max: u64) -> String {
+    // Sentinel: no unique-solution puzzle has been observed yet.
+    let range = if min == u64::MAX && max == 0 {
+        "—".to_string()
+    } else {
+        format!("{min}..={max}")
+    };
+    format!("{valid_puzzles} valid puzzles, nodes seen: {range}")
 }
 
 /// One worker iteration: random DFS-fill, derive targets, solve, race to
@@ -214,6 +232,7 @@ fn worker<const N: usize>(
     min_nodes: u64,
     max_nodes: u64,
     grids: &AtomicU64,
+    valid_puzzles: &AtomicU64,
     min_nodes_seen: &AtomicU64,
     max_nodes_seen: &AtomicU64,
     done: &AtomicBool,
@@ -235,6 +254,7 @@ fn worker<const N: usize>(
 
         if let SolveOutcome::Unique(solved) = state.solve() {
             let nodes = solved.stats().search_nodes;
+            valid_puzzles.fetch_add(1, Ordering::Relaxed);
             // Track the full observed range of node counts, regardless of
             // whether this puzzle qualifies — the spinner uses these to
             // show how far we are from the requested window.
@@ -259,6 +279,8 @@ fn report<const N: usize>(
     solved: &QueueSolverState<N>,
     nodes: u64,
     grids: u64,
+    valid_puzzles: u64,
+    elapsed: Duration,
 ) {
     // Targets line: row targets followed by column targets, ready to pipe
     // into `cargo run -- <targets>`.
@@ -269,7 +291,11 @@ fn report<const N: usize>(
     println!();
     print!("{solved}");
     println!();
-    println!("search nodes: {nodes}  (after {grids} grids)");
+    println!("search nodes: {nodes}");
+    println!(
+        "Searched {valid_puzzles} valid puzzles in {grids} grids in {:.1} seconds.",
+        elapsed.as_secs_f64()
+    );
 }
 
 // Attempt to fill `cells` from `pos` onward, trying candidates in a random
