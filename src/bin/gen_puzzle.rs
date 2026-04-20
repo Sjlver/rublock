@@ -13,12 +13,12 @@
 //
 // ## Why send only `(row_targets, col_targets)` across threads?
 //
-// `QueueSolverState` holds an `Rc<Cell<Stats>>`, which is `!Send`.  Rather
-// than reworking the stats plumbing to be `Send + Sync`, we ship the puzzle
-// targets (which are `Copy`) through an `mpsc::channel` and re-solve once on
-// the main thread for display.  One extra solve is cheap; isolating the
-// threading concern to this binary keeps the rest of the codebase
-// single-threaded.
+// Both solver states hold an `Rc<Cell<Stats>>` (via `StatsHandle`), which is
+// `!Send`.  Rather than reworking the stats plumbing to be `Send + Sync`, we
+// ship the puzzle targets (which are `Copy`) through an `mpsc::channel` and
+// re-solve once on the main thread for display.  One extra solve is cheap;
+// isolating the threading concern to this binary keeps the rest of the
+// codebase single-threaded.
 //
 // ## Coordination
 //
@@ -37,12 +37,15 @@ use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
+use rublock::enumerate::SolverChoice;
 use rublock::grid::{Cell, Grid};
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolveOutcome};
+use rublock::solver::{Puzzle, SolveOutcome, SolverState};
 
 fn usage() -> ! {
-    eprintln!("Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--threads=T]");
+    eprintln!(
+        "Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--threads=T] [--solver=basic|queue]"
+    );
     eprintln!("  --size       grid side length, 3–11 (default: 6)");
     eprintln!(
         "  --min-nodes  minimum search-tree nodes the solver must visit (inclusive, default: 0)"
@@ -51,16 +54,18 @@ fn usage() -> ! {
         "  --max-nodes  maximum search-tree nodes the solver must visit (inclusive, default: unbounded)"
     );
     eprintln!("  --threads    worker threads (default: available parallelism)");
+    eprintln!("  --solver     solver implementation to use (default: queue)");
     std::process::exit(1);
 }
 
-fn parse_args() -> (usize, u64, u64, usize) {
+fn parse_args() -> (usize, u64, u64, usize, SolverChoice) {
     let mut size = 6usize;
     let mut min_nodes = 0u64;
     let mut max_nodes = u64::MAX;
     let mut threads = thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
+    let mut solver = SolverChoice::Queue;
 
     for arg in std::env::args().skip(1) {
         if let Some(val) = arg.strip_prefix("--size=") {
@@ -71,6 +76,12 @@ fn parse_args() -> (usize, u64, u64, usize) {
             max_nodes = val.parse().unwrap_or_else(|_| usage());
         } else if let Some(val) = arg.strip_prefix("--threads=") {
             threads = val.parse().unwrap_or_else(|_| usage());
+        } else if let Some(val) = arg.strip_prefix("--solver=") {
+            solver = match val {
+                "basic" => SolverChoice::Basic,
+                "queue" => SolverChoice::Queue,
+                _ => usage(),
+            };
         } else {
             usage();
         }
@@ -89,26 +100,31 @@ fn parse_args() -> (usize, u64, u64, usize) {
         std::process::exit(1);
     }
 
-    (size, min_nodes, max_nodes, threads)
+    (size, min_nodes, max_nodes, threads, solver)
 }
 
 fn main() {
-    let (size, min_nodes, max_nodes, threads) = parse_args();
+    let (size, min_nodes, max_nodes, threads, solver) = parse_args();
     match size {
-        3 => run::<3>(min_nodes, max_nodes, threads),
-        4 => run::<4>(min_nodes, max_nodes, threads),
-        5 => run::<5>(min_nodes, max_nodes, threads),
-        6 => run::<6>(min_nodes, max_nodes, threads),
-        7 => run::<7>(min_nodes, max_nodes, threads),
-        8 => run::<8>(min_nodes, max_nodes, threads),
-        9 => run::<9>(min_nodes, max_nodes, threads),
-        10 => run::<10>(min_nodes, max_nodes, threads),
-        11 => run::<11>(min_nodes, max_nodes, threads),
+        3 => run::<3>(min_nodes, max_nodes, threads, solver),
+        4 => run::<4>(min_nodes, max_nodes, threads, solver),
+        5 => run::<5>(min_nodes, max_nodes, threads, solver),
+        6 => run::<6>(min_nodes, max_nodes, threads, solver),
+        7 => run::<7>(min_nodes, max_nodes, threads, solver),
+        8 => run::<8>(min_nodes, max_nodes, threads, solver),
+        9 => run::<9>(min_nodes, max_nodes, threads, solver),
+        10 => run::<10>(min_nodes, max_nodes, threads, solver),
+        11 => run::<11>(min_nodes, max_nodes, threads, solver),
         _ => unreachable!(), // validated in parse_args
     }
 }
 
-fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
+fn run<const N: usize>(
+    min_nodes: u64,
+    max_nodes: u64,
+    num_threads: usize,
+    solver: SolverChoice,
+) {
     let grids = AtomicU64::new(0);
     let valid_puzzles = AtomicU64::new(0);
     // Sentinel values: min starts at `u64::MAX` so `fetch_min` lowers it on
@@ -153,6 +169,7 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
                 worker::<N>(
                     min_nodes,
                     max_nodes,
+                    solver,
                     grids,
                     valid_puzzles,
                     min_nodes_seen,
@@ -198,21 +215,41 @@ fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
         let total_valid = valid_puzzles.load(Ordering::Relaxed);
         let elapsed = start.elapsed();
         // Re-solve on the main thread to obtain a printable state.  See the
-        // module-level note on why we don't ship `QueueSolverState` across
+        // module-level note on why we don't ship the solver state across
         // threads.
-        let solved = match QueueSolverState::new(Puzzle::new(row_targets, col_targets)).solve() {
-            SolveOutcome::Unique(s) => s,
-            _ => unreachable!("worker just generated this puzzle as Unique"),
-        };
-        report::<N>(
-            &row_targets,
-            &col_targets,
-            &solved,
-            nodes,
-            total_grids,
-            total_valid,
-            elapsed,
-        );
+        let puzzle = Puzzle::new(row_targets, col_targets);
+        match solver {
+            SolverChoice::Basic => {
+                let solved = match SolverState::new(puzzle).solve() {
+                    SolveOutcome::Unique(s) => s,
+                    _ => unreachable!("worker just generated this puzzle as Unique"),
+                };
+                report::<N, _>(
+                    &row_targets,
+                    &col_targets,
+                    &solved,
+                    nodes,
+                    total_grids,
+                    total_valid,
+                    elapsed,
+                );
+            }
+            SolverChoice::Queue => {
+                let solved = match QueueSolverState::new(puzzle).solve() {
+                    SolveOutcome::Unique(s) => s,
+                    _ => unreachable!("worker just generated this puzzle as Unique"),
+                };
+                report::<N, _>(
+                    &row_targets,
+                    &col_targets,
+                    &solved,
+                    nodes,
+                    total_grids,
+                    total_valid,
+                    elapsed,
+                );
+            }
+        }
     }
 }
 
@@ -231,6 +268,7 @@ fn format_status(valid_puzzles: u64, min: u64, max: u64) -> String {
 fn worker<const N: usize>(
     min_nodes: u64,
     max_nodes: u64,
+    solver: SolverChoice,
     grids: &AtomicU64,
     valid_puzzles: &AtomicU64,
     min_nodes_seen: &AtomicU64,
@@ -250,10 +288,18 @@ fn worker<const N: usize>(
 
         let (row_targets, col_targets) = grid.compute_targets();
         let puzzle = Puzzle::new(row_targets, col_targets);
-        let state = QueueSolverState::new(puzzle);
+        let unique_nodes = match solver {
+            SolverChoice::Basic => match SolverState::new(puzzle).solve() {
+                SolveOutcome::Unique(solved) => Some(solved.stats().search_nodes),
+                _ => None,
+            },
+            SolverChoice::Queue => match QueueSolverState::new(puzzle).solve() {
+                SolveOutcome::Unique(solved) => Some(solved.stats().search_nodes),
+                _ => None,
+            },
+        };
 
-        if let SolveOutcome::Unique(solved) = state.solve() {
-            let nodes = solved.stats().search_nodes;
+        if let Some(nodes) = unique_nodes {
             valid_puzzles.fetch_add(1, Ordering::Relaxed);
             // Track the full observed range of node counts, regardless of
             // whether this puzzle qualifies — the spinner uses these to
@@ -273,10 +319,10 @@ fn worker<const N: usize>(
     }
 }
 
-fn report<const N: usize>(
+fn report<const N: usize, S: std::fmt::Display>(
     row_targets: &[u8; N],
     col_targets: &[u8; N],
-    solved: &QueueSolverState<N>,
+    solved: &S,
     nodes: u64,
     grids: u64,
     valid_puzzles: u64,
