@@ -653,6 +653,22 @@ impl<const N: usize> SolverState<N> {
         best.map(|(r, c, _)| (r, c))
     }
 
+    /// Find a bit to branch on, in the given cell.
+    ///
+    /// There's not much data to base this decision on, so we heuristically
+    /// choose black bits first, then digit bits.
+    fn pick_branching_bit(&self, row: usize, col: usize) -> CellDomain {
+        let domain = self.domains[row][col];
+        if domain & Self::BLACK1_ROW != 0 {
+            return Self::BLACK1_ROW;
+        }
+        if domain & Self::BLACK2_ROW != 0 {
+            return Self::BLACK2_ROW;
+        }
+        debug_assert!(domain & Self::ALL_DIGITS != 0);
+        return 1 << domain.trailing_zeros();
+    }
+
     /// Count the number of distinct solutions, stopping once `max` is reached.
     ///
     /// Returns the number of solutions found, which is at most `max`.
@@ -689,8 +705,7 @@ impl<const N: usize> SolverState<N> {
         };
 
         // Try the first possible value for this cell.
-        let bits = Self::branching_bits(state.domains[row][col]);
-        let bit = 1 << bits.trailing_zeros();
+        let bit = state.pick_branching_bit(row, col);
         let mut branch = state.clone();
         // Both the commit and the complement are branching decisions, not
         // deductions of any real rule, so we tag them `Backtracking`.
@@ -728,8 +743,7 @@ impl<const N: usize> SolverState<N> {
             panic!("Propagation stalled");
         };
 
-        let bits = Self::branching_bits(state.domains[row][col]);
-        let bit = 1 << bits.trailing_zeros();
+        let bit = state.pick_branching_bit(row, col);
 
         let mut branch = state.clone();
         branch.set_cell(row, col, bit, Rule::Backtracking);

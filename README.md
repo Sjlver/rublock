@@ -28,10 +28,13 @@ This project is primarily a vehicle for learning Rust — exploring ownership, i
 
 Because of that, I prefer code that is simple over code that maximizes performance at all costs. I also want code that is highly idiomatic and corresponds to best practices.
 
+### Binaries
+
 There are multiple solvers, accessible via `src/main.rs`.
 
 There is a generator for puzzles of varying difficulty, in `src/bin/gen_puzzle.rs`. Here's the hardest puzzle it has found so far:
 
+```
 0 4 3 8 4 3 0 0 0 0 4 0
 
      0   0   0   0   4   0
@@ -50,3 +53,6 @@ There is a generator for puzzles of varying difficulty, in `src/bin/gen_puzzle.r
    +---+---+---+---+---+---+
 
 search nodes: 323  (after 3119192 attempts)
+```
+
+There's also a binary to count the number of valid puzzles of a given size. It works well up to size 6, but sizes larger than that become prohibitively expensive.

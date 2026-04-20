@@ -1,3 +1,5 @@
+use std::usize;
+
 use tracing::{instrument, trace};
 
 use crate::solver::{Puzzle, SolveOutcome, Tables};
@@ -685,16 +687,29 @@ impl<const N: usize> QueueSolverState<N> {
         })
     }
 
-    fn branching_bits(domain: CellDomain) -> CellDomain {
-        let primary = domain & (Self::ALL_DIGITS | Self::ROW_BLACKS);
-        if primary.count_ones() > 1 { primary } else { 0 }
+    fn pick_branching_bit(&mut self, row: usize, col: usize) -> CellDomain {
+        // Heuristic is to branch on the bit that has the smallest tuple support.
+        // If there is equality, prefer black bits (hence <= below, not <).
+        let mut primary = self.domains[row][col] & (Self::ALL_DIGITS | Self::ROW_BLACKS);
+        let mut best = 0;
+        let mut min_support = u16::MAX;
+        while primary != 0 {
+            let bit = primary & primary.wrapping_neg();
+            primary &= primary - 1;
+            let support = *self.tuple_support_row(row, col, bit);
+            if support <= min_support {
+                best = bit;
+                min_support = support;
+            }
+        }
+        best
     }
 
     fn pick_branching_cell(&self) -> Option<(usize, usize)> {
         let mut best: Option<(usize, usize, u32)> = None;
         for r in 0..N {
             for c in 0..N {
-                let bits = Self::branching_bits(self.domains[r][c]);
+                let bits = self.domains[r][c] & (Self::ALL_DIGITS | Self::ROW_BLACKS);
                 let freedom = bits.count_ones();
                 if freedom > 1 && best.map_or(true, |b| freedom < b.2) {
                     if freedom == 2 {
@@ -729,8 +744,7 @@ impl<const N: usize> QueueSolverState<N> {
             panic!("Propagation stalled");
         };
 
-        let bits = Self::branching_bits(state.domains[row][col]);
-        let bit = 1 << bits.trailing_zeros();
+        let bit = state.pick_branching_bit(row, col);
         let mut branch = state.clone();
         // Both the commit and the complement are branching decisions, not
         // deductions of any real rule, so we tag them `Backtracking`.
@@ -765,8 +779,7 @@ impl<const N: usize> QueueSolverState<N> {
             panic!("Propagation stalled");
         };
 
-        let bits = Self::branching_bits(state.domains[row][col]);
-        let bit = 1 << bits.trailing_zeros();
+        let bit = state.pick_branching_bit(row, col);
 
         let mut branch = state.clone();
         branch.set_cell(row, col, bit, Rule::Backtracking);
