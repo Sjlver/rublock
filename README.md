@@ -4,6 +4,8 @@ A Rust learning project — a solver for a small grid puzzle.
 
 ## The Puzzle
 
+The puzzle is called **Doplo** and is published by *Küng Rätsel* at <https://doplo.ch>. I didn't invent it — I just wrote this solver (with a lot of assistance from Anthropic's Claude).
+
 The puzzle is played on a **6x6 grid**. Each row and each column has a **target number** attached, ranging from 0 to 10.
 
 ### Rules
@@ -52,7 +54,9 @@ There is a generator for puzzles of varying difficulty, in `src/bin/gen_puzzle.r
  3 | 2 | # | 3 | # | 4 | 1 |
    +---+---+---+---+---+---+
 
-search nodes: 323  (after 3119192 attempts)
+search nodes: 323  (after 3119192 grids)
 ```
 
 There's also a binary to count the number of valid puzzles of a given size. It works well up to size 6, but sizes larger than that become prohibitively expensive.
+
+Two additional binaries exist for development only: `gen_bench_puzzles` prints a Rust snippet to paste into `benches/solver_bench.rs`, and `compare` runs both solver backends on a fixed set of puzzles and asserts they agree.

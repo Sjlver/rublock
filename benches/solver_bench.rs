@@ -29,11 +29,12 @@ const PUZZLES: &[([u8; 6], [u8; 6])] = &[
 fn bench_solver(c: &mut Criterion) {
     let mut group = c.benchmark_group("solve");
 
-    for (i, &(row_t, col_t)) in PUZZLES.iter().enumerate() {
+    for (i, &(row_targets, col_targets)) in PUZZLES.iter().enumerate() {
         group.bench_function(format!("basic/{i}"), |b| {
             b.iter(|| {
                 assert_eq!(
-                    SolverState::new(black_box(Puzzle::new(row_t, col_t))).count_solutions(2),
+                    SolverState::new(black_box(Puzzle::new(row_targets, col_targets)))
+                        .count_solutions(2),
                     1
                 );
             })
@@ -42,7 +43,8 @@ fn bench_solver(c: &mut Criterion) {
         group.bench_function(format!("queue/{i}"), |b| {
             b.iter(|| {
                 assert_eq!(
-                    QueueSolverState::new(black_box(Puzzle::new(row_t, col_t))).count_solutions(2),
+                    QueueSolverState::new(black_box(Puzzle::new(row_targets, col_targets)))
+                        .count_solutions(2),
                     1
                 );
             })

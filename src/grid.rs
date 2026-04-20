@@ -36,9 +36,9 @@ impl<const N: usize> Grid<N> {
         let mut row_targets = [0u8; N];
         let mut col_targets = [0u8; N];
 
-        for r in 0..N {
-            let (b1, b2) = black_pair_in_row(&self.cells[r], r);
-            row_targets[r] = (b1 + 1..b2)
+        for (r, target) in row_targets.iter_mut().enumerate() {
+            let (b1, b2) = black_pair_in_row(&self.cells[r]);
+            *target = (b1 + 1..b2)
                 .map(|c| match self.cells[r][c] {
                     Cell::Number(n) => n,
                     other => panic!("unexpected {other:?} between blacks at ({r}, {c})"),
@@ -46,10 +46,10 @@ impl<const N: usize> Grid<N> {
                 .sum();
         }
 
-        for c in 0..N {
+        for (c, target) in col_targets.iter_mut().enumerate() {
             let col: [Cell; N] = std::array::from_fn(|r| self.cells[r][c]);
-            let (b1, b2) = black_pair_in_row(&col, c);
-            col_targets[c] = (b1 + 1..b2)
+            let (b1, b2) = black_pair_in_row(&col);
+            *target = (b1 + 1..b2)
                 .map(|r| match self.cells[r][c] {
                     Cell::Number(n) => n,
                     other => panic!("unexpected {other:?} between blacks at ({r}, {c})"),
@@ -71,19 +71,11 @@ impl<const N: usize> Grid<N> {
 /// Find the positions of the two black squares in a row (or column) of cells.
 ///
 /// Panics if the row does not contain exactly two `Black` cells.
-fn black_pair_in_row<const N: usize>(cells: &[Cell; N], index: usize) -> (usize, usize) {
+fn black_pair_in_row<const N: usize>(cells: &[Cell; N]) -> (usize, usize) {
     let mut iter = (0..N).filter(|&i| cells[i] == Cell::Black);
-    let b1 = iter
-        .next()
-        .expect("Expected a black square in row/col {index}");
-    let b2 = iter
-        .next()
-        .expect("Expected a second black square in row/col {index}");
-    assert_eq!(
-        iter.next(),
-        None,
-        "Expected two black squares in row/col {index}"
-    );
+    let b1 = iter.next().expect("expected a black square");
+    let b2 = iter.next().expect("expected a second black square");
+    assert_eq!(iter.next(), None, "expected exactly two black squares");
 
     (b1, b2)
 }

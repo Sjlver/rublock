@@ -1,17 +1,17 @@
 // Generates a single random puzzle with a unique solution, optionally
-// filtered by difficulty (minimum number of search-tree nodes the solver
-// needs to visit).
+// filtered by difficulty — the number of search-tree nodes the solver needs
+// to visit must fall in `[--min-nodes, --max-nodes]` (both inclusive).
 //
 // Usage:
-//   cargo run --release --bin gen_puzzle -- --size=6 --min-nodes=50
+//   cargo run --release --bin gen_puzzle -- --size=6 --min-nodes=50 --max-nodes=500
 //
 // Strategy: a pool of worker threads independently fill empty grids with a
 // randomised DFS, derive the row/col targets, and run
 // `QueueSolverState::solve`.  The first thread to find a unique-solution
-// puzzle whose solve visits at least `--min-nodes` nodes wins; the others
+// puzzle whose solve visits a node count inside the window wins; the others
 // stop on the next iteration.
 //
-// ## Why send only `(row_t, col_t)` across threads?
+// ## Why send only `(row_targets, col_targets)` across threads?
 //
 // `QueueSolverState` holds an `Rc<Cell<Stats>>`, which is `!Send`.  Rather
 // than reworking the stats plumbing to be `Send + Sync`, we ship the puzzle
@@ -22,10 +22,10 @@
 //
 // ## Coordination
 //
-// - `grids` and `best_nodes` are `AtomicU64` shared via stack borrow
-//   (thanks to `thread::scope`, no `Arc` is needed).  Workers update them
-//   with `fetch_add` and `fetch_max`; the main thread reads them ~10× a
-//   second to refresh the spinner.
+// - `grids`, `min_nodes_seen`, and `max_nodes_seen` are `AtomicU64` shared
+//   via stack borrow (thanks to `thread::scope`, no `Arc` is needed).
+//   Workers update them with `fetch_add` / `fetch_min` / `fetch_max`; the
+//   main thread reads them ~10× a second to refresh the spinner.
 // - `done: AtomicBool` is the stop flag; workers check it at the top of each
 //   loop iteration.
 // - `mpsc::channel` carries the winning targets to the main thread.
@@ -42,16 +42,22 @@ use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, SolveOutcome};
 
 fn usage() -> ! {
-    eprintln!("Usage: gen_puzzle [--size=N] [--min-nodes=K] [--threads=T]");
+    eprintln!("Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--threads=T]");
     eprintln!("  --size       grid side length, 3–11 (default: 6)");
-    eprintln!("  --min-nodes  minimum search-tree nodes the solver must visit (default: 0)");
+    eprintln!(
+        "  --min-nodes  minimum search-tree nodes the solver must visit (inclusive, default: 0)"
+    );
+    eprintln!(
+        "  --max-nodes  maximum search-tree nodes the solver must visit (inclusive, default: unbounded)"
+    );
     eprintln!("  --threads    worker threads (default: available parallelism)");
     std::process::exit(1);
 }
 
-fn parse_args() -> (usize, u64, usize) {
+fn parse_args() -> (usize, u64, u64, usize) {
     let mut size = 6usize;
     let mut min_nodes = 0u64;
+    let mut max_nodes = u64::MAX;
     let mut threads = thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
@@ -61,6 +67,8 @@ fn parse_args() -> (usize, u64, usize) {
             size = val.parse().unwrap_or_else(|_| usage());
         } else if let Some(val) = arg.strip_prefix("--min-nodes=") {
             min_nodes = val.parse().unwrap_or_else(|_| usage());
+        } else if let Some(val) = arg.strip_prefix("--max-nodes=") {
+            max_nodes = val.parse().unwrap_or_else(|_| usage());
         } else if let Some(val) = arg.strip_prefix("--threads=") {
             threads = val.parse().unwrap_or_else(|_| usage());
         } else {
@@ -76,41 +84,49 @@ fn parse_args() -> (usize, u64, usize) {
         eprintln!("--threads must be at least 1");
         std::process::exit(1);
     }
+    if max_nodes < min_nodes {
+        eprintln!("--max-nodes ({max_nodes}) must be >= --min-nodes ({min_nodes})");
+        std::process::exit(1);
+    }
 
-    (size, min_nodes, threads)
+    (size, min_nodes, max_nodes, threads)
 }
 
 fn main() {
-    let (size, min_nodes, threads) = parse_args();
+    let (size, min_nodes, max_nodes, threads) = parse_args();
     match size {
-        3 => run::<3>(min_nodes, threads),
-        4 => run::<4>(min_nodes, threads),
-        5 => run::<5>(min_nodes, threads),
-        6 => run::<6>(min_nodes, threads),
-        7 => run::<7>(min_nodes, threads),
-        8 => run::<8>(min_nodes, threads),
-        9 => run::<9>(min_nodes, threads),
-        10 => run::<10>(min_nodes, threads),
-        11 => run::<11>(min_nodes, threads),
+        3 => run::<3>(min_nodes, max_nodes, threads),
+        4 => run::<4>(min_nodes, max_nodes, threads),
+        5 => run::<5>(min_nodes, max_nodes, threads),
+        6 => run::<6>(min_nodes, max_nodes, threads),
+        7 => run::<7>(min_nodes, max_nodes, threads),
+        8 => run::<8>(min_nodes, max_nodes, threads),
+        9 => run::<9>(min_nodes, max_nodes, threads),
+        10 => run::<10>(min_nodes, max_nodes, threads),
+        11 => run::<11>(min_nodes, max_nodes, threads),
         _ => unreachable!(), // validated in parse_args
     }
 }
 
-fn run<const N: usize>(min_nodes: u64, num_threads: usize) {
+fn run<const N: usize>(min_nodes: u64, max_nodes: u64, num_threads: usize) {
     let grids = AtomicU64::new(0);
-    let best_nodes = AtomicU64::new(0);
+    // Sentinel values: min starts at `u64::MAX` so `fetch_min` lowers it on
+    // first observation; max starts at `0` so `fetch_max` raises it.  The
+    // main thread renders them as "—" until at least one unique-solution
+    // puzzle has been seen.
+    let min_nodes_seen = AtomicU64::new(u64::MAX);
+    let max_nodes_seen = AtomicU64::new(0);
     let done = AtomicBool::new(false);
 
     let pb = ProgressBar::new_spinner();
     // `{pos}` is indicatif's built-in counter (updated via `set_position`),
-    // and `{msg}` is the free-form string we update with the best node
-    // count.  Thread count is constant for this run, so we bake it straight
+    // and `{msg}` is the free-form string we update with the observed node
+    // range.  Thread count is constant for this run, so we bake it straight
     // into the template rather than reaching for `{prefix}`.
-    let template = format!(
-        "{{spinner}} tried {{pos}} grids on {num_threads} threads, best so far: {{msg}} nodes"
-    );
+    let template =
+        format!("{{spinner}} tried {{pos}} grids on {num_threads} threads, nodes seen: {{msg}}");
     pb.set_style(ProgressStyle::with_template(&template).unwrap());
-    pb.set_message("0");
+    pb.set_message("—");
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let (tx, rx) = mpsc::channel::<([u8; N], [u8; N], u64)>();
@@ -126,9 +142,20 @@ fn run<const N: usize>(min_nodes: u64, num_threads: usize) {
             let tx = tx.clone();
             // Borrow shared state by reference; lifetimes are tied to `s`.
             let grids = &grids;
-            let best_nodes = &best_nodes;
+            let min_nodes_seen = &min_nodes_seen;
+            let max_nodes_seen = &max_nodes_seen;
             let done = &done;
-            s.spawn(move || worker::<N>(min_nodes, grids, best_nodes, done, tx));
+            s.spawn(move || {
+                worker::<N>(
+                    min_nodes,
+                    max_nodes,
+                    grids,
+                    min_nodes_seen,
+                    max_nodes_seen,
+                    done,
+                    tx,
+                )
+            });
         }
         // Drop our copy of the sender so the channel becomes `Disconnected`
         // once every worker exits — the recv loop below uses that as a
@@ -148,7 +175,10 @@ fn run<const N: usize>(min_nodes: u64, num_threads: usize) {
                     // loads are racy (workers may be mid-update), which is
                     // fine for a UI counter.
                     pb.set_position(grids.load(Ordering::Relaxed));
-                    pb.set_message(best_nodes.load(Ordering::Relaxed).to_string());
+                    pb.set_message(format_range(
+                        min_nodes_seen.load(Ordering::Relaxed),
+                        max_nodes_seen.load(Ordering::Relaxed),
+                    ));
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => return None,
             }
@@ -157,25 +187,35 @@ fn run<const N: usize>(min_nodes: u64, num_threads: usize) {
 
     pb.finish_and_clear();
 
-    if let Some((row_t, col_t, nodes)) = winner {
+    if let Some((row_targets, col_targets, nodes)) = winner {
         let total_grids = grids.load(Ordering::Relaxed);
         // Re-solve on the main thread to obtain a printable state.  See the
         // module-level note on why we don't ship `QueueSolverState` across
         // threads.
-        let solved = match QueueSolverState::new(Puzzle::new(row_t, col_t)).solve() {
+        let solved = match QueueSolverState::new(Puzzle::new(row_targets, col_targets)).solve() {
             SolveOutcome::Unique(s) => s,
             _ => unreachable!("worker just generated this puzzle as Unique"),
         };
-        report::<N>(&row_t, &col_t, &solved, nodes, total_grids);
+        report::<N>(&row_targets, &col_targets, &solved, nodes, total_grids);
     }
+}
+
+fn format_range(min: u64, max: u64) -> String {
+    // Sentinel: nothing has been recorded yet.
+    if min == u64::MAX && max == 0 {
+        return "—".to_string();
+    }
+    format!("{min}..={max}")
 }
 
 /// One worker iteration: random DFS-fill, derive targets, solve, race to
 /// publish the result.  Exits when `done` is observed `true`.
 fn worker<const N: usize>(
     min_nodes: u64,
+    max_nodes: u64,
     grids: &AtomicU64,
-    best_nodes: &AtomicU64,
+    min_nodes_seen: &AtomicU64,
+    max_nodes_seen: &AtomicU64,
     done: &AtomicBool,
     tx: mpsc::Sender<([u8; N], [u8; N], u64)>,
 ) {
@@ -189,21 +229,24 @@ fn worker<const N: usize>(
 
         grids.fetch_add(1, Ordering::Relaxed);
 
-        let (row_t, col_t) = grid.compute_targets();
-        let puzzle = Puzzle::new(row_t, col_t);
+        let (row_targets, col_targets) = grid.compute_targets();
+        let puzzle = Puzzle::new(row_targets, col_targets);
         let state = QueueSolverState::new(puzzle);
 
         if let SolveOutcome::Unique(solved) = state.solve() {
             let nodes = solved.stats().search_nodes;
-            // Monotonic max — `fetch_max` handles the racing CAS for us.
-            best_nodes.fetch_max(nodes, Ordering::Relaxed);
-            if nodes >= min_nodes {
+            // Track the full observed range of node counts, regardless of
+            // whether this puzzle qualifies — the spinner uses these to
+            // show how far we are from the requested window.
+            min_nodes_seen.fetch_min(nodes, Ordering::Relaxed);
+            max_nodes_seen.fetch_max(nodes, Ordering::Relaxed);
+            if (min_nodes..=max_nodes).contains(&nodes) {
                 // Set the stop flag *before* sending so other workers see it
                 // as soon as possible; the receiver also sets it on receipt.
                 done.store(true, Ordering::Relaxed);
                 // The receiver may have already exited (e.g. another worker
                 // raced us); ignore a closed channel.
-                let _ = tx.send((row_t, col_t, nodes));
+                let _ = tx.send((row_targets, col_targets, nodes));
                 return;
             }
         }
@@ -211,8 +254,8 @@ fn worker<const N: usize>(
 }
 
 fn report<const N: usize>(
-    row_t: &[u8; N],
-    col_t: &[u8; N],
+    row_targets: &[u8; N],
+    col_targets: &[u8; N],
     solved: &QueueSolverState<N>,
     nodes: u64,
     grids: u64,
@@ -220,8 +263,8 @@ fn report<const N: usize>(
     // Targets line: row targets followed by column targets, ready to pipe
     // into `cargo run -- <targets>`.
     let mut nums: Vec<String> = Vec::with_capacity(2 * N);
-    nums.extend(row_t.iter().map(|n| n.to_string()));
-    nums.extend(col_t.iter().map(|n| n.to_string()));
+    nums.extend(row_targets.iter().map(|n| n.to_string()));
+    nums.extend(col_targets.iter().map(|n| n.to_string()));
     println!("{}", nums.join(" "));
     println!();
     print!("{solved}");

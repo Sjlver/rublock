@@ -2,6 +2,13 @@
 name = "rublock"
 version = "0.1.0"
 edition = "2024"
+description = "A solver and puzzle generator for the Doplo grid number puzzle."
+license = "MIT"
+repository = "https://github.com/Sjlver/rublock"
+readme = "README.md"
+keywords = ["puzzle", "solver", "constraints"]
+categories = ["algorithms", "command-line-utilities"]
+authors = ["Jonas Wagner <jonas@purpureus.net>"]
 
 [dependencies]
 rayon = "1"

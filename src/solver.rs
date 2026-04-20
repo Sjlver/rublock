@@ -649,7 +649,7 @@ impl<const N: usize> SolverState<N> {
             for c in 0..N {
                 let bits = Self::branching_bits(self.domains[r][c]);
                 let freedom = bits.count_ones();
-                if freedom > 1 && best.map_or(true, |b| freedom < b.2) {
+                if freedom > 1 && best.is_none_or(|b| freedom < b.2) {
                     best = Some((r, c, freedom));
                 }
             }
@@ -670,7 +670,7 @@ impl<const N: usize> SolverState<N> {
             return Self::BLACK2_ROW;
         }
         debug_assert!(domain & Self::ALL_DIGITS != 0);
-        return 1 << domain.trailing_zeros();
+        1 << domain.trailing_zeros()
     }
 
     /// Count the number of distinct solutions, stopping once `max` is reached.
@@ -785,13 +785,12 @@ impl<const N: usize> SolverState<N> {
 impl<const N: usize> fmt::Display for SolverState<N> {
     /// Print the board and, for unsolved cells, the remaining domain bits.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ct = &self.puzzle.col_targets;
         write!(f, "    ")?;
-        for c in 0..N {
+        for (c, &t) in self.puzzle.col_targets.iter().enumerate() {
             if c > 0 {
                 write!(f, "  ")?;
             }
-            write!(f, "{:2}", ct[c])?;
+            write!(f, "{t:2}")?;
         }
         writeln!(f)?;
         let sep = format!("   +{}", "---+".repeat(N));

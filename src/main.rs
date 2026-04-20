@@ -30,7 +30,7 @@ fn parse_args() -> (SolverChoice, Vec<u8>) {
     }
 
     let count = nums.len();
-    if count < 6 || count > 22 || count % 2 != 0 {
+    if !(6..=22).contains(&count) || !count.is_multiple_of(2) {
         eprintln!("Expected an even number of targets between 6 and 22, got {count}.");
         std::process::exit(1);
     }
@@ -60,9 +60,9 @@ fn report<S: std::fmt::Display>(outcome: SolveOutcome<S>, stats: Stats) {
 }
 
 fn run<const N: usize>(nums: &[u8], solver: SolverChoice) {
-    let row_t: [u8; N] = nums[..N].try_into().unwrap();
-    let col_t: [u8; N] = nums[N..].try_into().unwrap();
-    let puzzle = Puzzle::new(row_t, col_t);
+    let row_targets: [u8; N] = nums[..N].try_into().unwrap();
+    let col_targets: [u8; N] = nums[N..].try_into().unwrap();
+    let puzzle = Puzzle::new(row_targets, col_targets);
     match solver {
         SolverChoice::Basic => {
             let state = SolverState::new(puzzle);

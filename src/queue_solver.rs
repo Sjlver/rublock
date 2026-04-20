@@ -1,5 +1,3 @@
-use std::usize;
-
 use tracing::{instrument, trace};
 
 use crate::solver::{CellDomain, Puzzle, SolveOutcome, Tables};
@@ -24,9 +22,7 @@ impl<const N: usize> LiveTuple<N> {
     ) -> Self {
         let mut pattern = [0 as CellDomain; N];
         pattern[0] = black1;
-        for i in 1..=len {
-            pattern[i] = digit_mask;
-        }
+        pattern[1..=len].fill(digit_mask);
         pattern[len + 1] = black2;
         Self {
             start: start as u8,
@@ -361,6 +357,11 @@ impl<const N: usize> QueueSolverState<N> {
     }
 
     /// Seed queue with bits that have no support.
+    //
+    // The `r`/`c` range loops below are paired with cross-indexing into
+    // `live_tuples_row[r]` / `live_tuples_col[c]`, so the clippy-suggested
+    // `iter_mut().enumerate()` rewrite actually hurts readability here.
+    #[allow(clippy::needless_range_loop)]
     fn seed_queue(&mut self) {
         let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
 
@@ -530,19 +531,19 @@ impl<const N: usize> QueueSolverState<N> {
     fn update_hidden_singles(&mut self, r: usize, c: usize, bit: CellDomain) {
         if bit & (Self::ALL_DIGITS | Self::ROW_BLACKS) != 0 {
             *self.row_candidates_for(r, bit) -= 1;
-            if *self.row_candidates_for(r, bit) == 1 {
-                if let Some(c2) = (0..N).find(|&col| self.domains[r][col] & bit != 0) {
-                    self.set_cell(r, c2, bit, Rule::HiddenSingle);
-                }
+            if *self.row_candidates_for(r, bit) == 1
+                && let Some(c2) = (0..N).find(|&col| self.domains[r][col] & bit != 0)
+            {
+                self.set_cell(r, c2, bit, Rule::HiddenSingle);
             }
         }
 
         if bit & (Self::ALL_DIGITS | Self::COL_BLACKS) != 0 {
             *self.col_candidates_for(c, bit) -= 1;
-            if *self.col_candidates_for(c, bit) == 1 {
-                if let Some(r2) = (0..N).find(|&row| self.domains[row][c] & bit != 0) {
-                    self.set_cell(r2, c, bit, Rule::HiddenSingle);
-                }
+            if *self.col_candidates_for(c, bit) == 1
+                && let Some(r2) = (0..N).find(|&row| self.domains[row][c] & bit != 0)
+            {
+                self.set_cell(r2, c, bit, Rule::HiddenSingle);
             }
         }
     }
@@ -709,7 +710,7 @@ impl<const N: usize> QueueSolverState<N> {
             for c in 0..N {
                 let bits = self.domains[r][c] & (Self::ALL_DIGITS | Self::ROW_BLACKS);
                 let freedom = bits.count_ones();
-                if freedom > 1 && best.map_or(true, |b| freedom < b.2) {
+                if freedom > 1 && best.is_none_or(|b| freedom < b.2) {
                     if freedom == 2 {
                         return Some((r, c));
                     }
@@ -738,7 +739,6 @@ impl<const N: usize> QueueSolverState<N> {
         }
 
         let Some((row, col)) = state.pick_branching_cell() else {
-            dbg!(state);
             panic!("Propagation stalled");
         };
 
@@ -773,7 +773,6 @@ impl<const N: usize> QueueSolverState<N> {
         }
 
         let Some((row, col)) = state.pick_branching_cell() else {
-            dbg!(state);
             panic!("Propagation stalled");
         };
 
@@ -807,13 +806,12 @@ impl<const N: usize> QueueSolverState<N> {
 
 impl<const N: usize> std::fmt::Display for QueueSolverState<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ct = &self.puzzle.col_targets;
         write!(f, "    ")?;
-        for c in 0..N {
+        for (c, &t) in self.puzzle.col_targets.iter().enumerate() {
             if c > 0 {
                 write!(f, "  ")?;
             }
-            write!(f, "{:2}", ct[c])?;
+            write!(f, "{t:2}")?;
         }
         writeln!(f)?;
         let sep = format!("   +{}", "---+".repeat(N));

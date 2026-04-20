@@ -249,21 +249,25 @@ fn orbit_size<const N: usize>(row: [u8; N], col: [u8; N]) -> u64 {
 /// Therefore palindromic row/col targets immediately imply two solutions.
 ///
 /// For N ≤ 3 this shortcut is skipped (degenerate cases).
-fn uniqueness_ruled_out<const N: usize>(grid: &Grid<N>, row_t: [u8; N], col_t: [u8; N]) -> bool {
+fn uniqueness_ruled_out<const N: usize>(
+    grid: &Grid<N>,
+    row_targets: [u8; N],
+    col_targets: [u8; N],
+) -> bool {
     if N <= 3 {
         return false;
     }
-    let mut rev_row = row_t;
+    let mut rev_row = row_targets;
     rev_row.reverse();
-    if row_t == rev_row {
+    if row_targets == rev_row {
         return true; // V(grid) ≠ grid always, so two solutions exist
     }
-    let mut rev_col = col_t;
+    let mut rev_col = col_targets;
     rev_col.reverse();
-    if col_t == rev_col {
+    if col_targets == rev_col {
         return true; // H(grid) ≠ grid always, so two solutions exist
     }
-    if row_t == col_t {
+    if row_targets == col_targets {
         // Self-transposed grids can exist, so we must compare explicitly.
         return grid.transpose() != *grid;
     }
@@ -287,8 +291,12 @@ impl std::fmt::Display for SolverChoice {
 }
 
 /// Return `true` if the puzzle with the given targets has exactly one solution.
-fn is_valid_puzzle<const N: usize>(row_t: [u8; N], col_t: [u8; N], solver: SolverChoice) -> bool {
-    let puzzle = Puzzle::new(row_t, col_t);
+fn is_valid_puzzle<const N: usize>(
+    row_targets: [u8; N],
+    col_targets: [u8; N],
+    solver: SolverChoice,
+) -> bool {
+    let puzzle = Puzzle::new(row_targets, col_targets);
     match solver {
         SolverChoice::Basic => SolverState::new(puzzle).count_solutions(2) == 1,
         SolverChoice::Queue => QueueSolverState::new(puzzle).count_solutions(2) == 1,
@@ -324,12 +332,12 @@ fn dfs<const N: usize>(
         let grid = Grid {
             cells: partial.cells,
         };
-        let (row_t, col_t) = grid.compute_targets();
-        if is_canonical(row_t, col_t)
-            && !uniqueness_ruled_out(&grid, row_t, col_t)
-            && is_valid_puzzle(row_t, col_t, solver)
+        let (row_targets, col_targets) = grid.compute_targets();
+        if is_canonical(row_targets, col_targets)
+            && !uniqueness_ruled_out(&grid, row_targets, col_targets)
+            && is_valid_puzzle(row_targets, col_targets, solver)
         {
-            *valid += orbit_size(row_t, col_t);
+            *valid += orbit_size(row_targets, col_targets);
         }
         return;
     }
@@ -420,20 +428,20 @@ mod tests {
         // For every unique target set, the brute-force count is the number of
         // grids that share those targets.  The solver must agree.
         let mut mismatches: Vec<([u8; N], [u8; N], usize, usize)> = Vec::new();
-        for ((row_t, col_t), brute_count) in &by_targets {
-            let puzzle = Puzzle::new(*row_t, *col_t);
+        for ((row_targets, col_targets), brute_count) in &by_targets {
+            let puzzle = Puzzle::new(*row_targets, *col_targets);
             let state = SolverState::new(puzzle);
             let solver_count = state.count_solutions(brute_count + 1);
             if solver_count != *brute_count {
-                mismatches.push((*row_t, *col_t, *brute_count, solver_count));
+                mismatches.push((*row_targets, *col_targets, *brute_count, solver_count));
             }
         }
 
         if !mismatches.is_empty() {
-            for (row_t, col_t, expected, got) in &mismatches {
+            for (row_targets, col_targets, expected, got) in &mismatches {
                 eprintln!(
                     "MISMATCH row={:?} col={:?}  brute_force={expected}  solver={got}",
-                    row_t, col_t
+                    row_targets, col_targets
                 );
             }
             panic!(
