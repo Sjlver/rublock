@@ -50,8 +50,12 @@ pub enum SolveOutcome<S> {
 //
 // We distinguish between various values for black. Black 1 means the first
 // black entry in a row (or column), and black 2 is the second.
-
-type CellDomain = u64;
+//
+// In principle, u16 suffices for puzzles up to N=13, and would lead to a smaller
+// solver state and faster cloning. However, performance on puzzles that don't
+// backtrack seems to decrease for reasons I don't fully understand. Hence
+// use u64.
+pub type CellDomain = u64;
 
 // ── SolverState ───────────────────────────────────────────────────────────────
 //

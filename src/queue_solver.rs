@@ -2,10 +2,8 @@ use std::usize;
 
 use tracing::{instrument, trace};
 
-use crate::solver::{Puzzle, SolveOutcome, Tables};
+use crate::solver::{CellDomain, Puzzle, SolveOutcome, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
-
-type CellDomain = u64;
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 
