@@ -125,6 +125,19 @@ fn run<const N: usize>(
     num_threads: usize,
     solver: SolverChoice,
 ) {
+    // Fast path: `--max-nodes=1` means "solvable by propagation alone".  We
+    // skip the full backtracking `solve()` — propagation reaching a solved
+    // state implies a unique solution — and, since every match is valid by
+    // construction, the "valid puzzles" / "nodes seen" counters carry no
+    // information.  Announce the mode and drop those fields from the UI.
+    let fast_path = max_nodes == 1;
+    if fast_path {
+        println!(
+            "max-nodes=1: propagation-only fast path (no backtracking search; \
+             valid-puzzle counts omitted)."
+        );
+    }
+
     let grids = AtomicU64::new(0);
     let valid_puzzles = AtomicU64::new(0);
     // Sentinel values: min starts at `u64::MAX` so `fetch_min` lowers it on
@@ -141,11 +154,16 @@ fn run<const N: usize>(
     // and `{msg}` is the free-form string we update with the valid-puzzle
     // count and observed node range.  Thread count is constant for this
     // run, so we bake it straight into the template rather than reaching
-    // for `{prefix}`.
-    let template =
-        format!("{{spinner}} tried {{pos}} grids on {num_threads} threads, {{msg}}");
+    // for `{prefix}`.  The fast path has nothing meaningful for `{msg}`.
+    let template = if fast_path {
+        format!("{{spinner}} tried {{pos}} grids on {num_threads} threads")
+    } else {
+        format!("{{spinner}} tried {{pos}} grids on {num_threads} threads, {{msg}}")
+    };
     pb.set_style(ProgressStyle::with_template(&template).unwrap());
-    pb.set_message(format_status(0, u64::MAX, 0));
+    if !fast_path {
+        pb.set_message(format_status(0, u64::MAX, 0));
+    }
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let (tx, rx) = mpsc::channel::<([u8; N], [u8; N], u64)>();
@@ -197,11 +215,13 @@ fn run<const N: usize>(
                     // loads are racy (workers may be mid-update), which is
                     // fine for a UI counter.
                     pb.set_position(grids.load(Ordering::Relaxed));
-                    pb.set_message(format_status(
-                        valid_puzzles.load(Ordering::Relaxed),
-                        min_nodes_seen.load(Ordering::Relaxed),
-                        max_nodes_seen.load(Ordering::Relaxed),
-                    ));
+                    if !fast_path {
+                        pb.set_message(format_status(
+                            valid_puzzles.load(Ordering::Relaxed),
+                            min_nodes_seen.load(Ordering::Relaxed),
+                            max_nodes_seen.load(Ordering::Relaxed),
+                        ));
+                    }
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => return None,
             }
@@ -218,6 +238,9 @@ fn run<const N: usize>(
         // module-level note on why we don't ship the solver state across
         // threads.
         let puzzle = Puzzle::new(row_targets, col_targets);
+        // Slow-path stats (node count, total valid puzzles).  `None` signals
+        // the fast path, where neither value is meaningful.
+        let slow_stats = (!fast_path).then_some((nodes, total_valid));
         match solver {
             SolverChoice::Basic => {
                 let solved = match SolverState::new(puzzle).solve() {
@@ -228,10 +251,9 @@ fn run<const N: usize>(
                     &row_targets,
                     &col_targets,
                     &solved,
-                    nodes,
                     total_grids,
-                    total_valid,
                     elapsed,
+                    slow_stats,
                 );
             }
             SolverChoice::Queue => {
@@ -243,10 +265,9 @@ fn run<const N: usize>(
                     &row_targets,
                     &col_targets,
                     &solved,
-                    nodes,
                     total_grids,
-                    total_valid,
                     elapsed,
+                    slow_stats,
                 );
             }
         }
@@ -288,6 +309,29 @@ fn worker<const N: usize>(
 
         let (row_targets, col_targets) = grid.compute_targets();
         let puzzle = Puzzle::new(row_targets, col_targets);
+
+        if max_nodes == 1 {
+            // Propagation-only fast path.  If propagation alone reaches a
+            // solved state, the solution is trivially unique (no branching
+            // was needed), so we skip the uniqueness-checking `solve()`
+            // call entirely.  `valid_puzzles` and the node-range atomics
+            // carry no information in this mode and are left untouched.
+            let solved = match solver {
+                SolverChoice::Basic => {
+                    let mut st = SolverState::new(puzzle);
+                    st.propagate();
+                    st.is_solved()
+                }
+                SolverChoice::Queue => QueueSolverState::new(puzzle).is_solved(),
+            };
+            if solved {
+                done.store(true, Ordering::Relaxed);
+                let _ = tx.send((row_targets, col_targets, 1));
+                return;
+            }
+            continue;
+        }
+
         let unique_nodes = match solver {
             SolverChoice::Basic => match SolverState::new(puzzle).solve() {
                 SolveOutcome::Unique(solved) => Some(solved.stats().search_nodes),
@@ -319,14 +363,18 @@ fn worker<const N: usize>(
     }
 }
 
+/// Print the winning puzzle, its solved state, and run statistics.
+///
+/// `slow_stats = Some((nodes, valid_puzzles))` on the full solve path;
+/// `None` on the `--max-nodes=1` fast path, where node counts and the
+/// "valid puzzles" running total carry no information.
 fn report<const N: usize, S: std::fmt::Display>(
     row_targets: &[u8; N],
     col_targets: &[u8; N],
     solved: &S,
-    nodes: u64,
     grids: u64,
-    valid_puzzles: u64,
     elapsed: Duration,
+    slow_stats: Option<(u64, u64)>,
 ) {
     // Targets line: row targets followed by column targets, ready to pipe
     // into `cargo run -- <targets>`.
@@ -337,11 +385,18 @@ fn report<const N: usize, S: std::fmt::Display>(
     println!();
     print!("{solved}");
     println!();
-    println!("search nodes: {nodes}");
-    println!(
-        "Searched {valid_puzzles} valid puzzles in {grids} grids in {:.1} seconds.",
-        elapsed.as_secs_f64()
-    );
+    if let Some((nodes, valid_puzzles)) = slow_stats {
+        println!("search nodes: {nodes}");
+        println!(
+            "Searched {valid_puzzles} valid puzzles in {grids} grids in {:.1} seconds.",
+            elapsed.as_secs_f64()
+        );
+    } else {
+        println!(
+            "Searched {grids} grids in {:.1} seconds.",
+            elapsed.as_secs_f64()
+        );
+    }
 }
 
 // Attempt to fill `cells` from `pos` onward, trying candidates in a random
