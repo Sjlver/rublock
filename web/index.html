@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doplo Puzzle Generator</title>
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f4f0;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+
+    /* ── Screen-only controls ──────────────────────────────────────────── */
+    #controls {
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    #controls h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-right: auto;
+    }
+
+    .field {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .field label {
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+    .field select,
+    .field input[type="number"] {
+      font-size: 0.9rem;
+      padding: 0.4rem 0.6rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      width: 5rem;
+      background: #fafafa;
+    }
+
+    #btn-generate {
+      padding: 0.5rem 1.4rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    #btn-generate:hover { background: #4338ca; }
+    #btn-generate:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    #btn-print {
+      padding: 0.5rem 1.4rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: transparent;
+      color: #4f46e5;
+      border: 2px solid #4f46e5;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    #btn-print:hover { background: #eef2ff; }
+
+    #status {
+      font-size: 0.85rem;
+      color: #888;
+      min-width: 8rem;
+    }
+
+    /* ── Puzzle output area ────────────────────────────────────────────── */
+    #output {
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    /* Each .page-group holds 6 puzzles in a 2-column layout */
+    .page-group {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 2rem 3rem;
+    }
+
+    /* ── Individual puzzle ─────────────────────────────────────────────── */
+    .puzzle-wrap {
+      display: inline-block;
+    }
+
+    .puzzle {
+      border-collapse: collapse;
+    }
+
+    .puzzle td {
+      width: 2.2rem;
+      height: 2.2rem;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 1rem;
+    }
+
+    /* Target cells (first row and first column) */
+    .puzzle td.target {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #333;
+    }
+
+    /* Empty corner */
+    .puzzle td.corner { }
+
+    /* Playable cells */
+    .puzzle td.cell {
+      border: 1.5px solid #444;
+    }
+
+    /* ── Promo footer ──────────────────────────────────────────────────── */
+    .promo {
+      display: none; /* hidden on screen */
+      font-size: 0.75rem;
+      color: #666;
+      text-align: center;
+      padding-top: 0.5rem;
+      border-top: 1px solid #ccc;
+      margin-top: 0.5rem;
+    }
+
+    /* ── Print styles ──────────────────────────────────────────────────── */
+    @media print {
+      body { background: #fff; }
+
+      #controls { display: none; }
+
+      #output { padding: 0; gap: 0; }
+
+      .page-group {
+        gap: 8mm 10mm;
+        page-break-after: always;
+        /* Leave room at the bottom for the promo */
+        padding-bottom: 12mm;
+        position: relative;
+      }
+
+      .page-group:last-child {
+        page-break-after: auto;
+      }
+
+      .promo {
+        display: block;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+
+      .puzzle td {
+        width: 9mm;
+        height: 9mm;
+        font-size: 8pt;
+      }
+
+      .puzzle td.target {
+        font-size: 8pt;
+      }
+
+      .puzzle td.cell {
+        border: 0.8pt solid #333;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  <h1>Doplo Puzzle Generator</h1>
+
+  <div class="field">
+    <label for="sel-size">Size</label>
+    <select id="sel-size">
+      <option value="5">5 × 5</option>
+      <option value="6" selected>6 × 6</option>
+      <option value="7">7 × 7</option>
+      <option value="8">8 × 8</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="inp-count">Puzzles</label>
+    <input id="inp-count" type="number" min="1" max="60" value="6">
+  </div>
+
+  <button id="btn-generate" disabled>Generate</button>
+  <button id="btn-print">Print</button>
+  <span id="status">Loading…</span>
+</div>
+
+<div id="output"></div>
+
+<script type="module">
+  import init, { generate_puzzle } from './pkg/rublock.js';
+
+  const btnGenerate = document.getElementById('btn-generate');
+  const btnPrint    = document.getElementById('btn-print');
+  const selSize     = document.getElementById('sel-size');
+  const inpCount    = document.getElementById('inp-count');
+  const statusEl    = document.getElementById('status');
+  const outputEl    = document.getElementById('output');
+
+  // ── Initialise wasm ──────────────────────────────────────────────────
+  await init();
+  statusEl.textContent = 'Ready';
+  btnGenerate.disabled = false;
+
+  // ── Puzzle rendering ─────────────────────────────────────────────────
+  function renderPuzzle(json) {
+    const { size, row_targets, col_targets } = JSON.parse(json);
+    const table = document.createElement('table');
+    table.className = 'puzzle';
+
+    // Header row: corner + col targets
+    const thead = table.createTHead();
+    const hrow = thead.insertRow();
+    const corner = hrow.insertCell();
+    corner.className = 'corner';
+    for (let c = 0; c < size; c++) {
+      const td = hrow.insertCell();
+      td.className = 'target';
+      td.textContent = col_targets[c];
+    }
+
+    // Body rows: row target + empty cells
+    const tbody = table.createTBody();
+    for (let r = 0; r < size; r++) {
+      const row = tbody.insertRow();
+      const th = row.insertCell();
+      th.className = 'target';
+      th.textContent = row_targets[r];
+      for (let c = 0; c < size; c++) {
+        const td = row.insertCell();
+        td.className = 'cell';
+      }
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'puzzle-wrap';
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  // ── Generate handler ─────────────────────────────────────────────────
+  const PUZZLES_PER_PAGE = 6;
+  const PROMO = `Doplo puzzles generated by ${window.location.origin}${window.location.pathname}`;
+
+  function generateAll() {
+    const size  = parseInt(selSize.value, 10);
+    const count = Math.max(1, Math.min(60, parseInt(inpCount.value, 10) || 6));
+
+    outputEl.innerHTML = '';
+    statusEl.textContent = 'Generating…';
+    btnGenerate.disabled = true;
+
+    // Yield to the browser between pages so the UI doesn't freeze
+    let generated = 0;
+    function generatePage() {
+      const remaining = count - generated;
+      if (remaining <= 0) {
+        statusEl.textContent = `${count} puzzle${count !== 1 ? 's' : ''} ready`;
+        btnGenerate.disabled = false;
+        return;
+      }
+
+      const pageSize = Math.min(PUZZLES_PER_PAGE, remaining);
+      const group = document.createElement('div');
+      group.className = 'page-group';
+      // Make positioning context work for the absolute promo in print
+      group.style.position = 'relative';
+
+      for (let i = 0; i < pageSize; i++) {
+        const json = generate_puzzle(size);
+        group.appendChild(renderPuzzle(json));
+      }
+
+      // Promo footer (visible only in print)
+      const promo = document.createElement('div');
+      promo.className = 'promo';
+      promo.textContent = PROMO;
+      group.appendChild(promo);
+
+      outputEl.appendChild(group);
+      generated += pageSize;
+
+      // Schedule the next page asynchronously
+      setTimeout(generatePage, 0);
+    }
+
+    generatePage();
+  }
+
+  btnGenerate.addEventListener('click', generateAll);
+  btnPrint.addEventListener('click', () => window.print());
+</script>
+
+</body>
+</html>

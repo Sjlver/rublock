@@ -1,2 +1,3 @@
 [tools]
+"cargo:wasm-pack" = "latest"
 rust = "latest"
