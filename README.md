@@ -2,6 +2,8 @@
 
 A Rust learning project — a solver for a small grid puzzle.
 
+Try it online: https://dev.purpureus.net/rublock/
+
 ## The Puzzle
 
 The puzzle is called **Doplo** and is published by *Küng Rätsel* at <https://doplo.ch>. I didn't invent it — I just wrote this solver (with a lot of assistance from Anthropic's Claude).
