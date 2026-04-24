@@ -59,4 +59,4 @@ search nodes: 323  (after 3119192 grids)
 
 There's also a binary to count the number of valid puzzles of a given size. It works well up to size 6, but sizes larger than that become prohibitively expensive.
 
-Two additional binaries exist for development only: `gen_bench_puzzles` prints a Rust snippet to paste into `benches/solver_bench.rs`, and `compare` runs both solver backends on a fixed set of puzzles and asserts they agree.
+One additional binary, `compare`, exists for development: it runs both solver backends on a fixed set of puzzles and asserts they agree.
