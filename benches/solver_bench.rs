@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolverState};
+use rublock::basic_solver::{BasicSolverState, Puzzle};
 
 // A fixed set of hand-picked 6×6 puzzles: five that propagation alone solves,
 // and five that require backtracking.  To refresh these, use `gen_puzzle` with
@@ -35,7 +35,7 @@ fn bench_solver(c: &mut Criterion) {
         group.bench_function(format!("basic/{i}"), |b| {
             b.iter(|| {
                 assert_eq!(
-                    SolverState::new(black_box(Puzzle::new(row_targets, col_targets)))
+                    BasicSolverState::new(black_box(Puzzle::new(row_targets, col_targets)))
                         .count_solutions(2),
                     1
                 );

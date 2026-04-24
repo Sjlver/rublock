@@ -1,6 +1,6 @@
 use tracing::{instrument, trace};
 
-use crate::solver::{CellDomain, Puzzle, SolveOutcome, Tables};
+use crate::basic_solver::{CellDomain, Puzzle, SolveOutcome, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
@@ -790,7 +790,7 @@ impl<const N: usize> QueueSolverState<N> {
         state.collect_solutions(limit, out);
     }
 
-    /// Solve the puzzle, reporting uniqueness.  See `SolverState::solve`.
+    /// Solve the puzzle, reporting uniqueness.  See `BasicSolverState::solve`.
     pub fn solve(&self) -> SolveOutcome<Self> {
         let mut found: Vec<Self> = Vec::with_capacity(2);
         self.collect_solutions(2, &mut found);

@@ -40,7 +40,7 @@ use rand::seq::SliceRandom;
 use rublock::enumerate::SolverChoice;
 use rublock::grid::{Cell, Grid};
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolveOutcome, SolverState};
+use rublock::basic_solver::{BasicSolverState, Puzzle, SolveOutcome};
 
 fn usage() -> ! {
     eprintln!(
@@ -243,7 +243,7 @@ fn run<const N: usize>(
         let slow_stats = (!fast_path).then_some((nodes, total_valid));
         match solver {
             SolverChoice::Basic => {
-                let solved = match SolverState::new(puzzle).solve() {
+                let solved = match BasicSolverState::new(puzzle).solve() {
                     SolveOutcome::Unique(s) => s,
                     _ => unreachable!("worker just generated this puzzle as Unique"),
                 };
@@ -318,7 +318,7 @@ fn worker<const N: usize>(
             // carry no information in this mode and are left untouched.
             let solved = match solver {
                 SolverChoice::Basic => {
-                    let mut st = SolverState::new(puzzle);
+                    let mut st = BasicSolverState::new(puzzle);
                     st.propagate();
                     st.is_solved()
                 }
@@ -333,7 +333,7 @@ fn worker<const N: usize>(
         }
 
         let unique_nodes = match solver {
-            SolverChoice::Basic => match SolverState::new(puzzle).solve() {
+            SolverChoice::Basic => match BasicSolverState::new(puzzle).solve() {
                 SolveOutcome::Unique(solved) => Some(solved.stats().search_nodes),
                 _ => None,
             },

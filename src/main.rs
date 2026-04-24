@@ -1,6 +1,6 @@
 use rublock::enumerate::SolverChoice;
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolveOutcome, SolverState};
+use rublock::basic_solver::{BasicSolverState, Puzzle, SolveOutcome};
 use rublock::stats::Stats;
 
 fn usage() -> ! {
@@ -65,7 +65,7 @@ fn run<const N: usize>(nums: &[u8], solver: SolverChoice) {
     let puzzle = Puzzle::new(row_targets, col_targets);
     match solver {
         SolverChoice::Basic => {
-            let state = SolverState::new(puzzle);
+            let state = BasicSolverState::new(puzzle);
             let outcome = state.solve();
             report(outcome, state.stats());
         }

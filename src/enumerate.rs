@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
 use crate::grid::{Cell, Grid};
+use crate::basic_solver::{BasicSolverState, Puzzle};
 use crate::queue_solver::QueueSolverState;
-use crate::solver::{Puzzle, SolverState};
 
 // ── PartialGrid ───────────────────────────────────────────────────────────────
 
@@ -298,7 +298,7 @@ fn is_valid_puzzle<const N: usize>(
 ) -> bool {
     let puzzle = Puzzle::new(row_targets, col_targets);
     match solver {
-        SolverChoice::Basic => SolverState::new(puzzle).count_solutions(2) == 1,
+        SolverChoice::Basic => BasicSolverState::new(puzzle).count_solutions(2) == 1,
         SolverChoice::Queue => QueueSolverState::new(puzzle).count_solutions(2) == 1,
     }
 }
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn solver_count_solutions_matches_brute_force() {
-        use crate::solver::{Puzzle, SolverState};
+        use crate::basic_solver::{BasicSolverState, Puzzle};
         use std::collections::HashMap;
 
         const N: usize = 4;
@@ -430,7 +430,7 @@ mod tests {
         let mut mismatches: Vec<([u8; N], [u8; N], usize, usize)> = Vec::new();
         for ((row_targets, col_targets), brute_count) in &by_targets {
             let puzzle = Puzzle::new(*row_targets, *col_targets);
-            let state = SolverState::new(puzzle);
+            let state = BasicSolverState::new(puzzle);
             let solver_count = state.count_solutions(brute_count + 1);
             if solver_count != *brute_count {
                 mismatches.push((*row_targets, *col_targets, *brute_count, solver_count));

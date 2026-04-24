@@ -25,7 +25,7 @@ impl<const N: usize> Puzzle<N> {
 
 /// The result of a `solve()` call on a solver state.
 ///
-/// Generic over the state type so both `SolverState` and `QueueSolverState`
+/// Generic over the state type so both `BasicSolverState` and `QueueSolverState`
 /// can use it.  When there are multiple solutions, we return the **first**
 /// one found — enough for display, while still flagging non-uniqueness.
 #[derive(Debug, Clone)]
@@ -57,7 +57,7 @@ pub enum SolveOutcome<S> {
 // use u64.
 pub type CellDomain = u64;
 
-// ── SolverState ───────────────────────────────────────────────────────────────
+// ── BasicSolverState ───────────────────────────────────────────────────────────────
 //
 // Working state during search.
 //
@@ -66,7 +66,7 @@ pub type CellDomain = u64;
 // accidental copies of this large struct would silently produce stale state.
 
 #[derive(Clone)]
-pub struct SolverState<const N: usize> {
+pub struct BasicSolverState<const N: usize> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
     tables: Arc<Tables>,
@@ -75,7 +75,7 @@ pub struct SolverState<const N: usize> {
     stats: StatsHandle,
 }
 
-impl<const N: usize> SolverState<N> {
+impl<const N: usize> BasicSolverState<N> {
     pub fn new(puzzle: Puzzle<N>) -> Self {
         // All value bits set: bit 1 through bit N+2.
         let full_cell: CellDomain = ((1 << (N + 2)) - 1) << 1;
@@ -96,9 +96,9 @@ impl<const N: usize> SolverState<N> {
 // We implement `Debug` manually because `StatsHandle` deliberately avoids a
 // derived `Debug` in release (it's a unit struct).  Showing the domain grid
 // and puzzle targets is all we need here.
-impl<const N: usize> fmt::Debug for SolverState<N> {
+impl<const N: usize> fmt::Debug for BasicSolverState<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SolverState")
+        f.debug_struct("BasicSolverState")
             .field("puzzle", &self.puzzle)
             .field("domains", &self.domains)
             .finish()
@@ -109,7 +109,7 @@ impl<const N: usize> fmt::Debug for SolverState<N> {
 //
 // `Tables` holds data derived purely from the grid size that is cheap to build
 // but reused on every propagation pass.  It is computed once in
-// `SolverState::new` and shared across all backtracking clones via `Arc`.
+// `BasicSolverState::new` and shared across all backtracking clones via `Arc`.
 //
 // All fields are `Vec`-based because their sizes depend on `num_digits = N-2`,
 // which is only known at runtime.
@@ -175,7 +175,7 @@ impl Tables {
 
 // ── Solver rules ──────────────────────────────────────────────────────────────
 
-impl<const N: usize> SolverState<N> {
+impl<const N: usize> BasicSolverState<N> {
     // Bit positions for the "black" value variants.
     const BLACK1_ROW: CellDomain = 1 << (N - 1);
     const BLACK2_ROW: CellDomain = 1 << N;
@@ -782,7 +782,7 @@ impl<const N: usize> SolverState<N> {
 
 // ── Display ───────────────────────────────────────────────────────────────────
 
-impl<const N: usize> fmt::Display for SolverState<N> {
+impl<const N: usize> fmt::Display for BasicSolverState<N> {
     /// Print the board and, for unsolved cells, the remaining domain bits.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "    ")?;
@@ -833,7 +833,7 @@ mod tests {
 
     #[test]
     fn cell_domain_all_values_possible() {
-        let state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         // 8 bits set: numbers 1-4 and the four variants of black
         assert_eq!(state.domains[0][0], 0b111111110);
         assert_eq!(state.domains[5][5], 0b111111110);
@@ -843,16 +843,16 @@ mod tests {
 
     #[test]
     fn row_cells_handles_wrapping_true() {
-        assert_eq!(SolverState::<6>::row_cells(0, 0, 3, true), None);
-        assert_eq!(SolverState::<6>::row_cells(0, 1, 3, true), None);
-        assert_eq!(SolverState::<6>::row_cells(0, 2, 3, true), None);
-        assert_eq!(SolverState::<6>::row_cells(0, 3, 3, true), None);
+        assert_eq!(BasicSolverState::<6>::row_cells(0, 0, 3, true), None);
+        assert_eq!(BasicSolverState::<6>::row_cells(0, 1, 3, true), None);
+        assert_eq!(BasicSolverState::<6>::row_cells(0, 2, 3, true), None);
+        assert_eq!(BasicSolverState::<6>::row_cells(0, 3, 3, true), None);
         assert_eq!(
-            SolverState::<6>::row_cells(0, 4, 3, true),
+            BasicSolverState::<6>::row_cells(0, 4, 3, true),
             Some(vec![(0, 4), (0, 5), (0, 0)])
         );
         assert_eq!(
-            SolverState::<6>::row_cells(0, 5, 3, true),
+            BasicSolverState::<6>::row_cells(0, 5, 3, true),
             Some(vec![(0, 5), (0, 0), (0, 1)])
         );
     }
@@ -860,33 +860,33 @@ mod tests {
     #[test]
     fn row_cells_handles_wrapping_false() {
         assert_eq!(
-            SolverState::<6>::row_cells(0, 0, 3, false),
+            BasicSolverState::<6>::row_cells(0, 0, 3, false),
             Some(vec![(0, 0), (0, 1), (0, 2)])
         );
         assert_eq!(
-            SolverState::<6>::row_cells(0, 1, 3, false),
+            BasicSolverState::<6>::row_cells(0, 1, 3, false),
             Some(vec![(0, 1), (0, 2), (0, 3)])
         );
         assert_eq!(
-            SolverState::<6>::row_cells(0, 2, 3, false),
+            BasicSolverState::<6>::row_cells(0, 2, 3, false),
             Some(vec![(0, 2), (0, 3), (0, 4)])
         );
         assert_eq!(
-            SolverState::<6>::row_cells(0, 3, 3, false),
+            BasicSolverState::<6>::row_cells(0, 3, 3, false),
             Some(vec![(0, 3), (0, 4), (0, 5)])
         );
-        assert_eq!(SolverState::<6>::row_cells(0, 4, 3, false), None);
-        assert_eq!(SolverState::<6>::row_cells(0, 5, 3, false), None);
+        assert_eq!(BasicSolverState::<6>::row_cells(0, 4, 3, false), None);
+        assert_eq!(BasicSolverState::<6>::row_cells(0, 5, 3, false), None);
     }
 
     #[test]
     fn black1_row_always_forbidden_at_last_position() {
         // Black-1 can never sit at position 5, even for target = 0.
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
         for r in 0..6 {
             assert_eq!(
-                state.domains[r][5] & SolverState::<6>::BLACK1_ROW,
+                state.domains[r][5] & BasicSolverState::<6>::BLACK1_ROW,
                 0,
                 "row {r}: black-1 should be cleared at the last position"
             );
@@ -902,22 +902,22 @@ mod tests {
         //   p=3: MAX_SUM[1] =  4 < 9  → forbidden
         //   p=4: MAX_SUM[0] =  0 < 9  → forbidden
         //   p=5: always forbidden
-        let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_ne!(
-            state.domains[0][0] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][0] & BasicSolverState::<6>::BLACK1_ROW,
             0,
             "p=0 should still be allowed"
         );
         assert_ne!(
-            state.domains[0][1] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][1] & BasicSolverState::<6>::BLACK1_ROW,
             0,
             "p=1 should still be allowed"
         );
         for p in 2..6 {
             assert_eq!(
-                state.domains[0][p] & SolverState::<6>::BLACK1_ROW,
+                state.domains[0][p] & BasicSolverState::<6>::BLACK1_ROW,
                 0,
                 "p={p} should be forbidden for black-1 with target 9"
             );
@@ -927,7 +927,7 @@ mod tests {
     #[test]
     fn inside_outside_rule_target_9() {
         // Row 0 has target 9: digit 1 is outside the blacks.
-        let mut state = SolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([9, 0, 0, 0, 0, 0], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         // Middle cells lose digit 1.
@@ -965,7 +965,7 @@ mod tests {
     #[test]
     fn inside_outside_rule_target_8_column() {
         // Column 2 has target 8: digit 2 is outside the blacks.
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0, 0, 8, 0, 0, 0]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0, 0, 8, 0, 0, 0]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         // Middle cells lose digit 2.
@@ -978,12 +978,12 @@ mod tests {
         }
         // Row 0 and 5: only digit 2 remains.
         assert_eq!(
-            state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
+            state.domains[0][2] & BasicSolverState::<6>::ALL_DIGITS,
             (1 << 2),
             "row=0 should have only digit 2"
         );
         assert_eq!(
-            state.domains[5][2] & SolverState::<6>::ALL_DIGITS,
+            state.domains[5][2] & BasicSolverState::<6>::ALL_DIGITS,
             (1 << 2),
             "row=0 should have only digit 2"
         );
@@ -993,7 +993,7 @@ mod tests {
     fn set_cell_digit_propagates_to_row_and_col() {
         // Manually place digit 3 at (0, 0) and check it is removed from the
         // rest of row 0 and column 0, while other cells are untouched.
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         state.set_cell(0, 0, 1 << 3, Rule::Singleton);
 
         // The cell itself holds only digit 3.
@@ -1013,22 +1013,22 @@ mod tests {
 
     #[test]
     fn set_cell_row_black_propagates() {
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.set_cell(2, 1, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
+        state.set_cell(2, 1, BasicSolverState::<6>::BLACK1_ROW, Rule::Singleton);
 
         // The assigned cell keeps BLACK1_ROW and both col-black bits, but
         // loses digits and BLACK2_ROW.
         let d = state.domains[2][1];
-        assert_ne!(d & SolverState::<6>::BLACK1_ROW, 0, "keep BLACK1_ROW");
-        assert_ne!(d & SolverState::<6>::BLACK1_COL, 0, "keep BLACK1_COL");
-        assert_ne!(d & SolverState::<6>::BLACK2_COL, 0, "keep BLACK2_COL");
-        assert_eq!(d & SolverState::<6>::BLACK2_ROW, 0, "drop BLACK2_ROW");
-        assert_eq!(d & SolverState::<6>::ALL_DIGITS, 0, "drop all digits");
+        assert_ne!(d & BasicSolverState::<6>::BLACK1_ROW, 0, "keep BLACK1_ROW");
+        assert_ne!(d & BasicSolverState::<6>::BLACK1_COL, 0, "keep BLACK1_COL");
+        assert_ne!(d & BasicSolverState::<6>::BLACK2_COL, 0, "keep BLACK2_COL");
+        assert_eq!(d & BasicSolverState::<6>::BLACK2_ROW, 0, "drop BLACK2_ROW");
+        assert_eq!(d & BasicSolverState::<6>::ALL_DIGITS, 0, "drop all digits");
 
         // BLACK1_ROW is gone from every other cell in row 2.
         for c in (0..6).filter(|&c| c != 1) {
             assert_eq!(
-                state.domains[2][c] & SolverState::<6>::BLACK1_ROW,
+                state.domains[2][c] & BasicSolverState::<6>::BLACK1_ROW,
                 0,
                 "col {c} should lose BLACK1_ROW"
             );
@@ -1037,14 +1037,14 @@ mod tests {
         // BLACK2_ROW is gone from every everything to the left, kept on the right
         for c in 0..1 {
             assert_eq!(
-                state.domains[2][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[2][c] & BasicSolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should lose BLACK2_ROW"
             );
         }
         for c in 2..6 {
             assert_ne!(
-                state.domains[2][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[2][c] & BasicSolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should keep BLACK2_ROW"
             );
@@ -1056,19 +1056,19 @@ mod tests {
         // Place BLACK1_ROW at position 3.  Positions 0..3 must lose BLACK2_ROW
         // (they are left of black-1 and can't be black-2).  Positions 4 and 5
         // keep BLACK2_ROW (black-2 still possible there).
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
-        state.set_cell(0, 3, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
+        state.set_cell(0, 3, BasicSolverState::<6>::BLACK1_ROW, Rule::Singleton);
 
         for c in 0..3 {
             assert_eq!(
-                state.domains[0][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should lose BLACK2_ROW (left of black-1)"
             );
         }
         for c in 4..6 {
             assert_ne!(
-                state.domains[0][c] & SolverState::<6>::BLACK2_ROW,
+                state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW,
                 0,
                 "col {c} should keep BLACK2_ROW (right of black-1)"
             );
@@ -1081,20 +1081,20 @@ mod tests {
         // Manually clear BLACK2_ROW from every cell except col 3.
         // Then BLACK1_ROW is only valid at col 2 (the sole cell adjacent to
         // the remaining BLACK2_ROW candidate).
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         for c in (0..6).filter(|&c| c != 3) {
-            state.domains[0][c] &= !SolverState::<6>::BLACK2_ROW;
+            state.domains[0][c] &= !BasicSolverState::<6>::BLACK2_ROW;
         }
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_ne!(
-            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][2] & BasicSolverState::<6>::BLACK1_ROW,
             0,
             "col 2 should keep BLACK1_ROW (adjacent to the only BLACK2_ROW at col 3)"
         );
         for p in (0..6).filter(|&p| p != 2) {
             assert_eq!(
-                state.domains[0][p] & SolverState::<6>::BLACK1_ROW,
+                state.domains[0][p] & BasicSolverState::<6>::BLACK1_ROW,
                 0,
                 "col {p} should lose BLACK1_ROW"
             );
@@ -1103,7 +1103,7 @@ mod tests {
 
     #[test]
     fn apply_singleton_rule_assigns_sole_digit() {
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Force cell (3, 3) to have only digit 2 in its domain.
         state.domains[3][3] = 1 << 2;
         // Run just this one rule (not propagate, to isolate it).
@@ -1121,7 +1121,7 @@ mod tests {
 
     #[test]
     fn apply_hidden_single_rule_assigns_forced_digit() {
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Remove digit 4 from every cell in row 0 except column 2.
         for c in (0..6).filter(|&c| c != 2) {
             state.domains[0][c] &= !(1 << 4);
@@ -1133,17 +1133,17 @@ mod tests {
 
     #[test]
     fn apply_black_consistency_rule_clears_col_blacks_when_no_row_blacks() {
-        let mut state = SolverState::new(Puzzle::new([0; 6], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([0; 6], [0; 6]));
         // Strip all row-black bits from cell (1, 4).
-        state.domains[1][4] &= !SolverState::<6>::ROW_BLACKS;
+        state.domains[1][4] &= !BasicSolverState::<6>::ROW_BLACKS;
         state.apply_black_consistency_rule(ChangeSet::all(6));
 
         // Col-black bits must now also be gone.
-        assert_eq!(state.domains[1][4] & SolverState::<6>::COL_BLACKS, 0);
+        assert_eq!(state.domains[1][4] & BasicSolverState::<6>::COL_BLACKS, 0);
         // But digit bits are intact.
         assert_eq!(
-            state.domains[1][4] & SolverState::<6>::ALL_DIGITS,
-            SolverState::<6>::ALL_DIGITS
+            state.domains[1][4] & BasicSolverState::<6>::ALL_DIGITS,
+            BasicSolverState::<6>::ALL_DIGITS
         );
     }
 
@@ -1152,13 +1152,13 @@ mod tests {
         // Row 0 has target 3. Pin BLACK1_ROW to col 1 and BLACK2_ROW to col 3.
         // The only inside cell is col 2; the only feasible tuple is {3}, so
         // the cage rule must narrow that cell's digit domain to just digit 3.
-        let mut state = SolverState::new(Puzzle::new([3, 0, 0, 0, 0, 0], [0; 6]));
-        state.set_cell(0, 1, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
-        state.set_cell(0, 3, SolverState::<6>::BLACK2_ROW, Rule::Singleton);
+        let mut state = BasicSolverState::new(Puzzle::new([3, 0, 0, 0, 0, 0], [0; 6]));
+        state.set_cell(0, 1, BasicSolverState::<6>::BLACK1_ROW, Rule::Singleton);
+        state.set_cell(0, 3, BasicSolverState::<6>::BLACK2_ROW, Rule::Singleton);
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
-            state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
+            state.domains[0][2] & BasicSolverState::<6>::ALL_DIGITS,
             1 << 3,
             "inside cell's digit domain should be reduced to just digit 3"
         );
@@ -1169,15 +1169,15 @@ mod tests {
         // Row 0, target 6. BLACK1_ROW at col 0, BLACK2_ROW at col 4.
         // Inside: cols 1, 2, 3.  Col 1 = digit 2, col 3 = digit 1.
         // Only feasible inside tuple: {1, 2, 3}, so col 2 must be digit 3.
-        let mut state = SolverState::new(Puzzle::new([6, 0, 0, 0, 0, 0], [0; 6]));
-        state.set_cell(0, 0, SolverState::<6>::BLACK1_ROW, Rule::Singleton);
-        state.set_cell(0, 4, SolverState::<6>::BLACK2_ROW, Rule::Singleton);
+        let mut state = BasicSolverState::new(Puzzle::new([6, 0, 0, 0, 0, 0], [0; 6]));
+        state.set_cell(0, 0, BasicSolverState::<6>::BLACK1_ROW, Rule::Singleton);
+        state.set_cell(0, 4, BasicSolverState::<6>::BLACK2_ROW, Rule::Singleton);
         state.set_cell(0, 1, 1 << 2, Rule::Singleton); // digit 2
         state.set_cell(0, 3, 1 << 1, Rule::Singleton); // digit 1
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
-            state.domains[0][2] & SolverState::<6>::ALL_DIGITS,
+            state.domains[0][2] & BasicSolverState::<6>::ALL_DIGITS,
             1 << 3,
             "empty inside cell's digit domain should be reduced to just digit 3"
         );
@@ -1188,10 +1188,10 @@ mod tests {
         // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
         // isn't clear whether col 2 could be BLACK1. It could be for the
         // shorter target.
-        let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_ne!(
-            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][2] & BasicSolverState::<6>::BLACK1_ROW,
             0,
             "BLACK1 still possible at col 2"
         );
@@ -1201,7 +1201,7 @@ mod tests {
         state.set_cell(0, 0, 1 << 3, Rule::Singleton);
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
-            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][2] & BasicSolverState::<6>::BLACK1_ROW,
             0,
             "BLACK1 no longer possible at col 2"
         );
@@ -1209,14 +1209,14 @@ mod tests {
         // In fact, this should completely determine the blacks.
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK1_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, true, false, false, false, false],
             "BLACK1 is completely determined"
         );
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, false, false, false, false, true],
             "BLACK2 is completely determined"
@@ -1228,10 +1228,10 @@ mod tests {
         // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
         // isn't clear whether col 2 could be BLACK1. It could be for the
         // shorter target.
-        let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_ne!(
-            state.domains[0][2] & SolverState::<6>::BLACK1_ROW,
+            state.domains[0][2] & BasicSolverState::<6>::BLACK1_ROW,
             0,
             "BLACK1 still possible at col 2"
         );
@@ -1242,14 +1242,14 @@ mod tests {
         state.apply_general_arc_consistency(ChangeSet::all(6));
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK1_ROW != 0)
                 .collect::<Vec<_>>(),
             [true, false, false, false, false, false],
             "BLACK1 is completely determined"
         );
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, false, false, false, true, false],
             "BLACK2 is completely determined"
@@ -1260,19 +1260,19 @@ mod tests {
     fn black_arc_consistency_black1_forward_not_enough_info() {
         // Row 0, target 7. Inside could be 3,4 or 1,2,4... so a priori it
         // isn't clear where the blacks are. The target could be 2 or 3 cells wide.
-        let mut state = SolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
+        let mut state = BasicSolverState::new(Puzzle::new([7, 0, 0, 0, 0, 0], [0; 6]));
         state.apply_general_arc_consistency(ChangeSet::all(6));
 
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK1_ROW != 0)
                 .collect::<Vec<_>>(),
             [true, true, true, false, false, false],
             "BLACK1 still possible in first three rows"
         );
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, false, false, true, true, true],
             "BLACK2 still possible in last three rows"
@@ -1285,14 +1285,14 @@ mod tests {
 
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK1_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, true, true, false, false, false],
             "BLACK1 has two remaining possibilities"
         );
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, false, false, false, true, true],
             "BLACK2 has two remaining possibilities"
@@ -1309,14 +1309,14 @@ mod tests {
 
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK1_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK1_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, false, true, false, false, false],
             "BLACK1 is determined"
         );
         assert_eq!(
             (0..6)
-                .map(|c| state.domains[0][c] & SolverState::<6>::BLACK2_ROW != 0)
+                .map(|c| state.domains[0][c] & BasicSolverState::<6>::BLACK2_ROW != 0)
                 .collect::<Vec<_>>(),
             [false, false, false, false, false, true],
             "BLACK2 is determined"
@@ -1328,10 +1328,10 @@ mod tests {
     #[test]
     fn count_solutions_returns_1_for_unique_puzzle() {
         // Both newspaper puzzles should have exactly one solution.
-        let state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let state = BasicSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
         assert_eq!(state.count_solutions(2), 1);
 
-        let state = SolverState::new(Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]));
+        let state = BasicSolverState::new(Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]));
         assert_eq!(state.count_solutions(2), 1);
     }
 
@@ -1339,7 +1339,7 @@ mod tests {
     fn count_solutions_returns_0_for_impossible_puzzle() {
         // Targets that cannot be satisfied: all targets = 1 requires a 1-cell
         // gap in every row and column, which is impossible to satisfy globally.
-        let state = SolverState::new(Puzzle::new([1; 6], [1; 6]));
+        let state = BasicSolverState::new(Puzzle::new([1; 6], [1; 6]));
         assert_eq!(state.count_solutions(1), 0);
     }
 
@@ -1347,7 +1347,7 @@ mod tests {
 
     #[test]
     fn solve_returns_unique_for_newspaper_puzzle() {
-        let state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let state = BasicSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
         match state.solve() {
             SolveOutcome::Unique(s) => assert!(s.is_solved()),
             other => panic!("expected Unique, got {other:?}"),
@@ -1358,7 +1358,7 @@ mod tests {
     fn solve_returns_multiple_for_underconstrained_puzzle() {
         // This puzzle is known to have many solutions (see
         // `solver_finds_known_solutions` above, which counts 32).
-        let state = SolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
+        let state = BasicSolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
         match state.solve() {
             SolveOutcome::Multiple(s) => assert!(s.is_solved()),
             other => panic!("expected Multiple, got {other:?}"),
@@ -1367,7 +1367,7 @@ mod tests {
 
     #[test]
     fn solve_returns_unsolvable_for_impossible_puzzle() {
-        let state = SolverState::new(Puzzle::new([1; 6], [1; 6]));
+        let state = BasicSolverState::new(Puzzle::new([1; 6], [1; 6]));
         assert!(matches!(state.solve(), SolveOutcome::Unsolvable));
     }
 
@@ -1377,7 +1377,7 @@ mod tests {
     #[test]
     fn stats_track_bits_removed_and_search_nodes() {
         // Solve a known-unique puzzle and check the counters are populated.
-        let state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let state = BasicSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
         let _ = state.solve();
         let s = state.stats();
         // One top-level search call at minimum; a uniquely-solvable puzzle
@@ -1395,7 +1395,7 @@ mod tests {
     #[test]
     fn stats_count_backtracks_on_underconstrained_puzzle() {
         // Multiple solutions → the search has to branch, so search_nodes > 1.
-        let state = SolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
+        let state = BasicSolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
         let _ = state.solve();
         let s = state.stats();
         assert!(
@@ -1412,7 +1412,7 @@ mod tests {
 
     #[test]
     fn newspaper_puzzle_1() {
-        let mut state = SolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let mut state = BasicSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
         state.propagate();
         assert_eq!(
             state.to_string(),
@@ -1437,7 +1437,7 @@ mod tests {
 
     #[test]
     fn newspaper_puzzle_2() {
-        let mut state = SolverState::new(Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]));
+        let mut state = BasicSolverState::new(Puzzle::new([3, 3, 5, 0, 7, 0], [5, 0, 2, 6, 5, 10]));
         state.propagate();
         assert_eq!(
             state.to_string(),
@@ -1468,7 +1468,7 @@ mod tests {
         // Targets must be 0 (no cells between adjacent blacks).
         // The only valid arrangement is [[B1,B2],[B1,B2]] with consistent
         // column ordering, and the solver should find exactly one solution.
-        let state = SolverState::<2>::new(Puzzle::new([0; 2], [0; 2]));
+        let state = BasicSolverState::<2>::new(Puzzle::new([0; 2], [0; 2]));
         assert_eq!(state.count_solutions(2), 1);
     }
 
@@ -1476,7 +1476,7 @@ mod tests {
     fn n4_has_solutions_for_satisfiable_targets() {
         // N=4 puzzle that can be satisfied.  All targets 0 means adjacent
         // blacks in every row and column; many valid grids exist.
-        let state = SolverState::<4>::new(Puzzle::new([0; 4], [0; 4]));
+        let state = BasicSolverState::<4>::new(Puzzle::new([0; 4], [0; 4]));
         assert!(state.count_solutions(1) >= 1);
     }
 
@@ -1485,7 +1485,7 @@ mod tests {
         // All row targets 3 forces blacks to col 0 and col 3 in every row,
         // which means every cell in cols 0 and 3 is black — but a column
         // can hold at most 2 blacks, giving a contradiction.
-        let state = SolverState::<4>::new(Puzzle::new([3; 4], [3; 4]));
+        let state = BasicSolverState::<4>::new(Puzzle::new([3; 4], [3; 4]));
         assert_eq!(state.count_solutions(1), 0);
     }
 
@@ -1493,18 +1493,18 @@ mod tests {
     fn n4_domain_initialises_correctly() {
         // For N=4: digits are 1 and 2 (bits 1-2), row blacks are bits 3-4,
         // col blacks are bits 5-6. Full cell = bits 1-6 = 0b1111110.
-        let state = SolverState::<4>::new(Puzzle::new([0; 4], [0; 4]));
+        let state = BasicSolverState::<4>::new(Puzzle::new([0; 4], [0; 4]));
         assert_eq!(state.domains[0][0], 0b1111110);
-        assert_eq!(SolverState::<4>::ALL_DIGITS, 0b110);
-        assert_eq!(SolverState::<4>::BLACK1_ROW, 1 << 3);
-        assert_eq!(SolverState::<4>::BLACK2_ROW, 1 << 4);
-        assert_eq!(SolverState::<4>::BLACK1_COL, 1 << 5);
-        assert_eq!(SolverState::<4>::BLACK2_COL, 1 << 6);
+        assert_eq!(BasicSolverState::<4>::ALL_DIGITS, 0b110);
+        assert_eq!(BasicSolverState::<4>::BLACK1_ROW, 1 << 3);
+        assert_eq!(BasicSolverState::<4>::BLACK2_ROW, 1 << 4);
+        assert_eq!(BasicSolverState::<4>::BLACK1_COL, 1 << 5);
+        assert_eq!(BasicSolverState::<4>::BLACK2_COL, 1 << 6);
     }
 
     #[test]
     fn solver_finds_known_solutions() {
-        let state = SolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
+        let state = BasicSolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
         assert_eq!(state.count_solutions(100), 32);
     }
 }

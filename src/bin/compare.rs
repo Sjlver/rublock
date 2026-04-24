@@ -1,10 +1,10 @@
 /// Runs both solvers on a set of known puzzles and asserts they agree on
 /// the solution count.
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolverState};
+use rublock::basic_solver::{BasicSolverState, Puzzle};
 
 fn check<const N: usize>(puzzle: Puzzle<N>, label: &str) {
-    let old_count = SolverState::new(puzzle.clone()).count_solutions(2);
+    let old_count = BasicSolverState::new(puzzle.clone()).count_solutions(2);
     let new_count = QueueSolverState::new(puzzle).count_solutions(2);
     assert_eq!(
         old_count, new_count,
