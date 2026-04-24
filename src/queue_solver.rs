@@ -720,7 +720,6 @@ impl<const N: usize> QueueSolverState<N> {
         }
         best.map(|(r, c, _)| (r, c))
     }
-
 }
 
 // ── Solver trait impl ─────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use rublock::queue_solver::QueueSolverState;
 use rublock::basic_solver::BasicSolverState;
+use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, Solver};
 
 // A fixed set of hand-picked 6×6 puzzles: five that propagation alone solves,

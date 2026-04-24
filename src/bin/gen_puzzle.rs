@@ -225,7 +225,10 @@ fn run<const N: usize, S: Solver<N>>(args: Args) {
     // run, so we bake it straight into the template rather than reaching
     // for `{prefix}`.  The fast path has nothing meaningful for `{msg}`.
     let template = if fast_path {
-        format!("{{spinner}} tried {{pos}} grids on {} threads", args.threads)
+        format!(
+            "{{spinner}} tried {{pos}} grids on {} threads",
+            args.threads
+        )
     } else {
         format!(
             "{{spinner}} tried {{pos}} grids on {} threads, {{msg}}",

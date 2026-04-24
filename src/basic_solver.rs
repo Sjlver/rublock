@@ -552,7 +552,6 @@ impl<const N: usize> BasicSolverState<N> {
         debug_assert!(domain & Self::ALL_DIGITS != 0);
         1 << domain.trailing_zeros()
     }
-
 }
 
 // ── Solver trait impl ─────────────────────────────────────────────────────────
