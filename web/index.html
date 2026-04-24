@@ -115,12 +115,60 @@
       font-size: 1.05rem;
     }
     .puzzle .target { font-weight: 700; color: #333; }
-    .puzzle .cell { border: 1.5px solid #444; }
-    .puzzle .cell.selected { outline: 2.5px solid #4f46e5; outline-offset: -2.5px; background: #eef2ff; }
+    .puzzle .cell {
+      border: 1.5px solid #444;
+      position: relative;
+    }
+    .puzzle .cell.selected {
+      outline: 2.5px solid #4f46e5;
+      outline-offset: -2.5px;
+      background: #eef2ff;
+    }
+    .puzzle .cell.selected.notes-mode {
+      outline-style: dashed;
+      background: #f5f3ff;
+    }
     .puzzle .cell.wrong { background: #fee2e2; border-color: #dc2626; }
     .puzzle .cell.selected.wrong { background: #fecaca; }
+    .puzzle .cell.selected.notes-mode.wrong { background: #fce7f3; }
     .puzzle .cell.black { background: #1a1a1a; color: #1a1a1a; }
     .puzzle .cell.black.wrong { outline: 3px solid #dc2626; outline-offset: -4px; }
+
+    .puzzle .cell .cell-value { font-size: 1.05rem; font-weight: 600; }
+    .puzzle .cell .cell-notes {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      pointer-events: none;
+      font-size: 0.62rem;
+      line-height: 1;
+      color: #4b5563;
+    }
+    .puzzle .cell .cell-notes .note {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+    .puzzle .cell .cell-notes .note-marker { grid-area: 3 / 3; font-weight: 700; }
+    .puzzle .cell .cell-notes .note-1 { grid-area: 1 / 1; }
+    .puzzle .cell .cell-notes .note-2 { grid-area: 1 / 2; }
+    .puzzle .cell .cell-notes .note-3 { grid-area: 1 / 3; }
+    .puzzle .cell .cell-notes .note-4 { grid-area: 2 / 1; }
+    .puzzle .cell .cell-notes .note-5 { grid-area: 2 / 2; }
+    .puzzle .cell .cell-notes .note-6 { grid-area: 2 / 3; }
+    .puzzle .cell .cell-notes .note-7 { grid-area: 3 / 1; }
+
+    .input-mode-hint {
+      width: 100%;
+      max-width: min(100vw - 2rem, 34rem);
+      text-align: center;
+      font-size: 0.85rem;
+      color: #6b7280;
+      min-height: 1.25rem;
+    }
 
     #input-bar {
       display: flex;
@@ -375,6 +423,9 @@
           <li>The sum of the digits <strong>between</strong> the two black squares must equal the target shown.</li>
           <li>A target of <strong>0</strong> means the two blacks are adjacent (nothing between them).</li>
         </ul>
+
+        <h2>Controls</h2>
+        <p>Select a cell once to enter values, then use the buttons below the grid. Select the same cell again to switch to notes, where the buttons toggle small pencil marks instead. Selecting another cell keeps the current mode, so you can enter several values or notes in a row.</p>
       </div>
     </section>
   </main>
@@ -397,11 +448,53 @@
       activeTab: 'play',
       puzzleData: null,
       cellValues: [],
+      cellNotes: [],
+      /** 'value' | 'notes' — persists when deselecting; reset on new puzzle */
+      inputMode: 'value',
       selectedCell: null,
       history: [],
       historyIndex: 0,
       wrongCells: new Set()
     };
+
+    function emptyNotes() {
+      return { digits: [], marker: null };
+    }
+
+    function emptyCellNotes(size) {
+      return Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => emptyNotes())
+      );
+    }
+
+    function cloneNotes(notes) {
+      return { digits: [...notes.digits], marker: notes.marker };
+    }
+
+    function sortNoteDigitsInPlace(notes) {
+      notes.digits.sort((a, b) => a - b);
+    }
+
+    function sameNotes(a, b) {
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      if (a.marker !== b.marker) return false;
+      if (a.digits.length !== b.digits.length) return false;
+      const ad = [...a.digits].sort((x, y) => x - y);
+      const bd = [...b.digits].sort((x, y) => x - y);
+      return ad.every((v, i) => v === bd[i]);
+    }
+
+    function notesHaveContent(notes) {
+      return notes.digits.length > 0 || notes.marker !== null;
+    }
+
+    function appendNote(grid, className, text) {
+      const note = document.createElement('span');
+      note.className = `note ${className}`;
+      note.textContent = text;
+      grid.appendChild(note);
+    }
 
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabPanels = document.querySelectorAll('.tab-panel');
@@ -523,16 +616,27 @@
       return a?.row === b?.row
         && a?.col === b?.col
         && sameValue(a?.oldValue, b?.oldValue)
-        && sameValue(a?.newValue, b?.newValue);
+        && sameValue(a?.newValue, b?.newValue)
+        && sameNotes(a?.oldNotes, b?.oldNotes)
+        && sameNotes(a?.newNotes, b?.newNotes);
     }
 
-    function applyUserValue(value) {
-      if (!state.selectedCell) return;
-      const { row, col } = state.selectedCell;
+    function commitCellEdit(row, col, newValue, newNotes) {
       const oldValue = state.cellValues[row][col];
-      if (sameValue(oldValue, value)) return;
+      const oldNotes = cloneNotes(state.cellNotes[row][col]);
+      const nextNotes = cloneNotes(newNotes);
+      sortNoteDigitsInPlace(nextNotes);
 
-      const operation = { row, col, oldValue, newValue: value };
+      if (sameValue(oldValue, newValue) && sameNotes(oldNotes, nextNotes)) return;
+
+      const operation = {
+        row,
+        col,
+        oldValue,
+        newValue,
+        oldNotes,
+        newNotes: cloneNotes(nextNotes)
+      };
       const nextOperation = state.history[state.historyIndex];
       if (sameOperation(operation, nextOperation)) {
         state.historyIndex += 1;
@@ -542,9 +646,70 @@
         state.historyIndex = state.history.length;
       }
 
-      state.cellValues[row][col] = value;
+      state.cellValues[row][col] = newValue;
+      state.cellNotes[row][col] = cloneNotes(nextNotes);
       clearWrongCell(row, col);
       renderPreview();
+    }
+
+    function applyUserInput(value) {
+      if (!state.selectedCell) return;
+      if (state.inputMode === 'notes') {
+        applyUserNote(value);
+      } else {
+        applyUserValue(value);
+      }
+    }
+
+    function applyUserValue(value) {
+      if (!state.selectedCell) return;
+      const { row, col } = state.selectedCell;
+      if (value === null) {
+        /** CLEAR: clear value only; keep pencil marks */
+        commitCellEdit(row, col, null, cloneNotes(state.cellNotes[row][col]));
+        return;
+      }
+      /** Digit or real black: set value and clear all notes */
+      commitCellEdit(row, col, value, emptyNotes());
+    }
+
+    function applyUserNote(value) {
+      if (!state.selectedCell) return;
+      const { row, col } = state.selectedCell;
+      let nextValue = state.cellValues[row][col];
+      let notes = cloneNotes(state.cellNotes[row][col]);
+
+      if (value === null) {
+        /** CLEAR in notes mode: empty cell */
+        commitCellEdit(row, col, null, emptyNotes());
+        return;
+      }
+
+      /** Entering a note clears a placed value in this cell */
+      if (nextValue !== null) {
+        nextValue = null;
+      }
+
+      if (typeof value === 'number') {
+        const i = notes.digits.indexOf(value);
+        if (i >= 0) notes.digits.splice(i, 1);
+        else notes.digits.push(value);
+        commitCellEdit(row, col, nextValue, notes);
+        return;
+      }
+
+      if (value === 'black') {
+        if (notes.marker === 'black') notes.marker = null;
+        else notes.marker = 'black';
+        commitCellEdit(row, col, nextValue, notes);
+        return;
+      }
+
+      if (value === 'digits-only') {
+        if (notes.marker === 'digits-only') notes.marker = null;
+        else notes.marker = 'digits-only';
+        commitCellEdit(row, col, nextValue, notes);
+      }
     }
 
     function undoInput() {
@@ -552,6 +717,7 @@
       const operation = state.history[state.historyIndex - 1];
       state.historyIndex -= 1;
       state.cellValues[operation.row][operation.col] = operation.oldValue;
+      state.cellNotes[operation.row][operation.col] = cloneNotes(operation.oldNotes);
       clearWrongCell(operation.row, operation.col);
       renderPreview();
     }
@@ -561,6 +727,7 @@
       const operation = state.history[state.historyIndex];
       state.historyIndex += 1;
       state.cellValues[operation.row][operation.col] = operation.newValue;
+      state.cellNotes[operation.row][operation.col] = cloneNotes(operation.newNotes);
       clearWrongCell(operation.row, operation.col);
       renderPreview();
     }
@@ -573,7 +740,9 @@
       state.puzzleData = data;
       if (shouldReset) {
         state.cellValues = emptyCellValues(nextSize);
+        state.cellNotes = emptyCellNotes(nextSize);
         state.selectedCell = null;
+        state.inputMode = 'value';
         state.history = [];
         state.historyIndex = 0;
         resetPlayFeedback();
@@ -597,20 +766,44 @@
         cell.dataset.row = r;
         cell.dataset.col = c;
         const value = state.cellValues[r][c];
+        const notes = state.cellNotes[r][c];
+
         if (value === 'black') {
           cell.classList.add('black');
           cell.textContent = 'X';
         } else if (value !== null) {
-          cell.textContent = String(value);
+          const main = document.createElement('span');
+          main.className = 'cell-value';
+          main.textContent = String(value);
+          cell.appendChild(main);
+        } else if (notesHaveContent(notes)) {
+          const grid = document.createElement('div');
+          grid.className = 'cell-notes';
+          for (const d of notes.digits) {
+            if (d < 1 || d > 7) continue;
+            appendNote(grid, `note-${d}`, String(d));
+          }
+          if (notes.marker === 'black' || notes.marker === 'digits-only') {
+            appendNote(grid, 'note-marker', notes.marker === 'black' ? 'x' : '_');
+          }
+          cell.appendChild(grid);
         }
+
         if (state.wrongCells.has(cellKey(r, c))) {
           cell.classList.add('wrong');
         }
-        if (state.selectedCell?.row === r && state.selectedCell?.col === c) {
+        const isSelected = state.selectedCell?.row === r && state.selectedCell?.col === c;
+        if (isSelected) {
           cell.classList.add('selected');
+          if (state.inputMode === 'notes') cell.classList.add('notes-mode');
         }
         cell.addEventListener('click', () => {
-          state.selectedCell = { row: r, col: c };
+          const prev = state.selectedCell;
+          if (!prev || prev.row !== r || prev.col !== c) {
+            state.selectedCell = { row: r, col: c };
+          } else {
+            state.inputMode = state.inputMode === 'value' ? 'notes' : 'value';
+          }
           renderPreview();
         });
       });
@@ -620,18 +813,29 @@
       wrap.appendChild(table);
       previewEl.appendChild(wrap);
 
+      const modeHint = document.createElement('div');
+      modeHint.className = 'input-mode-hint';
+      if (state.selectedCell) {
+        modeHint.textContent = state.inputMode === 'notes' ? 'Mode: Notes' : 'Mode: Values';
+      }
+      previewEl.appendChild(modeHint);
+
       const inputBar = document.createElement('div');
       inputBar.id = 'input-bar';
+      inputBar.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
       const disabled = state.selectedCell === null;
+      const notesMode = state.inputMode === 'notes';
 
-      function makeInputButton(label, value) {
+      function makeInputButton(label, value, opts = {}) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'btn-input';
         button.textContent = label;
-        button.disabled = disabled;
+        button.disabled = opts.disabled ?? disabled;
         button.addEventListener('click', () => {
-          applyUserValue(value);
+          applyUserInput(value);
         });
         return button;
       }
@@ -640,6 +844,9 @@
       for (let n = 1; n <= state.puzzleData.size - 2; n++) {
         inputBar.appendChild(makeInputButton(String(n), n));
       }
+      inputBar.appendChild(
+        makeInputButton('_', 'digits-only', { disabled: disabled || !notesMode })
+      );
       inputBar.appendChild(makeInputButton('CLEAR', null));
       previewEl.appendChild(inputBar);
       updatePlayControls();
