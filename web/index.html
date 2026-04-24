@@ -425,7 +425,7 @@
         </ul>
 
         <h2>Controls</h2>
-        <p>Select a cell once to enter values, then use the buttons below the grid. Select the same cell again to switch to notes, where the buttons toggle small pencil marks instead. Selecting another cell keeps the current mode, so you can enter several values or notes in a row.</p>
+        <p>Select a cell once to enter values, then use the buttons below the grid. Select the same cell again to switch to notes, where the buttons toggle small pencil marks instead. Selecting another cell keeps the current mode, so you can enter several values or notes in a row. On desktop, you can use the keyboard to move with the arrow keys or WASD, press Space to switch between values and notes, enter digits, use 0 or B for black squares, and press Backspace or Delete to clear.</p>
       </div>
     </section>
   </main>
@@ -730,6 +730,78 @@
       state.cellNotes[operation.row][operation.col] = cloneNotes(operation.newNotes);
       clearWrongCell(operation.row, operation.col);
       renderPreview();
+    }
+
+    function moveSelection(deltaRow, deltaCol) {
+      if (!state.puzzleData) return;
+      const max = state.puzzleData.size - 1;
+      const row = state.selectedCell ? state.selectedCell.row + deltaRow : 0;
+      const col = state.selectedCell ? state.selectedCell.col + deltaCol : 0;
+      state.selectedCell = {
+        row: Math.max(0, Math.min(max, row)),
+        col: Math.max(0, Math.min(max, col))
+      };
+      renderPreview();
+    }
+
+    function toggleInputMode() {
+      if (!state.puzzleData) return;
+      if (!state.selectedCell) state.selectedCell = { row: 0, col: 0 };
+      state.inputMode = state.inputMode === 'value' ? 'notes' : 'value';
+      renderPreview();
+    }
+
+    function isKeyboardInputTarget(target) {
+      return target.closest('input, textarea, select, [contenteditable="true"]') !== null;
+    }
+
+    function handlePlayKeydown(event) {
+      if (state.activeTab !== 'play' || !state.puzzleData || isKeyboardInputTarget(event.target)) return;
+
+      const key = event.key.toLowerCase();
+      const moves = {
+        arrowup: [-1, 0],
+        w: [-1, 0],
+        arrowdown: [1, 0],
+        s: [1, 0],
+        arrowleft: [0, -1],
+        a: [0, -1],
+        arrowright: [0, 1],
+        d: [0, 1]
+      };
+
+      if (key in moves) {
+        event.preventDefault();
+        const [deltaRow, deltaCol] = moves[key];
+        moveSelection(deltaRow, deltaCol);
+        return;
+      }
+
+      if (key === ' ') {
+        event.preventDefault();
+        toggleInputMode();
+        return;
+      }
+
+      if (key === 'backspace' || key === 'delete') {
+        event.preventDefault();
+        applyUserInput(null);
+        return;
+      }
+
+      if (key === '0' || key === 'b') {
+        event.preventDefault();
+        applyUserInput('black');
+        return;
+      }
+
+      if (/^[1-9]$/.test(key)) {
+        const digit = Number.parseInt(key, 10);
+        if (digit <= state.puzzleData.size - 2) {
+          event.preventDefault();
+          applyUserInput(digit);
+        }
+      }
     }
 
     function setPuzzleData(data, { preserveProgressIfSame = true } = {}) {
@@ -1072,6 +1144,7 @@
     btnPrint.addEventListener('click', generateAndPrint);
     btnShare.addEventListener('click', shareCurrentPuzzle);
     btnSolve.addEventListener('click', solveFromInput);
+    document.addEventListener('keydown', handlePlayKeydown);
 
     try {
       await init();
