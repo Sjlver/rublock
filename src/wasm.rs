@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::grid::{Cell, Grid};
 use crate::queue_solver::QueueSolverState;
-use crate::solver::Puzzle;
+use crate::solver::{Puzzle, SolveOutcome, Solver};
 
 #[wasm_bindgen]
 pub fn generate_puzzle(size: u32) -> String {
@@ -13,6 +13,21 @@ pub fn generate_puzzle(size: u32) -> String {
         7 => generate_puzzle_n::<7>(),
         8 => generate_puzzle_n::<8>(),
         _ => r#"{"error":"size must be 5–8"}"#.to_string(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn solve_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
+    if row_targets.len() != col_targets.len() {
+        return error_json("row_targets and col_targets must have the same length");
+    }
+
+    match row_targets.len() {
+        5 => solve_puzzle_n::<5>(row_targets, col_targets),
+        6 => solve_puzzle_n::<6>(row_targets, col_targets),
+        7 => solve_puzzle_n::<7>(row_targets, col_targets),
+        8 => solve_puzzle_n::<8>(row_targets, col_targets),
+        _ => error_json("size must be 5–8"),
     }
 }
 
@@ -33,6 +48,28 @@ fn generate_puzzle_n<const N: usize>() -> String {
     }
 }
 
+fn solve_puzzle_n<const N: usize>(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
+    let Ok(row_targets) = row_targets.try_into() else {
+        return error_json("row_targets length does not match puzzle size");
+    };
+    let Ok(col_targets) = col_targets.try_into() else {
+        return error_json("col_targets length does not match puzzle size");
+    };
+
+    let puzzle = Puzzle::<N>::new(row_targets, col_targets);
+    let state = QueueSolverState::<N>::new(puzzle.clone());
+    match state.solve() {
+        SolveOutcome::Unsolvable => error_json("puzzle is unsolvable"),
+        SolveOutcome::Multiple(_) => error_json("puzzle has multiple solutions"),
+        SolveOutcome::Unique(solved) => {
+            let Some(cells) = solved.solved_cells() else {
+                return error_json("solver returned an incomplete state");
+            };
+            solved_to_json(&puzzle.row_targets, &puzzle.col_targets, &cells)
+        }
+    }
+}
+
 fn to_json<const N: usize>(row_targets: &[u8; N], col_targets: &[u8; N]) -> String {
     let rows: Vec<String> = row_targets.iter().map(|n| n.to_string()).collect();
     let cols: Vec<String> = col_targets.iter().map(|n| n.to_string()).collect();
@@ -42,6 +79,45 @@ fn to_json<const N: usize>(row_targets: &[u8; N], col_targets: &[u8; N]) -> Stri
         rows.join(","),
         cols.join(",")
     )
+}
+
+fn solved_to_json<const N: usize>(
+    row_targets: &[u8; N],
+    col_targets: &[u8; N],
+    cells: &[[i8; N]; N],
+) -> String {
+    let rows: Vec<String> = row_targets.iter().map(|n| n.to_string()).collect();
+    let cols: Vec<String> = col_targets.iter().map(|n| n.to_string()).collect();
+    let cells_json = cells
+        .iter()
+        .map(|row| {
+            let vals = row
+                .iter()
+                .map(|v| {
+                    if *v < 0 {
+                        r#""black""#.to_string()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{}]", vals)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+
+    format!(
+        r#"{{"size":{},"row_targets":[{}],"col_targets":[{}],"cells":[{}]}}"#,
+        N,
+        rows.join(","),
+        cols.join(","),
+        cells_json
+    )
+}
+
+fn error_json(message: &str) -> String {
+    format!(r#"{{"error":"{}"}}"#, message)
 }
 
 fn dfs<const N: usize>(

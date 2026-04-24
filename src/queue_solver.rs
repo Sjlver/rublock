@@ -686,6 +686,29 @@ impl<const N: usize> QueueSolverState<N> {
         })
     }
 
+    /// Return the solved grid as `-1` for black and positive digits otherwise.
+    ///
+    /// Returns `None` when the state is not fully solved.
+    pub fn solved_cells(&self) -> Option<[[i8; N]; N]> {
+        if !self.is_solved() {
+            return None;
+        }
+
+        let mut cells = [[0_i8; N]; N];
+        for (r, row) in self.domains.iter().enumerate() {
+            for (c, &domain) in row.iter().enumerate() {
+                let digits = domain & Self::ALL_DIGITS;
+                cells[r][c] = if digits == 0 {
+                    -1
+                } else {
+                    digits.trailing_zeros() as i8
+                };
+            }
+        }
+
+        Some(cells)
+    }
+
     fn pick_branching_bit(&mut self, row: usize, col: usize) -> CellDomain {
         // Heuristic is to branch on the bit that has the smallest tuple support.
         // If there is equality, prefer black bits (hence <= below, not <).

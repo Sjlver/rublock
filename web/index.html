@@ -3,12 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Generate and print Doplo logic puzzles in various sizes.">
+  <meta name="description" content="Generate, solve, and print Doplo logic puzzles.">
   <title>Doplo Puzzle Generator</title>
   <style>
-    /* ── Reset & base ──────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background: #f5f4f0;
@@ -17,164 +15,117 @@
       display: flex;
       flex-direction: column;
     }
+    :focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
 
-    :focus-visible {
-      outline: 2px solid #4f46e5;
-      outline-offset: 2px;
-    }
-
-    /* ── Screen-only controls ──────────────────────────────────────────── */
-    #controls {
+    .app-header {
       background: #fff;
       border-bottom: 1px solid #ddd;
-      padding: 1.25rem 2rem;
+      padding: 1rem 1.25rem 0.85rem;
       display: flex;
-      align-items: center;
-      gap: 1.5rem;
       flex-wrap: wrap;
-    }
-
-    #controls h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: #1a1a1a;
-      margin-right: auto;
-    }
-
-    .field {
-      display: flex;
+      gap: 0.8rem;
       align-items: center;
-      gap: 0.5rem;
+    }
+    .app-header h1 { font-size: 1.2rem; font-weight: 700; margin-right: auto; }
+    #status { font-size: 0.85rem; color: #666; }
+
+    .tabs {
+      display: flex;
+      width: 100%;
+      gap: 0.4rem;
+      overflow-x: auto;
+      padding-bottom: 0.2rem;
+    }
+    .tab-btn {
+      border: 1px solid #ddd;
+      background: #f8f8f8;
+      border-radius: 8px 8px 0 0;
+      padding: 0.45rem 0.9rem;
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab-btn.active { background: #eef2ff; border-color: #c7d2fe; color: #312e81; }
+
+    main { flex: 1; padding: 1.25rem; }
+    .tab-panel { display: none; max-width: 70rem; margin: 0 auto; }
+    .tab-panel.active { display: block; }
+
+    .panel-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1rem;
     }
 
-    .field label,
-    .field .label-text {
-      font-size: 0.9rem;
-      color: #555;
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1rem;
+      margin-bottom: 1rem;
     }
-
-    .field select,
-    .field input[type="number"] {
+    .field { display: flex; align-items: center; gap: 0.45rem; }
+    .field label, .field .label-text { font-size: 0.9rem; color: #555; }
+    select, input[type="number"], input[type="text"] {
       font-size: 0.9rem;
-      padding: 0.4rem 0.6rem;
+      padding: 0.4rem 0.55rem;
       border: 1px solid #ccc;
       border-radius: 6px;
-      width: 5rem;
       background: #fafafa;
     }
+    input.narrow { width: 4rem; }
+    input[type="text"] { width: min(100%, 40rem); }
 
-    .field input[type="number"].narrow {
-      width: 3.5rem;
-    }
-
-    /* Primary button */
-    .btn-primary {
-      padding: 0.5rem 1.4rem;
-      font-size: 0.95rem;
-      font-weight: 600;
-      background: #4f46e5;
-      color: #fff;
-      border: none;
+    .btn-primary, .btn-ghost {
+      padding: 0.5rem 1rem;
+      font-size: 0.92rem;
       border-radius: 8px;
       cursor: pointer;
-      transition: background-color 0.15s;
+      border: none;
+      font-weight: 600;
     }
+    .btn-primary { background: #4f46e5; color: #fff; }
     .btn-primary:hover:not(:disabled) { background: #4338ca; }
     .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
-
-    /* Ghost button */
     .btn-ghost {
-      padding: 0.5rem 1.2rem;
-      font-size: 0.9rem;
-      font-weight: 500;
       background: transparent;
       color: #4f46e5;
       border: 1.5px solid #c7d2fe;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background-color 0.15s, border-color 0.15s;
     }
-    .btn-ghost:hover:not(:disabled) { background: #eef2ff; border-color: #a5b4fc; }
+    .btn-ghost:hover:not(:disabled) { background: #eef2ff; }
     .btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    #status {
-      font-size: 0.85rem;
-      color: #666;
-      min-width: 6rem;
-    }
-
-    /* ── Preview area (single puzzle, screen only) ─────────────────────── */
     #preview {
-      flex: 1;
-      padding: 3rem 2rem;
       display: flex;
       flex-direction: column;
-      justify-content: flex-start;
       align-items: center;
+      gap: 0.9rem;
+      min-height: 18rem;
     }
 
-    /* ── Print output (hidden on screen, shown when printing) ─────────── */
-    #print-output {
-      display: none;
-    }
-
-    /* Each .page-group holds 6 puzzles in a 2-column layout */
-    .page-group {
-      display: grid;
-      grid-template-columns: repeat(2, auto);
-      gap: 2rem 3rem;
-      position: relative;
-    }
-
-    /* ── Individual puzzle ─────────────────────────────────────────────── */
-    .puzzle-wrap {
-      display: inline-block;
-    }
-
-    .puzzle {
-      border-collapse: collapse;
-    }
-
-    .puzzle td,
-    .puzzle th {
+    .puzzle-wrap { display: inline-block; }
+    .puzzle { border-collapse: collapse; }
+    .puzzle td, .puzzle th {
       width: 2.5rem;
       height: 2.5rem;
       text-align: center;
       vertical-align: middle;
       font-size: 1.05rem;
     }
-
-    /* Target cells (first row and first column) */
-    .puzzle .target {
-      font-weight: 700;
-      font-size: 1rem;
-      color: #333;
-    }
-
-    /* Playable cells */
-    .puzzle .cell {
-      border: 1.5px solid #444;
-    }
-
-    .puzzle .cell.selected {
-      outline: 2.5px solid #4f46e5;
-      outline-offset: -2.5px;
-      background: #eef2ff;
-    }
-
-    .puzzle .cell.black {
-      background: #1a1a1a;
-    }
+    .puzzle .target { font-weight: 700; color: #333; }
+    .puzzle .cell { border: 1.5px solid #444; }
+    .puzzle .cell.selected { outline: 2.5px solid #4f46e5; outline-offset: -2.5px; background: #eef2ff; }
+    .puzzle .cell.black { background: #1a1a1a; color: #1a1a1a; }
 
     #input-bar {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       gap: 0.5rem;
-      padding-top: 1rem;
       max-width: min(100vw - 2rem, 34rem);
     }
-
     .btn-input {
       min-width: 2.8rem;
       min-height: 2.8rem;
@@ -184,51 +135,47 @@
       border-radius: 10px;
       border: 1.5px solid #d1d5db;
       background: #fff;
-      color: #1f2937;
       cursor: pointer;
-      transition: background-color 0.15s, border-color 0.15s;
     }
+    .btn-input:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    .btn-input:hover:enabled {
-      background: #f9fafb;
-      border-color: #9ca3af;
-    }
+    .feedback { min-height: 1.2rem; font-size: 0.88rem; color: #4b5563; }
+    .feedback.error { color: #b91c1c; }
+    .hint { font-size: 0.88rem; color: #6b7280; margin-top: 0.5rem; }
 
-    .btn-input:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    #solve-result { margin-top: 1rem; min-height: 16rem; }
+    #howto p { margin-bottom: 0.7rem; line-height: 1.5; color: #374151; }
+    #howto h2 { font-size: 1.05rem; font-weight: 700; color: #1a1a1a; margin: 1.4rem 0 0.5rem; }
+    #howto h2:first-child { margin-top: 0; }
+    #howto h3 { font-size: 0.97rem; font-weight: 700; color: #312e81; margin: 1.1rem 0 0.4rem; }
+    #howto ul { padding-left: 1.4rem; margin-bottom: 0.7rem; }
+    #howto li { line-height: 1.6; color: #374151; margin-bottom: 0.2rem; }
+    .howto-step { margin-bottom: 1rem; }
+    .howto-step .puzzle-wrap { margin-top: 0.55rem; display: inline-block; }
+    .howto-step .puzzle td,
+    .howto-step .puzzle th { width: 2.1rem; height: 2.1rem; font-size: 0.92rem; }
+    /* highlight for newly placed cells in example grids */
+    .puzzle .cell.ex-new { background: #fef9c3; border-color: #d97706; }
+    .puzzle .cell.black.ex-new { outline: 2.5px solid #f59e0b; outline-offset: -3px; }
 
-    /* ── Site footer ──────────────────────────────────────────────────── */
     #footer {
       background: #fff;
       border-top: 1px solid #ddd;
-      padding: 0.75rem 2rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
+      padding: 0.75rem 1.25rem;
+      text-align: center;
       font-size: 0.85rem;
       color: #555;
     }
+    #footer a { color: #4f46e5; text-decoration: none; }
+    #footer a:hover { text-decoration: underline; }
 
-    #footer a {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      color: #4f46e5;
-      text-decoration: none;
+    #print-output { display: none; }
+    .page-group {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 2rem 3rem;
+      position: relative;
     }
-
-    #footer a:hover {
-      text-decoration: underline;
-    }
-
-    #footer svg {
-      flex-shrink: 0;
-    }
-
-    /* ── Promo footer ──────────────────────────────────────────────────── */
     .promo {
       display: none;
       font-size: 0.75rem;
@@ -239,302 +186,567 @@
       margin-top: 0.5rem;
     }
 
-    /* ── Print styles ──────────────────────────────────────────────────── */
     @media print {
       body { background: #fff; }
-
-      #controls  { display: none; }
-      #footer    { display: none; }
-      #preview   { display: none; }
-      #input-bar { display: none; }
-
-      #print-output {
-        display: block;
-        padding: 0;
-      }
-
+      .app-header, main, #footer { display: none; }
+      #print-output { display: block; }
       .page-group {
         gap: 8mm 10mm;
         break-after: page;
-        page-break-after: always; /* fallback for older engines */
+        page-break-after: always;
         padding-bottom: 12mm;
       }
-
-      .page-group:last-child {
-        break-after: auto;
-        page-break-after: auto;
-      }
-
-      .promo {
-        display: block;
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-      }
-
-      .puzzle td,
-      .puzzle th {
-        width: 9mm;
-        height: 9mm;
-        font-size: 8pt;
-      }
-
-      .puzzle .target {
-        font-size: 8pt;
-      }
-
-      .puzzle .cell {
-        border: 0.8pt solid #333;
-      }
+      .page-group:last-child { break-after: auto; page-break-after: auto; }
+      .promo { display: block; position: absolute; bottom: 0; left: 0; right: 0; }
+      .puzzle td, .puzzle th { width: 9mm; height: 9mm; font-size: 8pt; }
+      .puzzle .cell { border: 0.8pt solid #333; }
     }
   </style>
 </head>
 <body>
+  <header class="app-header">
+    <h1>Doplo Puzzle Generator</h1>
+    <span id="status" role="status" aria-live="polite">Loading…</span>
+    <nav class="tabs" aria-label="Main sections">
+      <button class="tab-btn active" type="button" data-tab="play">Play</button>
+      <button class="tab-btn" type="button" data-tab="solve">Solve</button>
+      <button class="tab-btn" type="button" data-tab="print">Print</button>
+      <button class="tab-btn" type="button" data-tab="howto">How to Play</button>
+    </nav>
+  </header>
 
-<header id="controls">
-  <h1>Doplo Puzzle Generator</h1>
+  <main>
+    <section id="tab-play" class="tab-panel active">
+      <div class="panel-card">
+        <div class="controls-row">
+          <div class="field">
+            <label for="play-size">Size</label>
+            <select id="play-size">
+              <option value="5">5 × 5</option>
+              <option value="6" selected>6 × 6</option>
+              <option value="7">7 × 7</option>
+              <option value="8">8 × 8</option>
+            </select>
+          </div>
+          <button id="btn-another" class="btn-ghost" type="button" disabled>Generate another</button>
+        </div>
+        <div id="preview"></div>
+        <div class="controls-row">
+          <button id="btn-share" class="btn-ghost" type="button">Share this puzzle</button>
+          <span id="share-feedback" class="feedback" aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
 
-  <div class="field">
-    <label for="sel-size">Size</label>
-    <select id="sel-size">
-      <option value="5">5 × 5</option>
-      <option value="6" selected>6 × 6</option>
-      <option value="7">7 × 7</option>
-      <option value="8">8 × 8</option>
-    </select>
-  </div>
+    <section id="tab-solve" class="tab-panel">
+      <div class="panel-card">
+        <div class="controls-row">
+          <div class="field" style="flex: 1;">
+            <label for="solve-input">Targets</label>
+            <input id="solve-input" type="text" placeholder="r1,r2,...,rN,c1,c2,...,cN">
+          </div>
+          <button id="btn-solve" class="btn-primary" type="button">Solve</button>
+        </div>
+        <div id="solve-feedback" class="feedback" aria-live="polite"></div>
+        <div id="solve-result"></div>
+      </div>
+    </section>
 
-  <button id="btn-another" class="btn-ghost" disabled>Generate another</button>
+    <section id="tab-print" class="tab-panel">
+      <div class="panel-card">
+        <div class="controls-row">
+          <div class="field">
+            <label for="print-size">Size</label>
+            <select id="print-size">
+              <option value="5">5 × 5</option>
+              <option value="6" selected>6 × 6</option>
+              <option value="7">7 × 7</option>
+              <option value="8">8 × 8</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="inp-pages" class="label-text">Pages</label>
+            <input id="inp-pages" class="narrow" type="number" min="1" max="20" value="4">
+          </div>
+          <button id="btn-print" class="btn-primary" type="button" disabled>Print</button>
+        </div>
+        <p class="hint">Larger puzzle sizes and page counts may take a moment to generate.</p>
+      </div>
+    </section>
 
-  <div class="field">
-    <label for="inp-pages" class="label-text">Generate</label>
-    <input id="inp-pages" class="narrow" type="number" min="1" max="20" value="4">
-    <span class="label-text">pages and</span>
-    <button id="btn-print" class="btn-primary" disabled>Print</button>
-  </div>
+    <section id="tab-howto" class="tab-panel">
+      <div id="howto" class="panel-card">
+        <h2>The goal</h2>
+        <p>Fill the grid so that every row and column contains <strong>exactly two black squares</strong> and each digit from <strong>1 to N − 2</strong> exactly once (where N is the puzzle size). The numbers along the top and left are <em>targets</em> — each target is the sum of the digits that sit <em>between</em> the two black squares in that row or column.</p>
 
-  <span id="status" role="status" aria-live="polite">Loading…</span>
-</header>
+        <h2>Step-by-step example</h2>
+        <p>Here is a fresh 5 × 5 puzzle. The digits used are 1, 2, and 3. Everything is empty — where do you start?</p>
 
-<main id="preview"></main>
-<footer id="footer">
-  Source code:
-  <a href="https://github.com/Sjlver/rublock" target="_blank" rel="noopener noreferrer">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
-    </svg>
-    github.com/Sjlver/rublock
-  </a>
-</footer>
-<div id="print-output" aria-hidden="true"></div>
+        <div class="howto-step">
+          <div class="puzzle-wrap">
+            <table class="puzzle">
+              <thead><tr>
+                <th></th><th class="target">3</th><th class="target">0</th><th class="target">3</th><th class="target">0</th><th class="target">0</th>
+              </tr></thead>
+              <tbody>
+                <tr><th class="target">6</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">2</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">5</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">1</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">0</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-<script type="module">
-  import init, { generate_puzzle } from './pkg/rublock.js';
+        <h3>Step 1 — Row target 6 is the maximum possible sum</h3>
+        <p>In a 5 × 5 puzzle the digits are 1, 2, and 3. Their total is 1 + 2 + 3 = <strong>6</strong>. A row target of 6 means <em>every digit</em> must lie between the two blacks — the only way to fit all three digits is to put the blacks at the very ends: column 1 and column 5.</p>
 
-  const btnAnother    = document.getElementById('btn-another');
-  const btnPrint      = document.getElementById('btn-print');
-  const selSize       = document.getElementById('sel-size');
-  const inpPages      = document.getElementById('inp-pages');
-  const statusEl      = document.getElementById('status');
-  const previewEl     = document.getElementById('preview');
-  const printOutputEl = document.getElementById('print-output');
+        <div class="howto-step">
+          <div class="puzzle-wrap">
+            <table class="puzzle">
+              <thead><tr>
+                <th></th><th class="target">3</th><th class="target">0</th><th class="target">3</th><th class="target">0</th><th class="target">0</th>
+              </tr></thead>
+              <tbody>
+                <tr><th class="target">6</th><td class="cell black ex-new"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell black ex-new"></td></tr>
+                <tr><th class="target">2</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">5</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">1</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">0</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-  let puzzleData   = null;
-  let cellValues   = [];
-  let selectedCell = null;
+        <h3>Step 2 — Column 5 target 0 means the blacks are neighbours</h3>
+        <p>A target of 0 means <em>nothing</em> between the two blacks — they must be in adjacent rows. Column 5 already has a black in row 1 (from step 1), so the second black in column 5 must sit immediately below it, in row 2.</p>
 
-  // ── Shared table builder ──────────────────────────────────────────────
-  // onCell(td, row, col) is called for each playable cell, if provided.
-  function buildPuzzleTable({ size, row_targets, col_targets }, onCell = null) {
-    const table = document.createElement('table');
-    table.className = 'puzzle';
+        <div class="howto-step">
+          <div class="puzzle-wrap">
+            <table class="puzzle">
+              <thead><tr>
+                <th></th><th class="target">3</th><th class="target">0</th><th class="target">3</th><th class="target">0</th><th class="target">0</th>
+              </tr></thead>
+              <tbody>
+                <tr><th class="target">6</th><td class="cell black"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell black"></td></tr>
+                <tr><th class="target">2</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell black ex-new"></td></tr>
+                <tr><th class="target">5</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">1</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">0</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-    const thead = table.createTHead();
-    const hrow  = thead.insertRow();
-    const corner = document.createElement('th');
-    corner.className = 'corner';
-    hrow.appendChild(corner);
-    for (let c = 0; c < size; c++) {
-      const th = document.createElement('th');
-      th.scope = 'col';
-      th.className = 'target';
-      th.textContent = col_targets[c];
-      hrow.appendChild(th);
+        <h3>Step 3 — Row 2 target 2 pins the second black</h3>
+        <p>Row 2 already has a black at column 5. Target 2 means exactly the digit <strong>2</strong> sits between the two blacks (alone, because 2 is the only single digit that sums to 2). Place digit 2 at column 4, and put the second black at column 3 to close it in.</p>
+
+        <div class="howto-step">
+          <div class="puzzle-wrap">
+            <table class="puzzle">
+              <thead><tr>
+                <th></th><th class="target">3</th><th class="target">0</th><th class="target">3</th><th class="target">0</th><th class="target">0</th>
+              </tr></thead>
+              <tbody>
+                <tr><th class="target">6</th><td class="cell black"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell black"></td></tr>
+                <tr><th class="target">2</th><td class="cell"></td><td class="cell"></td><td class="cell black ex-new"></td><td class="cell ex-new">2</td><td class="cell black"></td></tr>
+                <tr><th class="target">5</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">1</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+                <tr><th class="target">0</th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p>Each deduction unlocks the next. Keep going row by row and column by column until the puzzle is complete — there is always exactly one solution.</p>
+
+        <h2>Rules at a glance</h2>
+        <ul>
+          <li>Each row and column contains exactly <strong>two black squares</strong>.</li>
+          <li>The remaining N − 2 cells in each row and column hold the digits 1 to N − 2, each exactly once.</li>
+          <li>The sum of the digits <strong>between</strong> the two black squares must equal the target shown.</li>
+          <li>A target of <strong>0</strong> means the two blacks are adjacent (nothing between them).</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer">
+    Source code:
+    <a href="https://github.com/Sjlver/rublock" target="_blank" rel="noopener noreferrer">github.com/Sjlver/rublock</a>
+  </footer>
+  <div id="print-output" aria-hidden="true"></div>
+
+  <script type="module">
+    import init, { generate_puzzle, solve_puzzle } from './pkg/rublock.js';
+
+    const PUZZLES_PER_PAGE = 6;
+    const PROMO = `Doplo puzzles generated by ${window.location.origin}${window.location.pathname}`;
+
+    const VALID_TABS = new Set(['play', 'solve', 'print', 'howto']);
+
+    const state = {
+      activeTab: 'play',
+      puzzleData: null,
+      cellValues: [],
+      selectedCell: null
+    };
+
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+    const statusEl = document.getElementById('status');
+    const playSizeEl = document.getElementById('play-size');
+    const printSizeEl = document.getElementById('print-size');
+    const btnAnother = document.getElementById('btn-another');
+    const btnPrint = document.getElementById('btn-print');
+    const inpPages = document.getElementById('inp-pages');
+    const previewEl = document.getElementById('preview');
+    const printOutputEl = document.getElementById('print-output');
+    const btnShare = document.getElementById('btn-share');
+    const shareFeedbackEl = document.getElementById('share-feedback');
+    const solveInputEl = document.getElementById('solve-input');
+    const btnSolve = document.getElementById('btn-solve');
+    const solveFeedbackEl = document.getElementById('solve-feedback');
+    const solveResultEl = document.getElementById('solve-result');
+
+    function tabFromSearchParams(searchParams) {
+      const raw = searchParams.get('t');
+      if (!raw || !VALID_TABS.has(raw) || raw === 'play') return 'play';
+      return raw;
     }
 
-    const tbody = table.createTBody();
-    for (let r = 0; r < size; r++) {
-      const row = tbody.insertRow();
-      const th  = document.createElement('th');
-      th.scope      = 'row';
-      th.className  = 'target';
-      th.textContent = row_targets[r];
-      row.appendChild(th);
+    /**
+     * Keep the address bar in sync with app state: current puzzle as `p=` (comma-separated,
+     * not URLSearchParams-serialized) and `t=` when the tab is not Play.
+     */
+    function syncUrlFromState() {
+      if (!state.puzzleData) return;
+      const p = serializePuzzleTargets(state.puzzleData);
+      let search = `?p=${p}`;
+      if (state.activeTab !== 'play') search += `&t=${state.activeTab}`;
+      const next = `${window.location.pathname}${search}${window.location.hash}`;
+      const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (next !== cur) history.replaceState(null, '', next);
+    }
+
+    function setTab(tabName) {
+      state.activeTab = tabName;
+      tabButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tabName));
+      tabPanels.forEach((panel) => panel.classList.toggle('active', panel.id === `tab-${tabName}`));
+      syncUrlFromState();
+    }
+
+    function buildPuzzleTable({ size, row_targets, col_targets }, onCell = null) {
+      const table = document.createElement('table');
+      table.className = 'puzzle';
+
+      const thead = table.createTHead();
+      const hrow = thead.insertRow();
+      const corner = document.createElement('th');
+      hrow.appendChild(corner);
       for (let c = 0; c < size; c++) {
-        const td = row.insertCell();
-        td.className = 'cell';
-        onCell?.(td, r, c);
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.className = 'target';
+        th.textContent = col_targets[c];
+        hrow.appendChild(th);
+      }
+
+      const tbody = table.createTBody();
+      for (let r = 0; r < size; r++) {
+        const row = tbody.insertRow();
+        const th = document.createElement('th');
+        th.scope = 'row';
+        th.className = 'target';
+        th.textContent = row_targets[r];
+        row.appendChild(th);
+        for (let c = 0; c < size; c++) {
+          const td = row.insertCell();
+          td.className = 'cell';
+          onCell?.(td, r, c);
+        }
+      }
+      return table;
+    }
+
+    function puzzleKey(data) {
+      return `${data.size}|${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
+    }
+
+    function setPuzzleData(data, { preserveProgressIfSame = true } = {}) {
+      const samePuzzle = state.puzzleData && puzzleKey(state.puzzleData) === puzzleKey(data);
+      const nextSize = data.size;
+      const shouldReset = !(preserveProgressIfSame && samePuzzle);
+
+      state.puzzleData = data;
+      if (shouldReset) {
+        state.cellValues = Array.from({ length: nextSize }, () => Array(nextSize).fill(null));
+        state.selectedCell = null;
+      }
+
+      playSizeEl.value = String(nextSize);
+      printSizeEl.value = String(nextSize);
+      solveInputEl.value = serializePuzzleTargets(data);
+      renderPreview();
+      syncUrlFromState();
+    }
+
+    function renderPreview() {
+      previewEl.innerHTML = '';
+      if (!state.puzzleData) return;
+
+      const table = buildPuzzleTable(state.puzzleData, (cell, r, c) => {
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+        const value = state.cellValues[r][c];
+        if (value === 'black') {
+          cell.classList.add('black');
+          cell.textContent = 'X';
+        } else if (value !== null) {
+          cell.textContent = String(value);
+        }
+        if (state.selectedCell?.row === r && state.selectedCell?.col === c) {
+          cell.classList.add('selected');
+        }
+        cell.addEventListener('click', () => {
+          state.selectedCell = { row: r, col: c };
+          renderPreview();
+        });
+      });
+
+      const wrap = document.createElement('div');
+      wrap.className = 'puzzle-wrap';
+      wrap.appendChild(table);
+      previewEl.appendChild(wrap);
+
+      const inputBar = document.createElement('div');
+      inputBar.id = 'input-bar';
+      const disabled = state.selectedCell === null;
+
+      function makeInputButton(label, value) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn-input';
+        button.textContent = label;
+        button.disabled = disabled;
+        button.addEventListener('click', () => {
+          if (!state.selectedCell) return;
+          state.cellValues[state.selectedCell.row][state.selectedCell.col] = value;
+          renderPreview();
+        });
+        return button;
+      }
+
+      inputBar.appendChild(makeInputButton('BLACK', 'black'));
+      for (let n = 1; n <= state.puzzleData.size - 2; n++) {
+        inputBar.appendChild(makeInputButton(String(n), n));
+      }
+      inputBar.appendChild(makeInputButton('CLEAR', null));
+      previewEl.appendChild(inputBar);
+    }
+
+    function renderSolvedGrid(data) {
+      solveResultEl.innerHTML = '';
+      const table = buildPuzzleTable(data, (cell, r, c) => {
+        const value = data.cells[r][c];
+        if (value === 'black') {
+          cell.classList.add('black');
+          cell.textContent = 'X';
+        } else {
+          cell.textContent = String(value);
+        }
+      });
+      const wrap = document.createElement('div');
+      wrap.className = 'puzzle-wrap';
+      wrap.appendChild(table);
+      solveResultEl.appendChild(wrap);
+    }
+
+    function serializePuzzleTargets(data) {
+      return [...data.row_targets, ...data.col_targets].join(',');
+    }
+
+    function parseTargetsText(text) {
+      const cleaned = text.trim();
+      if (!cleaned) return { error: 'Enter targets in r1,...,rN,c1,...,cN format.' };
+      const values = cleaned.split(',').map((s) => s.trim()).filter(Boolean).map((s) => Number.parseInt(s, 10));
+      if (values.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
+        return { error: 'Targets must be comma-separated integers between 0 and 255.' };
+      }
+      if (values.length % 2 !== 0) return { error: 'Target list must contain an even number of values.' };
+      const size = values.length / 2;
+      if (size < 5 || size > 8) return { error: 'Puzzle size must be between 5 and 8.' };
+      return {
+        size,
+        row_targets: values.slice(0, size),
+        col_targets: values.slice(size)
+      };
+    }
+
+    function parsePuzzleFromUrl() {
+      const param = new URLSearchParams(window.location.search).get('p');
+      if (!param) return null;
+      const parsed = parseTargetsText(param);
+      if (parsed.error) return null;
+      return parsed;
+    }
+
+    /** Share link: puzzle only, no tab param. (Plain `p=` so commas stay readable.) */
+    function puzzleUrl(data) {
+      const base = `${window.location.origin}${window.location.pathname}`;
+      const hash = window.location.hash || '';
+      return `${base}?p=${serializePuzzleTargets(data)}${hash}`;
+    }
+
+    async function shareCurrentPuzzle() {
+      if (!state.puzzleData) return;
+      const url = puzzleUrl(state.puzzleData);
+      shareFeedbackEl.classList.remove('error');
+      shareFeedbackEl.textContent = '';
+
+      try {
+        if (navigator.share && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+          await navigator.share({ title: 'Doplo puzzle', text: 'Try this Doplo puzzle:', url });
+          shareFeedbackEl.textContent = 'Shared.';
+          return;
+        }
+        await navigator.clipboard.writeText(url);
+        shareFeedbackEl.textContent = 'Copied!';
+      } catch (err) {
+        console.error('Share failed:', err);
+        shareFeedbackEl.classList.add('error');
+        shareFeedbackEl.textContent = 'Could not share this puzzle.';
       }
     }
 
-    return table;
-  }
+    function renderPuzzle(json) {
+      const data = JSON.parse(json);
+      const table = buildPuzzleTable(data);
+      const wrap = document.createElement('div');
+      wrap.className = 'puzzle-wrap';
+      wrap.appendChild(table);
+      return wrap;
+    }
 
-  // ── Static puzzle (used for print output) ────────────────────────────
-  function renderPuzzle(json) {
-    const data  = JSON.parse(json);
-    const table = buildPuzzleTable(data);
-    const wrap  = document.createElement('div');
-    wrap.className = 'puzzle-wrap';
-    wrap.appendChild(table);
-    return wrap;
-  }
+    async function fillPrintOutput(size, pages) {
+      const total = pages * PUZZLES_PER_PAGE;
+      printOutputEl.innerHTML = '';
+      let generated = 0;
 
-  // ── Interactive preview ───────────────────────────────────────────────
-  function renderPreview() {
-    if (!puzzleData) return;
-    previewEl.innerHTML = '';
+      while (generated < total) {
+        const pageSize = Math.min(PUZZLES_PER_PAGE, total - generated);
+        const group = document.createElement('div');
+        group.className = 'page-group';
+        for (let i = 0; i < pageSize; i++) {
+          group.appendChild(renderPuzzle(generate_puzzle(size)));
+        }
+        const promo = document.createElement('div');
+        promo.className = 'promo';
+        promo.textContent = PROMO;
+        group.appendChild(promo);
+        printOutputEl.appendChild(group);
+        generated += pageSize;
+        if (generated < total) await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
 
-    const table = buildPuzzleTable(puzzleData, (cell, r, c) => {
-      cell.dataset.row = r;
-      cell.dataset.col = c;
+    async function generateAndPrint() {
+      const size = Number.parseInt(printSizeEl.value, 10);
+      const pages = Math.max(1, Math.min(20, Number.parseInt(inpPages.value, 10) || 4));
+      btnPrint.disabled = true;
+      btnAnother.disabled = true;
+      statusEl.textContent = 'Generating…';
+      await fillPrintOutput(size, pages);
+      statusEl.textContent = 'Ready';
+      btnPrint.disabled = false;
+      btnAnother.disabled = false;
+      window.print();
+    }
 
-      const value = cellValues[r][c];
-      if (value === 'black') {
-        cell.classList.add('black');
-      } else if (value !== null) {
-        cell.textContent = String(value);
+    function loadRandomPuzzle(size) {
+      const parsed = JSON.parse(generate_puzzle(size));
+      if (parsed.error) throw new Error(parsed.error);
+      setPuzzleData(parsed, { preserveProgressIfSame: false });
+    }
+
+    async function solveFromInput() {
+      solveFeedbackEl.classList.remove('error');
+      solveFeedbackEl.textContent = '';
+
+      const parsed = parseTargetsText(solveInputEl.value);
+      if (parsed.error) {
+        solveResultEl.innerHTML = '';
+        solveFeedbackEl.classList.add('error');
+        solveFeedbackEl.textContent = parsed.error;
+        return;
       }
 
-      if (selectedCell?.row === r && selectedCell?.col === c) {
-        cell.classList.add('selected');
+      const response = JSON.parse(
+        solve_puzzle(Uint8Array.from(parsed.row_targets), Uint8Array.from(parsed.col_targets))
+      );
+      if (response.error) {
+        solveResultEl.innerHTML = '';
+        solveFeedbackEl.classList.add('error');
+        solveFeedbackEl.textContent = response.error;
+        return;
       }
 
-      cell.addEventListener('click', () => {
-        selectedCell = { row: r, col: c };
+      solveFeedbackEl.textContent = 'Solved.';
+      renderSolvedGrid(response);
+      setPuzzleData(
+        {
+          size: parsed.size,
+          row_targets: parsed.row_targets,
+          col_targets: parsed.col_targets
+        },
+        { preserveProgressIfSame: true }
+      );
+    }
+
+    previewEl.addEventListener('click', (event) => {
+      if (!state.selectedCell) return;
+      if (!event.target.closest('.puzzle')) {
+        state.selectedCell = null;
         renderPreview();
-      });
+      }
     });
 
-    const wrap = document.createElement('div');
-    wrap.className = 'puzzle-wrap';
-    wrap.appendChild(table);
-    previewEl.appendChild(wrap);
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => setTab(btn.dataset.tab));
+    });
+    playSizeEl.addEventListener('change', () => loadRandomPuzzle(Number.parseInt(playSizeEl.value, 10)));
+    printSizeEl.addEventListener('change', () => { playSizeEl.value = printSizeEl.value; });
+    btnAnother.addEventListener('click', () => loadRandomPuzzle(Number.parseInt(playSizeEl.value, 10)));
+    btnPrint.addEventListener('click', generateAndPrint);
+    btnShare.addEventListener('click', shareCurrentPuzzle);
+    btnSolve.addEventListener('click', solveFromInput);
 
-    const inputBar      = document.createElement('div');
-    inputBar.id         = 'input-bar';
-    const buttonsDisabled = selectedCell === null;
-
-    function makeInputButton(label, value) {
-      const button       = document.createElement('button');
-      button.type        = 'button';
-      button.className   = 'btn-input';
-      button.textContent = label;
-      button.disabled    = buttonsDisabled;
-      button.addEventListener('click', () => {
-        if (!selectedCell) return;
-        cellValues[selectedCell.row][selectedCell.col] = value;
-        renderPreview();
-      });
-      return button;
-    }
-
-    inputBar.appendChild(makeInputButton('BLACK', 'black'));
-    for (let n = 1; n <= puzzleData.size - 2; n++) {
-      inputBar.appendChild(makeInputButton(String(n), n));
-    }
-    inputBar.appendChild(makeInputButton('CLEAR', null));
-    previewEl.appendChild(inputBar);
-  }
-
-  function generatePreview() {
-    const size = parseInt(selSize.value, 10);
-    puzzleData = JSON.parse(generate_puzzle(size));
-    cellValues = Array.from({ length: size }, () => Array(size).fill(null));
-    selectedCell = null;
-    renderPreview();
-  }
-
-  previewEl.addEventListener('click', (event) => {
-    if (!selectedCell) return;
-    if (!event.target.closest('.puzzle')) {
-      selectedCell = null;
-      renderPreview();
-    }
-  });
-
-  // ── Print output ─────────────────────────────────────────────────────
-  const PUZZLES_PER_PAGE = 6;
-  const PROMO = `Doplo puzzles generated by ${window.location.origin}${window.location.pathname}`;
-
-  async function fillPrintOutput(size, pages) {
-    const total = pages * PUZZLES_PER_PAGE;
-    printOutputEl.innerHTML = '';
-
-    let generated = 0;
-    while (generated < total) {
-      const pageSize = Math.min(PUZZLES_PER_PAGE, total - generated);
-      const group    = document.createElement('div');
-      group.className = 'page-group';
-
-      for (let i = 0; i < pageSize; i++) {
-        group.appendChild(renderPuzzle(generate_puzzle(size)));
+    try {
+      await init();
+      const initialParams = new URLSearchParams(window.location.search);
+      const fromUrl = parsePuzzleFromUrl();
+      if (fromUrl) {
+        setPuzzleData(fromUrl, { preserveProgressIfSame: false });
+      } else {
+        loadRandomPuzzle(Number.parseInt(playSizeEl.value, 10));
       }
 
-      const promo       = document.createElement('div');
-      promo.className   = 'promo';
-      promo.textContent = PROMO;
-      group.appendChild(promo);
+      const tabFromUrl = tabFromSearchParams(initialParams);
+      if (tabFromUrl !== 'play') setTab(tabFromUrl);
 
-      printOutputEl.appendChild(group);
-      generated += pageSize;
+      // Keep startup responsive for Ctrl+P workflows by pre-generating only
+      // one page of 6x6 puzzles during initial load.
+      await fillPrintOutput(6, 1);
 
-      // Yield to the browser between pages so the UI doesn't freeze
-      if (generated < total) await new Promise(r => setTimeout(r, 0));
+      btnAnother.disabled = false;
+      btnPrint.disabled = false;
+      statusEl.textContent = 'Ready';
+    } catch (err) {
+      statusEl.textContent = 'Failed to load';
+      console.error('Initialization failed:', err);
+      throw err;
     }
-  }
-
-  async function generateAndPrint() {
-    const size  = parseInt(selSize.value, 10);
-    const pages = Math.max(1, Math.min(20, parseInt(inpPages.value, 10) || 4));
-
-    btnPrint.disabled    = true;
-    btnAnother.disabled  = true;
-    statusEl.textContent = 'Generating…';
-
-    await fillPrintOutput(size, pages);
-
-    statusEl.textContent = 'Ready';
-    btnPrint.disabled    = false;
-    btnAnother.disabled  = false;
-
-    window.print();
-  }
-
-  // ── Initialise wasm ──────────────────────────────────────────────────
-  try {
-    await init();
-  } catch (err) {
-    statusEl.textContent = 'Failed to load';
-    console.error('WASM init failed:', err);
-    throw err;
-  }
-
-  btnAnother.disabled  = false;
-  btnPrint.disabled    = false;
-  statusEl.textContent = 'Ready';
-
-  generatePreview();
-  fillPrintOutput(parseInt(selSize.value, 10), 1);
-
-  selSize.addEventListener('change', () => {
-    generatePreview();
-    fillPrintOutput(parseInt(selSize.value, 10), 1);
-  });
-  btnAnother.addEventListener('click', generatePreview);
-  btnPrint.addEventListener('click', generateAndPrint);
-</script>
-
+  </script>
 </body>
 </html>
