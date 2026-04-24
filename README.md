@@ -2,7 +2,7 @@
 
 A Rust learning project — a solver for a small grid puzzle.
 
-Try it online: https://dev.purpureus.net/rublock/
+Try it online: <https://dev.purpureus.net/rublock/>
 
 ## The Puzzle
 
@@ -22,10 +22,6 @@ If a row has a target of **5** and its black squares are at columns 2 and 5 (1-i
 
 If the two black squares are **adjacent**, there are no numbers between them, and the sum is 0.
 
-## Goal
-
-Write a solver in Rust that, given the 12 target numbers (6 for rows, 6 for columns), finds a valid assignment of black squares and digits to the grid.
-
 ## Project Structure
 
 This project is primarily a vehicle for learning Rust — exploring ownership, iterators, enums, pattern matching, and more.
@@ -38,7 +34,7 @@ There are multiple solvers, accessible via `src/main.rs`.
 
 There is a generator for puzzles of varying difficulty, in `src/bin/gen_puzzle.rs`. Here's the hardest puzzle it has found so far:
 
-```
+```text
 0 4 3 8 4 3 0 0 0 0 4 0
 
      0   0   0   0   4   0
@@ -62,3 +58,14 @@ search nodes: 323  (after 3119192 grids)
 There's also a binary to count the number of valid puzzles of a given size. It works well up to size 6, but sizes larger than that become prohibitively expensive.
 
 One additional binary, `compare`, exists for development: it runs both solver backends on a fixed set of puzzles and asserts they agree.
+
+## Development
+
+Use `mise exec -- ...` for project commands so the configured Rust toolchain and `wasm-pack` are available.
+
+Common checks:
+
+```sh
+mise exec -- cargo test
+mise exec -- wasm-pack build --target web --release --features wasm
+```

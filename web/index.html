@@ -117,7 +117,10 @@
     .puzzle .target { font-weight: 700; color: #333; }
     .puzzle .cell { border: 1.5px solid #444; }
     .puzzle .cell.selected { outline: 2.5px solid #4f46e5; outline-offset: -2.5px; background: #eef2ff; }
+    .puzzle .cell.wrong { background: #fee2e2; border-color: #dc2626; }
+    .puzzle .cell.selected.wrong { background: #fecaca; }
     .puzzle .cell.black { background: #1a1a1a; color: #1a1a1a; }
+    .puzzle .cell.black.wrong { outline: 3px solid #dc2626; outline-offset: -4px; }
 
     #input-bar {
       display: flex;
@@ -229,6 +232,10 @@
             </select>
           </div>
           <button id="btn-another" class="btn-ghost" type="button" disabled>Generate another</button>
+          <button id="btn-undo" class="btn-ghost" type="button" disabled>Undo</button>
+          <button id="btn-redo" class="btn-ghost" type="button" disabled>Redo</button>
+          <button id="btn-check" class="btn-primary" type="button" disabled>Check</button>
+          <span id="play-feedback" class="feedback" aria-live="polite"></span>
         </div>
         <div id="preview"></div>
         <div class="controls-row">
@@ -390,7 +397,10 @@
       activeTab: 'play',
       puzzleData: null,
       cellValues: [],
-      selectedCell: null
+      selectedCell: null,
+      history: [],
+      historyIndex: 0,
+      wrongCells: new Set()
     };
 
     const tabButtons = document.querySelectorAll('.tab-btn');
@@ -399,6 +409,10 @@
     const playSizeEl = document.getElementById('play-size');
     const printSizeEl = document.getElementById('print-size');
     const btnAnother = document.getElementById('btn-another');
+    const btnUndo = document.getElementById('btn-undo');
+    const btnRedo = document.getElementById('btn-redo');
+    const btnCheck = document.getElementById('btn-check');
+    const playFeedbackEl = document.getElementById('play-feedback');
     const btnPrint = document.getElementById('btn-print');
     const inpPages = document.getElementById('inp-pages');
     const previewEl = document.getElementById('preview');
@@ -474,6 +488,83 @@
       return `${data.size}|${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
     }
 
+    function emptyCellValues(size) {
+      return Array.from({ length: size }, () => Array(size).fill(null));
+    }
+
+    function cellKey(row, col) {
+      return `${row},${col}`;
+    }
+
+    function sameValue(a, b) {
+      return a === b;
+    }
+
+    function resetPlayFeedback({ clearWrongCells = true } = {}) {
+      playFeedbackEl.classList.remove('error');
+      playFeedbackEl.textContent = '';
+      if (clearWrongCells) state.wrongCells.clear();
+    }
+
+    function clearWrongCell(row, col) {
+      state.wrongCells.delete(cellKey(row, col));
+      playFeedbackEl.classList.remove('error');
+      playFeedbackEl.textContent = '';
+    }
+
+    function updatePlayControls() {
+      const hasPuzzle = state.puzzleData !== null;
+      btnUndo.disabled = state.historyIndex === 0;
+      btnRedo.disabled = state.historyIndex === state.history.length;
+      btnCheck.disabled = !hasPuzzle;
+    }
+
+    function sameOperation(a, b) {
+      return a?.row === b?.row
+        && a?.col === b?.col
+        && sameValue(a?.oldValue, b?.oldValue)
+        && sameValue(a?.newValue, b?.newValue);
+    }
+
+    function applyUserValue(value) {
+      if (!state.selectedCell) return;
+      const { row, col } = state.selectedCell;
+      const oldValue = state.cellValues[row][col];
+      if (sameValue(oldValue, value)) return;
+
+      const operation = { row, col, oldValue, newValue: value };
+      const nextOperation = state.history[state.historyIndex];
+      if (sameOperation(operation, nextOperation)) {
+        state.historyIndex += 1;
+      } else {
+        state.history = state.history.slice(0, state.historyIndex);
+        state.history.push(operation);
+        state.historyIndex = state.history.length;
+      }
+
+      state.cellValues[row][col] = value;
+      clearWrongCell(row, col);
+      renderPreview();
+    }
+
+    function undoInput() {
+      if (state.historyIndex === 0) return;
+      const operation = state.history[state.historyIndex - 1];
+      state.historyIndex -= 1;
+      state.cellValues[operation.row][operation.col] = operation.oldValue;
+      clearWrongCell(operation.row, operation.col);
+      renderPreview();
+    }
+
+    function redoInput() {
+      if (state.historyIndex === state.history.length) return;
+      const operation = state.history[state.historyIndex];
+      state.historyIndex += 1;
+      state.cellValues[operation.row][operation.col] = operation.newValue;
+      clearWrongCell(operation.row, operation.col);
+      renderPreview();
+    }
+
     function setPuzzleData(data, { preserveProgressIfSame = true } = {}) {
       const samePuzzle = state.puzzleData && puzzleKey(state.puzzleData) === puzzleKey(data);
       const nextSize = data.size;
@@ -481,8 +572,11 @@
 
       state.puzzleData = data;
       if (shouldReset) {
-        state.cellValues = Array.from({ length: nextSize }, () => Array(nextSize).fill(null));
+        state.cellValues = emptyCellValues(nextSize);
         state.selectedCell = null;
+        state.history = [];
+        state.historyIndex = 0;
+        resetPlayFeedback();
       }
 
       playSizeEl.value = String(nextSize);
@@ -494,7 +588,10 @@
 
     function renderPreview() {
       previewEl.innerHTML = '';
-      if (!state.puzzleData) return;
+      if (!state.puzzleData) {
+        updatePlayControls();
+        return;
+      }
 
       const table = buildPuzzleTable(state.puzzleData, (cell, r, c) => {
         cell.dataset.row = r;
@@ -505,6 +602,9 @@
           cell.textContent = 'X';
         } else if (value !== null) {
           cell.textContent = String(value);
+        }
+        if (state.wrongCells.has(cellKey(r, c))) {
+          cell.classList.add('wrong');
         }
         if (state.selectedCell?.row === r && state.selectedCell?.col === c) {
           cell.classList.add('selected');
@@ -531,9 +631,7 @@
         button.textContent = label;
         button.disabled = disabled;
         button.addEventListener('click', () => {
-          if (!state.selectedCell) return;
-          state.cellValues[state.selectedCell.row][state.selectedCell.col] = value;
-          renderPreview();
+          applyUserValue(value);
         });
         return button;
       }
@@ -544,6 +642,7 @@
       }
       inputBar.appendChild(makeInputButton('CLEAR', null));
       previewEl.appendChild(inputBar);
+      updatePlayControls();
     }
 
     function renderSolvedGrid(data) {
@@ -590,6 +689,12 @@
       const parsed = parseTargetsText(param);
       if (parsed.error) return null;
       return parsed;
+    }
+
+    function solvePuzzleTargets(data) {
+      return JSON.parse(
+        solve_puzzle(Uint8Array.from(data.row_targets), Uint8Array.from(data.col_targets))
+      );
     }
 
     /** Share link: puzzle only, no tab param. (Plain `p=` so commas stay readable.) */
@@ -670,6 +775,44 @@
       setPuzzleData(parsed, { preserveProgressIfSame: false });
     }
 
+    function checkCurrentPuzzle() {
+      if (!state.puzzleData) return;
+
+      const response = solvePuzzleTargets(state.puzzleData);
+      state.wrongCells.clear();
+      playFeedbackEl.classList.remove('error');
+
+      if (response.error) {
+        playFeedbackEl.classList.add('error');
+        playFeedbackEl.textContent = response.error;
+        renderPreview();
+        return;
+      }
+
+      let entered = 0;
+      for (let r = 0; r < state.puzzleData.size; r++) {
+        for (let c = 0; c < state.puzzleData.size; c++) {
+          const value = state.cellValues[r][c];
+          if (value === null) continue;
+          entered += 1;
+          if (!sameValue(value, response.cells[r][c])) {
+            state.wrongCells.add(cellKey(r, c));
+          }
+        }
+      }
+
+      const wrongCount = state.wrongCells.size;
+      if (entered === 0) {
+        playFeedbackEl.textContent = 'Enter some cells, then check them.';
+      } else if (wrongCount === 0) {
+        playFeedbackEl.textContent = 'All entered cells are correct.';
+      } else {
+        playFeedbackEl.textContent = `${wrongCount} wrong cell${wrongCount === 1 ? '' : 's'}.`;
+      }
+
+      renderPreview();
+    }
+
     async function solveFromInput() {
       solveFeedbackEl.classList.remove('error');
       solveFeedbackEl.textContent = '';
@@ -682,9 +825,7 @@
         return;
       }
 
-      const response = JSON.parse(
-        solve_puzzle(Uint8Array.from(parsed.row_targets), Uint8Array.from(parsed.col_targets))
-      );
+      const response = solvePuzzleTargets(parsed);
       if (response.error) {
         solveResultEl.innerHTML = '';
         solveFeedbackEl.classList.add('error');
@@ -718,6 +859,9 @@
     playSizeEl.addEventListener('change', () => loadRandomPuzzle(Number.parseInt(playSizeEl.value, 10)));
     printSizeEl.addEventListener('change', () => { playSizeEl.value = printSizeEl.value; });
     btnAnother.addEventListener('click', () => loadRandomPuzzle(Number.parseInt(playSizeEl.value, 10)));
+    btnUndo.addEventListener('click', undoInput);
+    btnRedo.addEventListener('click', redoInput);
+    btnCheck.addEventListener('click', checkCurrentPuzzle);
     btnPrint.addEventListener('click', generateAndPrint);
     btnShare.addEventListener('click', shareCurrentPuzzle);
     btnSolve.addEventListener('click', solveFromInput);
