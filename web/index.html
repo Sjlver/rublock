@@ -106,7 +106,10 @@
     }
 
     .puzzle-wrap { display: inline-block; }
-    .puzzle { border-collapse: collapse; }
+    .puzzle {
+      border-collapse: collapse;
+      color: #374151;
+    }
     .puzzle td, .puzzle th {
       width: 2.5rem;
       height: 2.5rem;
@@ -161,6 +164,19 @@
     .puzzle .cell .cell-notes .note-6 { grid-area: 2 / 3; }
     .puzzle .cell .cell-notes .note-7 { grid-area: 3 / 1; }
 
+    @media screen {
+      .puzzle th, .puzzle td {
+        border: 1px solid #e5e7eb;
+      }
+      .puzzle th {
+        background: #f8fafc;
+        color: #1f2937;
+      }
+      .puzzle .cell {
+        border-color: #e5e7eb;
+      }
+    }
+
     .input-mode-hint {
       width: 100%;
       max-width: min(100vw - 2rem, 34rem);
@@ -176,6 +192,7 @@
       justify-content: center;
       gap: 0.5rem;
       max-width: min(100vw - 2rem, 34rem);
+      margin-bottom: 0.9rem;
     }
     .btn-input {
       min-width: 2.8rem;
@@ -201,6 +218,20 @@
     #howto h3 { font-size: 0.97rem; font-weight: 700; color: #312e81; margin: 1.1rem 0 0.4rem; }
     #howto ul { padding-left: 1.4rem; margin-bottom: 0.7rem; }
     #howto li { line-height: 1.6; color: #374151; margin-bottom: 0.2rem; }
+    #howto table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 42rem;
+      margin-bottom: 0.7rem;
+      color: #374151;
+    }
+    #howto > table th, #howto > table td {
+      border: 1px solid #e5e7eb;
+      padding: 0.45rem 0.6rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    #howto > table th { background: #f8fafc; color: #1f2937; }
     .howto-step { margin-bottom: 1rem; }
     .howto-step .puzzle-wrap { margin-top: 0.55rem; display: inline-block; }
     .howto-step .puzzle td,
@@ -425,7 +456,20 @@
         </ul>
 
         <h2>Controls</h2>
-        <p>Select a cell once to enter values, then use the buttons below the grid. Select the same cell again to switch to notes, where the buttons toggle small pencil marks instead. Selecting another cell keeps the current mode, so you can enter several values or notes in a row. On desktop, you can use the keyboard to move with the arrow keys or WASD, press Space to switch between values and notes, enter digits, use 0 or B for black squares, and press Backspace or Delete to clear.</p>
+        <table>
+          <thead>
+            <tr><th>Action</th><th>Mouse or touch</th><th>Desktop keyboard</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Select a cell</td><td>Tap or click a cell</td><td>Use the arrow keys or WASD to move the selection</td></tr>
+            <tr><td>Switch between values and notes</td><td>Select the same cell again</td><td>Press Space</td></tr>
+            <tr><td>Enter a digit</td><td>Use the number buttons below the grid</td><td>Press a digit key</td></tr>
+            <tr><td>Make a cell black</td><td>Use BLACK below the grid</td><td>Press 0, B, or X</td></tr>
+            <tr><td>Mark a notes-only digit cell</td><td>Use O below the grid in notes mode</td><td>Press 9 or O</td></tr>
+            <tr><td>Clear a cell</td><td>Use CLEAR below the grid</td><td>Press Backspace or Delete</td></tr>
+          </tbody>
+        </table>
+        <p>Selecting another cell keeps the current mode, so you can enter several values or notes in a row.</p>
       </div>
     </section>
   </main>
@@ -789,9 +833,15 @@
         return;
       }
 
-      if (key === '0' || key === 'b') {
+      if (key === '0' || key === 'b' || key === 'x') {
         event.preventDefault();
         applyUserInput('black');
+        return;
+      }
+
+      if (key === '9' || key === 'o') {
+        event.preventDefault();
+        applyUserNote('digits-only');
         return;
       }
 
@@ -856,7 +906,7 @@
             appendNote(grid, `note-${d}`, String(d));
           }
           if (notes.marker === 'black' || notes.marker === 'digits-only') {
-            appendNote(grid, 'note-marker', notes.marker === 'black' ? 'x' : '_');
+            appendNote(grid, 'note-marker', notes.marker === 'black' ? 'X' : 'O');
           }
           cell.appendChild(grid);
         }
@@ -917,7 +967,7 @@
         inputBar.appendChild(makeInputButton(String(n), n));
       }
       inputBar.appendChild(
-        makeInputButton('_', 'digits-only', { disabled: disabled || !notesMode })
+        makeInputButton('O', 'digits-only', { disabled: disabled || !notesMode })
       );
       inputBar.appendChild(makeInputButton('CLEAR', null));
       previewEl.appendChild(inputBar);
