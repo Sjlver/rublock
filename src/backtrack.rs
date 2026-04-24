@@ -19,7 +19,7 @@ use crate::solver::{SolveOutcome, Solver};
 /// If `out` is `Some`, each solved state is appended to it as it is found.
 /// For an initially-empty `out`, the return value equals `out.len()` after
 /// the call.
-fn search<S, const N: usize>(solver: &S, max: usize, mut out: Option<&mut Vec<S>>) -> usize
+fn search<S, const N: usize>(state: &mut S, max: usize, mut out: Option<&mut Vec<S>>) -> usize
 where
     S: Solver<N>,
 {
@@ -27,9 +27,6 @@ where
         return 0;
     }
 
-    solver.stats_handle().incr_node();
-
-    let mut state = solver.clone();
     state.propagate();
 
     if state.is_contradiction() {
@@ -37,7 +34,7 @@ where
     }
     if state.is_solved() {
         if let Some(out) = out.as_deref_mut() {
-            out.push(state);
+            out.push(state.clone());
         }
         return 1;
     }
@@ -50,12 +47,13 @@ where
     };
 
     let bit = state.pick_branching_bit(row, col);
+    state.stats_handle().incr_node();
     let mut branch = state.clone();
     branch.take_branch(row, col, bit);
-    let left = search(&branch, max, out.as_deref_mut());
+    let left = search(&mut branch, max, out.as_deref_mut());
 
     state.reject_branch(row, col, bit);
-    left + search(&state, max - left, out)
+    left + search(state, max - left, out)
 }
 
 /// Count the number of distinct solutions, stopping once `max` is reached.
@@ -69,7 +67,9 @@ pub fn count_solutions<S, const N: usize>(solver: &S, max: usize) -> usize
 where
     S: Solver<N>,
 {
-    search(solver, max, None)
+    solver.stats_handle().incr_node();
+    let mut state = solver.clone();
+    search(&mut state, max, None)
 }
 
 /// Solve the puzzle, reporting uniqueness.
@@ -80,8 +80,10 @@ pub fn solve<S, const N: usize>(solver: &S) -> SolveOutcome<S>
 where
     S: Solver<N>,
 {
+    solver.stats_handle().incr_node();
+    let mut state = solver.clone();
     let mut found: Vec<S> = Vec::with_capacity(2);
-    search(solver, 2, Some(&mut found));
+    search(&mut state, 2, Some(&mut found));
 
     let mut it = found.into_iter();
     match (it.next(), it.next()) {

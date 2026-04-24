@@ -100,7 +100,7 @@ impl StatsHandle {
     #[cfg(not(debug_assertions))]
     pub fn incr_bits(&self, _rule: Rule, _n: u32) {}
 
-    /// Record one search-tree node (one entry into the recursive solve).
+    /// Record one solver-state creation (one branching clone or the initial clone at search entry).
     #[inline]
     pub fn incr_node(&self) {
         let mut s = self.0.get();
