@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::changeset::ChangeSet;
-use crate::solver::{CellDomain, Puzzle, SolveOutcome, Solver, Tables};
+use crate::solver::{CellDomain, Puzzle, Solver, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── BasicSolverState ───────────────────────────────────────────────────────────────
@@ -553,111 +553,6 @@ impl<const N: usize> BasicSolverState<N> {
         1 << domain.trailing_zeros()
     }
 
-    /// Count the number of distinct solutions, stopping once `max` is reached.
-    ///
-    /// Returns the number of solutions found, which is at most `max`.
-    ///
-    /// Practical usage:
-    /// - Pass `max = 1` to test satisfiability.
-    /// - Pass `max = 2` to cheaply distinguish "unique solution" (returns 1)
-    ///   from "multiple solutions" (returns 2), which is what puzzle validation
-    ///   needs — no point counting further once we know uniqueness is broken.
-    ///
-    /// The method clones the solver state before each candidate branch so that
-    /// constraint-propagation side-effects don't leak across sibling branches.
-    pub fn count_solutions(&self, max: usize) -> usize {
-        if max == 0 {
-            return 0;
-        }
-
-        self.stats.incr_node();
-
-        let mut state = self.clone();
-        state.propagate();
-
-        if state.is_contradiction() {
-            return 0;
-        }
-        if state.is_solved() {
-            return 1;
-        }
-
-        let Some((row, col)) = state.pick_branching_cell() else {
-            // Propagation stalled but the grid is neither solved nor
-            // contradicted.  This shouldn't happen, let's just panic.
-            panic!("Propagation stalled");
-        };
-
-        // Try the first possible value for this cell.
-        let bit = state.pick_branching_bit(row, col);
-        let mut branch = state.clone();
-        // Both the commit and the complement are branching decisions, not
-        // deductions of any real rule, so we tag them `Backtracking`.
-        branch.set_cell(row, col, bit, Rule::Backtracking);
-        let branch_solutions = branch.count_solutions(max);
-
-        // For the remaining values, remove `bit` from this cell and recurse.
-        state.clear_mask(row, col, bit, Rule::Backtracking);
-        branch_solutions + state.count_solutions(max - branch_solutions)
-    }
-
-    /// Run backtracking search and fill `out` with up to `limit` solved states.
-    ///
-    /// Same shape as `count_solutions`, but keeps the solved states around so
-    /// the caller can display them.  Stops as soon as `out.len() == limit`.
-    fn collect_solutions(&self, limit: usize, out: &mut Vec<Self>) {
-        if out.len() >= limit {
-            return;
-        }
-
-        self.stats.incr_node();
-
-        let mut state = self.clone();
-        state.propagate();
-
-        if state.is_contradiction() {
-            return;
-        }
-        if state.is_solved() {
-            out.push(state);
-            return;
-        }
-
-        let Some((row, col)) = state.pick_branching_cell() else {
-            panic!("Propagation stalled");
-        };
-
-        let bit = state.pick_branching_bit(row, col);
-
-        let mut branch = state.clone();
-        branch.set_cell(row, col, bit, Rule::Backtracking);
-        branch.collect_solutions(limit, out);
-
-        if out.len() >= limit {
-            return;
-        }
-
-        state.clear_mask(row, col, bit, Rule::Backtracking);
-        state.collect_solutions(limit, out);
-    }
-
-    /// Solve the puzzle, reporting uniqueness.
-    ///
-    /// Searches for up to two solutions so the outcome can distinguish
-    /// `Unique` from `Multiple` without enumerating the whole solution space.
-    pub fn solve(&self) -> SolveOutcome<Self> {
-        let mut found: Vec<Self> = Vec::with_capacity(2);
-        self.collect_solutions(2, &mut found);
-
-        // Destructure the Vec via an iterator — idiomatic Rust for "give me
-        // up to the first two elements".
-        let mut it = found.into_iter();
-        match (it.next(), it.next()) {
-            (None, _) => SolveOutcome::Unsolvable,
-            (Some(s), None) => SolveOutcome::Unique(s),
-            (Some(s), Some(_)) => SolveOutcome::Multiple(s),
-        }
-    }
 }
 
 // ── Solver trait impl ─────────────────────────────────────────────────────────
@@ -761,6 +656,7 @@ impl<const N: usize> fmt::Display for BasicSolverState<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::solver::SolveOutcome;
 
     #[test]
     fn cell_domain_all_values_possible() {

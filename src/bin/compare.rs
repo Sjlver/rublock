@@ -2,7 +2,7 @@
 /// the solution count.
 use rublock::basic_solver::BasicSolverState;
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::Puzzle;
+use rublock::solver::{Puzzle, Solver};
 
 fn check<const N: usize>(puzzle: Puzzle<N>, label: &str) {
     let old_count = BasicSolverState::new(puzzle.clone()).count_solutions(2);

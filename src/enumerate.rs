@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::basic_solver::BasicSolverState;
 use crate::grid::{Cell, Grid};
 use crate::queue_solver::QueueSolverState;
-use crate::solver::Puzzle;
+use crate::solver::{Puzzle, Solver};
 
 // ── PartialGrid ───────────────────────────────────────────────────────────────
 

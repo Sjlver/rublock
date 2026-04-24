@@ -1,3 +1,4 @@
+pub mod backtrack;
 pub mod basic_solver;
 pub mod changeset;
 pub mod enumerate;

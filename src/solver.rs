@@ -12,6 +12,7 @@
 
 use std::fmt;
 
+use crate::backtrack;
 use crate::stats::{Stats, StatsHandle};
 
 // ── Puzzle ────────────────────────────────────────────────────────────────────
@@ -214,4 +215,25 @@ pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
     /// Exclude `bit` from `(r, c)` as a branching decision (the complement
     /// path), propagating consequences.  See [`take_branch`](Self::take_branch).
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain);
+
+    // ── Provided backtracking entry points ────────────────────────────────────
+    //
+    // These forward to free generic functions in `crate::backtrack` so the
+    // search loop lives in one place.  They're on the trait so call sites can
+    // write `state.count_solutions(max)` rather than `backtrack::count_solutions(&state, max)`.
+
+    /// See [`backtrack::count_solutions`].
+    fn count_solutions(&self, max: usize) -> usize {
+        backtrack::count_solutions(self, max)
+    }
+
+    /// See [`backtrack::collect_solutions`].
+    fn collect_solutions(&self, limit: usize, out: &mut Vec<Self>) {
+        backtrack::collect_solutions(self, limit, out)
+    }
+
+    /// See [`backtrack::solve`].
+    fn solve(&self) -> SolveOutcome<Self> {
+        backtrack::solve(self)
+    }
 }

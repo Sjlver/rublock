@@ -1,6 +1,6 @@
 use tracing::{instrument, trace};
 
-use crate::solver::{CellDomain, Puzzle, SolveOutcome, Solver, Tables};
+use crate::solver::{CellDomain, Puzzle, Solver, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
@@ -721,87 +721,6 @@ impl<const N: usize> QueueSolverState<N> {
         best.map(|(r, c, _)| (r, c))
     }
 
-    pub fn count_solutions(&self, max: usize) -> usize {
-        if max == 0 {
-            return 0;
-        }
-
-        self.stats.incr_node();
-
-        let mut state = self.clone();
-        state.propagate();
-
-        if state.is_contradiction() {
-            return 0;
-        }
-        if state.is_solved() {
-            return 1;
-        }
-
-        let Some((row, col)) = state.pick_branching_cell() else {
-            panic!("Propagation stalled");
-        };
-
-        let bit = state.pick_branching_bit(row, col);
-        let mut branch = state.clone();
-        // Both the commit and the complement are branching decisions, not
-        // deductions of any real rule, so we tag them `Backtracking`.
-        branch.set_cell(row, col, bit, Rule::Backtracking);
-        let branch_solutions = branch.count_solutions(max);
-
-        state.clear_mask(row, col, bit, Rule::Backtracking);
-        branch_solutions + state.count_solutions(max - branch_solutions)
-    }
-
-    /// Run backtracking search and fill `out` with up to `limit` solved states.
-    fn collect_solutions(&self, limit: usize, out: &mut Vec<Self>) {
-        if out.len() >= limit {
-            return;
-        }
-
-        self.stats.incr_node();
-
-        let mut state = self.clone();
-        state.propagate();
-
-        if state.is_contradiction() {
-            return;
-        }
-        if state.is_solved() {
-            out.push(state);
-            return;
-        }
-
-        let Some((row, col)) = state.pick_branching_cell() else {
-            panic!("Propagation stalled");
-        };
-
-        let bit = state.pick_branching_bit(row, col);
-
-        let mut branch = state.clone();
-        branch.set_cell(row, col, bit, Rule::Backtracking);
-        branch.collect_solutions(limit, out);
-
-        if out.len() >= limit {
-            return;
-        }
-
-        state.clear_mask(row, col, bit, Rule::Backtracking);
-        state.collect_solutions(limit, out);
-    }
-
-    /// Solve the puzzle, reporting uniqueness.  See `BasicSolverState::solve`.
-    pub fn solve(&self) -> SolveOutcome<Self> {
-        let mut found: Vec<Self> = Vec::with_capacity(2);
-        self.collect_solutions(2, &mut found);
-
-        let mut it = found.into_iter();
-        match (it.next(), it.next()) {
-            (None, _) => SolveOutcome::Unsolvable,
-            (Some(s), None) => SolveOutcome::Unique(s),
-            (Some(s), Some(_)) => SolveOutcome::Multiple(s),
-        }
-    }
 }
 
 // ── Solver trait impl ─────────────────────────────────────────────────────────
@@ -900,6 +819,7 @@ impl<const N: usize> std::fmt::Display for QueueSolverState<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::solver::SolveOutcome;
 
     #[test]
     fn live_tuple_pos_at_works() {

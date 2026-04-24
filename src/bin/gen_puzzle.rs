@@ -41,7 +41,7 @@ use rublock::basic_solver::BasicSolverState;
 use rublock::enumerate::SolverChoice;
 use rublock::grid::{Cell, Grid};
 use rublock::queue_solver::QueueSolverState;
-use rublock::solver::{Puzzle, SolveOutcome};
+use rublock::solver::{Puzzle, SolveOutcome, Solver};
 
 fn usage() -> ! {
     eprintln!(
