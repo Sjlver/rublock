@@ -227,11 +227,6 @@ pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
         backtrack::count_solutions(self, max)
     }
 
-    /// See [`backtrack::collect_solutions`].
-    fn collect_solutions(&self, limit: usize, out: &mut Vec<Self>) {
-        backtrack::collect_solutions(self, limit, out)
-    }
-
     /// See [`backtrack::solve`].
     fn solve(&self) -> SolveOutcome<Self> {
         backtrack::solve(self)

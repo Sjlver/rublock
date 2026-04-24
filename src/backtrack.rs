@@ -13,17 +13,13 @@
 
 use crate::solver::{SolveOutcome, Solver};
 
-/// Count the number of distinct solutions, stopping once `max` is reached.
+/// Core backtracking search.
 ///
-/// Returns the number of solutions found, which is at most `max`.
-///
-/// Typical usage:
-/// - `max = 1` — satisfiability test.
-/// - `max = 2` — uniqueness test: `1` means unique, `2` means multiple.
-///
-/// The solver is cloned before each guess so sibling branches don't see each
-/// other's propagation side-effects.
-pub fn count_solutions<S, const N: usize>(solver: &S, max: usize) -> usize
+/// Returns the number of solutions found during this call, up to `max`.
+/// If `out` is `Some`, each solved state is appended to it as it is found.
+/// For an initially-empty `out`, the return value equals `out.len()` after
+/// the call.
+fn search<S, const N: usize>(solver: &S, max: usize, mut out: Option<&mut Vec<S>>) -> usize
 where
     S: Solver<N>,
 {
@@ -40,6 +36,9 @@ where
         return 0;
     }
     if state.is_solved() {
+        if let Some(out) = out.as_deref_mut() {
+            out.push(state);
+        }
         return 1;
     }
 
@@ -53,53 +52,24 @@ where
     let bit = state.pick_branching_bit(row, col);
     let mut branch = state.clone();
     branch.take_branch(row, col, bit);
-    let branch_solutions = count_solutions(&branch, max);
+    let left = search(&branch, max, out.as_deref_mut());
 
     state.reject_branch(row, col, bit);
-    branch_solutions + count_solutions(&state, max - branch_solutions)
+    left + search(&state, max - left, out)
 }
 
-/// Run backtracking search and fill `out` with up to `limit` solved states.
+/// Count the number of distinct solutions, stopping once `max` is reached.
 ///
-/// Same shape as [`count_solutions`] but keeps the solved states so the caller
-/// can display them.  Stops as soon as `out.len() == limit`.
-pub fn collect_solutions<S, const N: usize>(solver: &S, limit: usize, out: &mut Vec<S>)
+/// Returns the number of solutions found, which is at most `max`.
+///
+/// Typical usage:
+/// - `max = 1` — satisfiability test.
+/// - `max = 2` — uniqueness test: `1` means unique, `2` means multiple.
+pub fn count_solutions<S, const N: usize>(solver: &S, max: usize) -> usize
 where
     S: Solver<N>,
 {
-    if out.len() >= limit {
-        return;
-    }
-
-    solver.stats_handle().incr_node();
-
-    let mut state = solver.clone();
-    state.propagate();
-
-    if state.is_contradiction() {
-        return;
-    }
-    if state.is_solved() {
-        out.push(state);
-        return;
-    }
-
-    let Some((row, col)) = state.pick_branching_cell() else {
-        panic!("Propagation stalled");
-    };
-
-    let bit = state.pick_branching_bit(row, col);
-
-    let mut branch = state.clone();
-    branch.take_branch(row, col, bit);
-    collect_solutions(&branch, limit, out);
-
-    if out.len() >= limit {
-        return;
-    }
-
-    state.reject_branch(row, col, bit);
-    collect_solutions(&state, limit, out);
+    search(solver, max, None)
 }
 
 /// Solve the puzzle, reporting uniqueness.
@@ -111,10 +81,8 @@ where
     S: Solver<N>,
 {
     let mut found: Vec<S> = Vec::with_capacity(2);
-    collect_solutions(solver, 2, &mut found);
+    search(solver, 2, Some(&mut found));
 
-    // Destructure the Vec via an iterator — idiomatic for "give me up to the
-    // first two elements".
     let mut it = found.into_iter();
     match (it.next(), it.next()) {
         (None, _) => SolveOutcome::Unsolvable,
