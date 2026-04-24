@@ -2,60 +2,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::changeset::ChangeSet;
+use crate::solver::{CellDomain, Puzzle, SolveOutcome, Solver, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
-
-// ── Puzzle ────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
-pub struct Puzzle<const N: usize> {
-    pub row_targets: [u8; N],
-    pub col_targets: [u8; N],
-}
-
-impl<const N: usize> Puzzle<N> {
-    pub fn new(row_targets: [u8; N], col_targets: [u8; N]) -> Self {
-        Self {
-            row_targets,
-            col_targets,
-        }
-    }
-}
-
-// ── SolveOutcome ──────────────────────────────────────────────────────────────
-
-/// The result of a `solve()` call on a solver state.
-///
-/// Generic over the state type so both `BasicSolverState` and `QueueSolverState`
-/// can use it.  When there are multiple solutions, we return the **first**
-/// one found — enough for display, while still flagging non-uniqueness.
-#[derive(Debug, Clone)]
-pub enum SolveOutcome<S> {
-    /// No assignment satisfies every constraint.
-    Unsolvable,
-    /// Exactly one solution exists.
-    Unique(S),
-    /// At least two solutions exist; the enclosed state is the first one found.
-    Multiple(S),
-}
-
-// ── Domain types ──────────────────────────────────────────────────────────────
-//
-// CellDomain: which values can a cell still hold?
-//   bit 0     = unused
-//   bit n     = number n  (n = 1..=N-2)
-//   bit N-1   = black 1 in row
-//   bit N     = black 2 in row
-//   bit N+1   = black 1 in column
-//   bit N+2   = black 2 in column
-//
-// We distinguish between various values for black. Black 1 means the first
-// black entry in a row (or column), and black 2 is the second.
-//
-// In principle, u16 suffices for puzzles up to N=13, and would lead to a smaller
-// solver state and faster cloning. However, performance on puzzles that don't
-// backtrack seems to decrease for reasons I don't fully understand. Hence
-// use u64.
-pub type CellDomain = u64;
 
 // ── BasicSolverState ───────────────────────────────────────────────────────────────
 //
@@ -102,74 +50,6 @@ impl<const N: usize> fmt::Debug for BasicSolverState<N> {
             .field("puzzle", &self.puzzle)
             .field("domains", &self.domains)
             .finish()
-    }
-}
-
-// ── Precomputed tables ────────────────────────────────────────────────────────
-//
-// `Tables` holds data derived purely from the grid size that is cheap to build
-// but reused on every propagation pass.  It is computed once in
-// `BasicSolverState::new` and shared across all backtracking clones via `Arc`.
-//
-// All fields are `Vec`-based because their sizes depend on `num_digits = N-2`,
-// which is only known at runtime.
-
-#[derive(Debug)]
-pub(crate) struct Tables {
-    /// For each (target, size) pair, the list of valid digit-set bitmasks.
-    ///
-    /// A valid digit-set for cage target `t` and size `k` is any k-element
-    /// subset of the digit set whose elements sum to `t`.  Each set is encoded
-    /// as a `CellDomain` with bit `d` set (i.e. `1 << d`) if digit `d` belongs to
-    /// the set — the same layout used for cell domains.
-    ///
-    /// Indexed as `valid_tuples[target][size]`.
-    valid_tuples: Vec<Vec<Vec<CellDomain>>>,
-
-    /// Maximum achievable cage sum (= 1 + 2 + ... + num_digits).
-    pub(crate) max_sum: usize,
-}
-
-impl Tables {
-    /// Build tables for a grid whose rows/columns contain `num_digits` distinct
-    /// digit values (i.e. `num_digits = N - 2` for an N×N grid).
-    pub(crate) fn build(num_digits: usize) -> Self {
-        // Digits are 1..=num_digits; max achievable cage sum is their total.
-        let max_target: usize = (1..=num_digits).sum();
-        let num_targets = max_target + 1;
-
-        // valid_tuples[target][size]: one Vec per (target, size) pair.
-        let mut valid_tuples: Vec<Vec<Vec<CellDomain>>> =
-            vec![vec![vec![]; num_digits + 1]; num_targets];
-
-        // Iterate over every subset of the digit set {1, …, num_digits}.
-        // For each subset, its size and sum determine exactly which slot it
-        // belongs in — no inner loops or filtering needed.
-        for subset in 0 as CellDomain..(1 as CellDomain) << num_digits {
-            let size = subset.count_ones() as usize;
-            let target: usize = (0..num_digits)
-                .filter(|&b| subset & (1 << b) != 0)
-                .map(|b| b + 1) // bit b represents digit b+1
-                .sum();
-            // Shift left by 1: bit b (digit b+1) → bit b+1 in the domain mask.
-            valid_tuples[target][size].push(subset << 1);
-        }
-
-        Self {
-            valid_tuples,
-            max_sum: max_target,
-        }
-    }
-
-    // Returns (l, t) for all valid tuples with the given `target`
-    pub(crate) fn valid_tuples_for_target(
-        &self,
-        target: usize,
-    ) -> impl Iterator<Item = (usize, CellDomain)> {
-        self.valid_tuples[target]
-            .iter()
-            .enumerate()
-            .flat_map(|(l, ts)| ts.iter().map(move |&t| (l, t)))
     }
 }
 
@@ -777,6 +657,57 @@ impl<const N: usize> BasicSolverState<N> {
             (Some(s), None) => SolveOutcome::Unique(s),
             (Some(s), Some(_)) => SolveOutcome::Multiple(s),
         }
+    }
+}
+
+// ── Solver trait impl ─────────────────────────────────────────────────────────
+//
+// The inherent methods above are the hand-written API; this impl block is a
+// thin adapter that exposes them through the shared `Solver` trait so the
+// backtracking code (and other generic consumers) can drive any solver without
+// knowing its concrete type.  Most trait methods forward to the identically-
+// named inherent method via `Self::method(...)` — that path always resolves to
+// the inherent method, so there's no accidental recursion.
+
+impl<const N: usize> Solver<N> for BasicSolverState<N> {
+    fn new(puzzle: Puzzle<N>) -> Self {
+        Self::new(puzzle)
+    }
+
+    fn stats(&self) -> Stats {
+        self.stats.snapshot()
+    }
+
+    fn stats_handle(&self) -> &StatsHandle {
+        &self.stats
+    }
+
+    fn propagate(&mut self) {
+        Self::propagate(self)
+    }
+
+    fn is_solved(&self) -> bool {
+        Self::is_solved(self)
+    }
+
+    fn is_contradiction(&self) -> bool {
+        Self::is_contradiction(self)
+    }
+
+    fn pick_branching_cell(&self) -> Option<(usize, usize)> {
+        Self::pick_branching_cell(self)
+    }
+
+    fn pick_branching_bit(&mut self, row: usize, col: usize) -> CellDomain {
+        Self::pick_branching_bit(self, row, col)
+    }
+
+    fn take_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        let _ = self.set_cell(r, c, bit, Rule::Backtracking);
+    }
+
+    fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        let _ = self.clear_mask(r, c, bit, Rule::Backtracking);
     }
 }
 

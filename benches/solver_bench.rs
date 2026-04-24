@@ -1,6 +1,7 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rublock::queue_solver::QueueSolverState;
-use rublock::basic_solver::{BasicSolverState, Puzzle};
+use rublock::basic_solver::BasicSolverState;
+use rublock::solver::Puzzle;
 
 // A fixed set of hand-picked 6×6 puzzles: five that propagation alone solves,
 // and five that require backtracking.  To refresh these, use `gen_puzzle` with

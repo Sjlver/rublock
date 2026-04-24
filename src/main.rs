@@ -1,6 +1,7 @@
+use rublock::basic_solver::BasicSolverState;
 use rublock::enumerate::SolverChoice;
 use rublock::queue_solver::QueueSolverState;
-use rublock::basic_solver::{BasicSolverState, Puzzle, SolveOutcome};
+use rublock::solver::{Puzzle, SolveOutcome};
 use rublock::stats::Stats;
 
 fn usage() -> ! {

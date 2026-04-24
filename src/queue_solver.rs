@@ -1,6 +1,6 @@
 use tracing::{instrument, trace};
 
-use crate::basic_solver::{CellDomain, Puzzle, SolveOutcome, Tables};
+use crate::solver::{CellDomain, Puzzle, SolveOutcome, Solver, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
@@ -801,6 +801,55 @@ impl<const N: usize> QueueSolverState<N> {
             (Some(s), None) => SolveOutcome::Unique(s),
             (Some(s), Some(_)) => SolveOutcome::Multiple(s),
         }
+    }
+}
+
+// ── Solver trait impl ─────────────────────────────────────────────────────────
+//
+// Mirror of the adapter in `basic_solver.rs`: each required trait method
+// forwards to the identically-named inherent method above.  `take_branch` /
+// `reject_branch` delegate to the internal propagation primitives, tagging the
+// change as a `Backtracking` decision for the stats counters.
+
+impl<const N: usize> Solver<N> for QueueSolverState<N> {
+    fn new(puzzle: Puzzle<N>) -> Self {
+        Self::new(puzzle)
+    }
+
+    fn stats(&self) -> Stats {
+        self.stats.snapshot()
+    }
+
+    fn stats_handle(&self) -> &StatsHandle {
+        &self.stats
+    }
+
+    fn propagate(&mut self) {
+        Self::propagate(self)
+    }
+
+    fn is_solved(&self) -> bool {
+        Self::is_solved(self)
+    }
+
+    fn is_contradiction(&self) -> bool {
+        Self::is_contradiction(self)
+    }
+
+    fn pick_branching_cell(&self) -> Option<(usize, usize)> {
+        Self::pick_branching_cell(self)
+    }
+
+    fn pick_branching_bit(&mut self, row: usize, col: usize) -> CellDomain {
+        Self::pick_branching_bit(self, row, col)
+    }
+
+    fn take_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.set_cell(r, c, bit, Rule::Backtracking);
+    }
+
+    fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.clear_mask(r, c, bit, Rule::Backtracking);
     }
 }
 

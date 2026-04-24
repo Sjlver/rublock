@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 
+use crate::basic_solver::BasicSolverState;
 use crate::grid::{Cell, Grid};
-use crate::basic_solver::{BasicSolverState, Puzzle};
 use crate::queue_solver::QueueSolverState;
+use crate::solver::Puzzle;
 
 // ── PartialGrid ───────────────────────────────────────────────────────────────
 
@@ -396,7 +397,8 @@ mod tests {
 
     #[test]
     fn solver_count_solutions_matches_brute_force() {
-        use crate::basic_solver::{BasicSolverState, Puzzle};
+        use crate::basic_solver::BasicSolverState;
+        use crate::solver::Puzzle;
         use std::collections::HashMap;
 
         const N: usize = 4;
