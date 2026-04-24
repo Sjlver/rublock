@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Generate and print Doplo logic puzzles in various sizes.">
   <title>Doplo Puzzle Generator</title>
   <style>
     /* ── Reset & base ──────────────────────────────────────────────────── */
@@ -12,7 +13,14 @@
       font-family: system-ui, -apple-system, sans-serif;
       background: #f5f4f0;
       color: #1a1a1a;
-      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    :focus-visible {
+      outline: 2px solid #4f46e5;
+      outline-offset: 2px;
     }
 
     /* ── Screen-only controls ──────────────────────────────────────────── */
@@ -39,7 +47,8 @@
       gap: 0.5rem;
     }
 
-    .field label {
+    .field label,
+    .field .label-text {
       font-size: 0.9rem;
       color: #555;
     }
@@ -54,7 +63,12 @@
       background: #fafafa;
     }
 
-    #btn-generate {
+    .field input[type="number"].narrow {
+      width: 3.5rem;
+    }
+
+    /* Primary button */
+    .btn-primary {
       padding: 0.5rem 1.4rem;
       font-size: 0.95rem;
       font-weight: 600;
@@ -63,39 +77,45 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: background-color 0.15s;
     }
+    .btn-primary:hover:not(:disabled) { background: #4338ca; }
+    .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
 
-    #btn-generate:hover { background: #4338ca; }
-    #btn-generate:disabled { background: #a5b4fc; cursor: not-allowed; }
-
-    #btn-print {
-      padding: 0.5rem 1.4rem;
-      font-size: 0.95rem;
-      font-weight: 600;
+    /* Ghost button */
+    .btn-ghost {
+      padding: 0.5rem 1.2rem;
+      font-size: 0.9rem;
+      font-weight: 500;
       background: transparent;
       color: #4f46e5;
-      border: 2px solid #4f46e5;
+      border: 1.5px solid #c7d2fe;
       border-radius: 8px;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: background-color 0.15s, border-color 0.15s;
     }
-
-    #btn-print:hover { background: #eef2ff; }
+    .btn-ghost:hover:not(:disabled) { background: #eef2ff; border-color: #a5b4fc; }
+    .btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
 
     #status {
       font-size: 0.85rem;
-      color: #888;
-      min-width: 8rem;
+      color: #666;
+      min-width: 6rem;
     }
 
-    /* ── Puzzle output area ────────────────────────────────────────────── */
-    #output {
-      padding: 2rem;
+    /* ── Preview area (single puzzle, screen only) ─────────────────────── */
+    #preview {
+      flex: 1;
+      padding: 3rem 2rem;
       display: flex;
       flex-direction: column;
+      justify-content: flex-start;
       align-items: center;
-      gap: 2rem;
+    }
+
+    /* ── Print output (hidden on screen, shown when printing) ─────────── */
+    #print-output {
+      display: none;
     }
 
     /* Each .page-group holds 6 puzzles in a 2-column layout */
@@ -103,6 +123,7 @@
       display: grid;
       grid-template-columns: repeat(2, auto);
       gap: 2rem 3rem;
+      position: relative;
     }
 
     /* ── Individual puzzle ─────────────────────────────────────────────── */
@@ -114,32 +135,102 @@
       border-collapse: collapse;
     }
 
-    .puzzle td {
-      width: 2.2rem;
-      height: 2.2rem;
+    .puzzle td,
+    .puzzle th {
+      width: 2.5rem;
+      height: 2.5rem;
       text-align: center;
       vertical-align: middle;
-      font-size: 1rem;
+      font-size: 1.05rem;
     }
 
     /* Target cells (first row and first column) */
-    .puzzle td.target {
+    .puzzle .target {
       font-weight: 700;
-      font-size: 0.95rem;
+      font-size: 1rem;
       color: #333;
     }
 
-    /* Empty corner */
-    .puzzle td.corner { }
-
     /* Playable cells */
-    .puzzle td.cell {
+    .puzzle .cell {
       border: 1.5px solid #444;
+    }
+
+    .puzzle .cell.selected {
+      outline: 2.5px solid #4f46e5;
+      outline-offset: -2.5px;
+      background: #eef2ff;
+    }
+
+    .puzzle .cell.black {
+      background: #1a1a1a;
+    }
+
+    #input-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+      padding-top: 1rem;
+      max-width: min(100vw - 2rem, 34rem);
+    }
+
+    .btn-input {
+      min-width: 2.8rem;
+      min-height: 2.8rem;
+      padding: 0.5rem 0.9rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 10px;
+      border: 1.5px solid #d1d5db;
+      background: #fff;
+      color: #1f2937;
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    .btn-input:hover:enabled {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+
+    .btn-input:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* ── Site footer ──────────────────────────────────────────────────── */
+    #footer {
+      background: #fff;
+      border-top: 1px solid #ddd;
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      color: #555;
+    }
+
+    #footer a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: #4f46e5;
+      text-decoration: none;
+    }
+
+    #footer a:hover {
+      text-decoration: underline;
+    }
+
+    #footer svg {
+      flex-shrink: 0;
     }
 
     /* ── Promo footer ──────────────────────────────────────────────────── */
     .promo {
-      display: none; /* hidden on screen */
+      display: none;
       font-size: 0.75rem;
       color: #666;
       text-align: center;
@@ -152,19 +243,25 @@
     @media print {
       body { background: #fff; }
 
-      #controls { display: none; }
+      #controls  { display: none; }
+      #footer    { display: none; }
+      #preview   { display: none; }
+      #input-bar { display: none; }
 
-      #output { padding: 0; gap: 0; }
+      #print-output {
+        display: block;
+        padding: 0;
+      }
 
       .page-group {
         gap: 8mm 10mm;
-        page-break-after: always;
-        /* Leave room at the bottom for the promo */
+        break-after: page;
+        page-break-after: always; /* fallback for older engines */
         padding-bottom: 12mm;
-        position: relative;
       }
 
       .page-group:last-child {
+        break-after: auto;
         page-break-after: auto;
       }
 
@@ -176,17 +273,18 @@
         right: 0;
       }
 
-      .puzzle td {
+      .puzzle td,
+      .puzzle th {
         width: 9mm;
         height: 9mm;
         font-size: 8pt;
       }
 
-      .puzzle td.target {
+      .puzzle .target {
         font-size: 8pt;
       }
 
-      .puzzle td.cell {
+      .puzzle .cell {
         border: 0.8pt solid #333;
       }
     }
@@ -194,7 +292,7 @@
 </head>
 <body>
 
-<div id="controls">
+<header id="controls">
   <h1>Doplo Puzzle Generator</h1>
 
   <div class="field">
@@ -207,120 +305,235 @@
     </select>
   </div>
 
+  <button id="btn-another" class="btn-ghost" disabled>Generate another</button>
+
   <div class="field">
-    <label for="inp-count">Puzzles</label>
-    <input id="inp-count" type="number" min="1" max="60" value="6">
+    <label for="inp-pages" class="label-text">Generate</label>
+    <input id="inp-pages" class="narrow" type="number" min="1" max="20" value="4">
+    <span class="label-text">pages and</span>
+    <button id="btn-print" class="btn-primary" disabled>Print</button>
   </div>
 
-  <button id="btn-generate" disabled>Generate</button>
-  <button id="btn-print">Print</button>
-  <span id="status">Loading…</span>
-</div>
+  <span id="status" role="status" aria-live="polite">Loading…</span>
+</header>
 
-<div id="output"></div>
+<main id="preview"></main>
+<footer id="footer">
+  Source code:
+  <a href="https://github.com/Sjlver/rublock" target="_blank" rel="noopener noreferrer">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+    </svg>
+    github.com/Sjlver/rublock
+  </a>
+</footer>
+<div id="print-output" aria-hidden="true"></div>
 
 <script type="module">
   import init, { generate_puzzle } from './pkg/rublock.js';
 
-  const btnGenerate = document.getElementById('btn-generate');
-  const btnPrint    = document.getElementById('btn-print');
-  const selSize     = document.getElementById('sel-size');
-  const inpCount    = document.getElementById('inp-count');
-  const statusEl    = document.getElementById('status');
-  const outputEl    = document.getElementById('output');
+  const btnAnother    = document.getElementById('btn-another');
+  const btnPrint      = document.getElementById('btn-print');
+  const selSize       = document.getElementById('sel-size');
+  const inpPages      = document.getElementById('inp-pages');
+  const statusEl      = document.getElementById('status');
+  const previewEl     = document.getElementById('preview');
+  const printOutputEl = document.getElementById('print-output');
 
-  // ── Initialise wasm ──────────────────────────────────────────────────
-  await init();
-  statusEl.textContent = 'Ready';
-  btnGenerate.disabled = false;
+  let puzzleData   = null;
+  let cellValues   = [];
+  let selectedCell = null;
 
-  // ── Puzzle rendering ─────────────────────────────────────────────────
-  function renderPuzzle(json) {
-    const { size, row_targets, col_targets } = JSON.parse(json);
+  // ── Shared table builder ──────────────────────────────────────────────
+  // onCell(td, row, col) is called for each playable cell, if provided.
+  function buildPuzzleTable({ size, row_targets, col_targets }, onCell = null) {
     const table = document.createElement('table');
     table.className = 'puzzle';
 
-    // Header row: corner + col targets
     const thead = table.createTHead();
-    const hrow = thead.insertRow();
-    const corner = hrow.insertCell();
+    const hrow  = thead.insertRow();
+    const corner = document.createElement('th');
     corner.className = 'corner';
+    hrow.appendChild(corner);
     for (let c = 0; c < size; c++) {
-      const td = hrow.insertCell();
-      td.className = 'target';
-      td.textContent = col_targets[c];
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.className = 'target';
+      th.textContent = col_targets[c];
+      hrow.appendChild(th);
     }
 
-    // Body rows: row target + empty cells
     const tbody = table.createTBody();
     for (let r = 0; r < size; r++) {
       const row = tbody.insertRow();
-      const th = row.insertCell();
-      th.className = 'target';
+      const th  = document.createElement('th');
+      th.scope      = 'row';
+      th.className  = 'target';
       th.textContent = row_targets[r];
+      row.appendChild(th);
       for (let c = 0; c < size; c++) {
         const td = row.insertCell();
         td.className = 'cell';
+        onCell?.(td, r, c);
       }
     }
 
-    const wrap = document.createElement('div');
+    return table;
+  }
+
+  // ── Static puzzle (used for print output) ────────────────────────────
+  function renderPuzzle(json) {
+    const data  = JSON.parse(json);
+    const table = buildPuzzleTable(data);
+    const wrap  = document.createElement('div');
     wrap.className = 'puzzle-wrap';
     wrap.appendChild(table);
     return wrap;
   }
 
-  // ── Generate handler ─────────────────────────────────────────────────
+  // ── Interactive preview ───────────────────────────────────────────────
+  function renderPreview() {
+    if (!puzzleData) return;
+    previewEl.innerHTML = '';
+
+    const table = buildPuzzleTable(puzzleData, (cell, r, c) => {
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+
+      const value = cellValues[r][c];
+      if (value === 'black') {
+        cell.classList.add('black');
+      } else if (value !== null) {
+        cell.textContent = String(value);
+      }
+
+      if (selectedCell?.row === r && selectedCell?.col === c) {
+        cell.classList.add('selected');
+      }
+
+      cell.addEventListener('click', () => {
+        selectedCell = { row: r, col: c };
+        renderPreview();
+      });
+    });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'puzzle-wrap';
+    wrap.appendChild(table);
+    previewEl.appendChild(wrap);
+
+    const inputBar      = document.createElement('div');
+    inputBar.id         = 'input-bar';
+    const buttonsDisabled = selectedCell === null;
+
+    function makeInputButton(label, value) {
+      const button       = document.createElement('button');
+      button.type        = 'button';
+      button.className   = 'btn-input';
+      button.textContent = label;
+      button.disabled    = buttonsDisabled;
+      button.addEventListener('click', () => {
+        if (!selectedCell) return;
+        cellValues[selectedCell.row][selectedCell.col] = value;
+        renderPreview();
+      });
+      return button;
+    }
+
+    inputBar.appendChild(makeInputButton('BLACK', 'black'));
+    for (let n = 1; n <= puzzleData.size - 2; n++) {
+      inputBar.appendChild(makeInputButton(String(n), n));
+    }
+    inputBar.appendChild(makeInputButton('CLEAR', null));
+    previewEl.appendChild(inputBar);
+  }
+
+  function generatePreview() {
+    const size = parseInt(selSize.value, 10);
+    puzzleData = JSON.parse(generate_puzzle(size));
+    cellValues = Array.from({ length: size }, () => Array(size).fill(null));
+    selectedCell = null;
+    renderPreview();
+  }
+
+  previewEl.addEventListener('click', (event) => {
+    if (!selectedCell) return;
+    if (!event.target.closest('.puzzle')) {
+      selectedCell = null;
+      renderPreview();
+    }
+  });
+
+  // ── Print output ─────────────────────────────────────────────────────
   const PUZZLES_PER_PAGE = 6;
   const PROMO = `Doplo puzzles generated by ${window.location.origin}${window.location.pathname}`;
 
-  function generateAll() {
-    const size  = parseInt(selSize.value, 10);
-    const count = Math.max(1, Math.min(60, parseInt(inpCount.value, 10) || 6));
+  async function fillPrintOutput(size, pages) {
+    const total = pages * PUZZLES_PER_PAGE;
+    printOutputEl.innerHTML = '';
 
-    outputEl.innerHTML = '';
-    statusEl.textContent = 'Generating…';
-    btnGenerate.disabled = true;
-
-    // Yield to the browser between pages so the UI doesn't freeze
     let generated = 0;
-    function generatePage() {
-      const remaining = count - generated;
-      if (remaining <= 0) {
-        statusEl.textContent = `${count} puzzle${count !== 1 ? 's' : ''} ready`;
-        btnGenerate.disabled = false;
-        return;
-      }
-
-      const pageSize = Math.min(PUZZLES_PER_PAGE, remaining);
-      const group = document.createElement('div');
+    while (generated < total) {
+      const pageSize = Math.min(PUZZLES_PER_PAGE, total - generated);
+      const group    = document.createElement('div');
       group.className = 'page-group';
-      // Make positioning context work for the absolute promo in print
-      group.style.position = 'relative';
 
       for (let i = 0; i < pageSize; i++) {
-        const json = generate_puzzle(size);
-        group.appendChild(renderPuzzle(json));
+        group.appendChild(renderPuzzle(generate_puzzle(size)));
       }
 
-      // Promo footer (visible only in print)
-      const promo = document.createElement('div');
-      promo.className = 'promo';
+      const promo       = document.createElement('div');
+      promo.className   = 'promo';
       promo.textContent = PROMO;
       group.appendChild(promo);
 
-      outputEl.appendChild(group);
+      printOutputEl.appendChild(group);
       generated += pageSize;
 
-      // Schedule the next page asynchronously
-      setTimeout(generatePage, 0);
+      // Yield to the browser between pages so the UI doesn't freeze
+      if (generated < total) await new Promise(r => setTimeout(r, 0));
     }
-
-    generatePage();
   }
 
-  btnGenerate.addEventListener('click', generateAll);
-  btnPrint.addEventListener('click', () => window.print());
+  async function generateAndPrint() {
+    const size  = parseInt(selSize.value, 10);
+    const pages = Math.max(1, Math.min(20, parseInt(inpPages.value, 10) || 4));
+
+    btnPrint.disabled    = true;
+    btnAnother.disabled  = true;
+    statusEl.textContent = 'Generating…';
+
+    await fillPrintOutput(size, pages);
+
+    statusEl.textContent = 'Ready';
+    btnPrint.disabled    = false;
+    btnAnother.disabled  = false;
+
+    window.print();
+  }
+
+  // ── Initialise wasm ──────────────────────────────────────────────────
+  try {
+    await init();
+  } catch (err) {
+    statusEl.textContent = 'Failed to load';
+    console.error('WASM init failed:', err);
+    throw err;
+  }
+
+  btnAnother.disabled  = false;
+  btnPrint.disabled    = false;
+  statusEl.textContent = 'Ready';
+
+  generatePreview();
+  fillPrintOutput(parseInt(selSize.value, 10), 1);
+
+  selSize.addEventListener('change', () => {
+    generatePreview();
+    fillPrintOutput(parseInt(selSize.value, 10), 1);
+  });
+  btnAnother.addEventListener('click', generatePreview);
+  btnPrint.addEventListener('click', generateAndPrint);
 </script>
 
 </body>
