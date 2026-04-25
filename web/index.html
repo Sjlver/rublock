@@ -251,6 +251,24 @@
     #footer a { color: #4f46e5; text-decoration: none; }
     #footer a:hover { text-decoration: underline; }
 
+    #emoji-rain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      overflow: hidden;
+    }
+    .emoji-drop {
+      position: absolute;
+      top: -3rem;
+      font-size: 1.75rem;
+      user-select: none;
+      will-change: transform;
+    }
+    @keyframes emoji-fall {
+      to { transform: translateY(110vh) rotate(var(--spin)); opacity: 0.2; }
+    }
+
     #print-output { display: none; }
     .page-group {
       display: grid;
@@ -1104,6 +1122,27 @@
       setPuzzleData(parsed, { preserveProgressIfSame: false });
     }
 
+    function triggerEmojiRain() {
+      const EMOJIS = ['🎉', '✨', '🌟', '⭐', '💯', '🎊', '🥳', '🏆', '🔢'];
+      const container = document.createElement('div');
+      container.id = 'emoji-rain';
+      document.body.appendChild(container);
+      for (let i = 0; i < 50; i++) {
+        setTimeout(() => {
+          const el = document.createElement('span');
+          el.className = 'emoji-drop';
+          el.textContent = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+          el.style.left = `${Math.random() * 100}%`;
+          const dur = (1.5 + Math.random() * 2).toFixed(2);
+          el.style.setProperty('--spin', `${(Math.random() * 720 - 360).toFixed(0)}deg`);
+          el.style.animation = `emoji-fall ${dur}s ease-in forwards`;
+          container.appendChild(el);
+          el.addEventListener('animationend', () => el.remove(), { once: true });
+        }, Math.random() * 1200);
+      }
+      setTimeout(() => container.remove(), 5000);
+    }
+
     function checkCurrentPuzzle() {
       if (!state.puzzleData) return;
 
@@ -1131,8 +1170,12 @@
       }
 
       const wrongCount = state.wrongCells.size;
+      const totalCells = state.puzzleData.size * state.puzzleData.size;
       if (entered === 0) {
         playFeedbackEl.textContent = 'Enter some cells, then check them.';
+      } else if (wrongCount === 0 && entered === totalCells) {
+        playFeedbackEl.textContent = 'Puzzle solved! 🎉';
+        triggerEmojiRain();
       } else if (wrongCount === 0) {
         playFeedbackEl.textContent = 'All entered cells are correct.';
       } else {
