@@ -1,3 +1,12 @@
 [tools]
 "cargo:wasm-pack" = "latest"
 rust = "latest"
+
+[tasks.web]
+description = "Build the web interface and run a server"
+run = [
+  "wasm-pack build --target web --release --features wasm",
+  "mkdir -p web/pkg",
+  "cp pkg/rublock_bg.wasm pkg/rublock.js web/pkg/",
+  "(cd web && python -m http.server)",
+]
