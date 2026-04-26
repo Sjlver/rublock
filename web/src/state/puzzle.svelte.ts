@@ -104,7 +104,7 @@ export function setPuzzle(data: PuzzleData, options?: { preserveProgressIfSame?:
 
 export function loadRandomPuzzle(size: number): void {
   setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
-  trackEvent('rublock/play/generate');
+  trackEvent(`rublock/play/generate/${size}`);
 }
 
 function clearWrongCell(row: number, col: number): void {
@@ -271,13 +271,13 @@ function autoCheckCompletion(): void {
   }
   playState.feedback = 'Puzzle solved! 🎉';
   playState.feedbackError = false;
-  trackEvent('rublock/play/complete');
+  trackEvent(`rublock/play/complete/${playState.puzzleData.size}`);
   for (const cb of solveCallbacks) cb();
 }
 
 export function checkCurrentPuzzle(): void {
   if (!playState.puzzleData) return;
-  trackEvent('rublock/play/check');
+  trackEvent(`rublock/play/check/${playState.puzzleData.size}`);
 
   const response: SolveResponse = solvePuzzle(playState.puzzleData);
   playState.wrongCells.clear();

@@ -85,7 +85,7 @@
   async function generateAndPrint(size: number, pages: number): Promise<void> {
     printBusy = true;
     status = 'Generating…';
-    trackEvent('rublock/print/print');
+    trackEvent(`rublock/print/print/${size}`);
     try {
       await fillPrintOutput(size, pages);
       status = 'Ready';
