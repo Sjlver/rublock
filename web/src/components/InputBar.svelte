@@ -11,7 +11,7 @@
   let { size, disabled, notesMode, onApply }: Props = $props();
 </script>
 
-<div class="input-bar" onclickcapture={(e) => e.stopPropagation()} role="group">
+<div class="input-bar" onclick={(e) => e.stopPropagation()} role="group">
   <button type="button" class="btn-input" {disabled} onclick={() => onApply('black')}>
     BLACK
   </button>

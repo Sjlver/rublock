@@ -45,7 +45,7 @@
     <thead>
       <tr>
         <th></th>
-        {#each puzzle.col_targets as t (t)}
+        {#each puzzle.col_targets as t}
           <th scope="col" class="target">{t}</th>
         {/each}
       </tr>
