@@ -34,7 +34,7 @@ export function parseTargetsText(text: string): { error: string } | PuzzleData {
   };
 }
 
-function decodeBase58Targets(p: string): PuzzleData | null {
+function decodeBase62Targets(p: string): PuzzleData | null {
   const values = [...p].map((c) => BASE62.indexOf(c));
   if (values.some((n) => n < 0)) return null;
   if (values.length % 2 !== 0) return null;
@@ -50,7 +50,7 @@ export function parsePuzzleFromUrl(): PuzzleData | null {
     const parsed = parseTargetsText(param);
     return 'error' in parsed ? null : parsed;
   }
-  return decodeBase58Targets(param);
+  return decodeBase62Targets(param);
 }
 
 export function tabFromUrl(): TabName {
@@ -70,17 +70,17 @@ export function setTab(name: TabName): void {
  */
 export function syncUrl(puzzleData: PuzzleData | null, active: TabName): void {
   if (!puzzleData) return;
-  const p = serializePuzzleTargets(puzzleData);
-  let search = `?p=${p}`;
-  if (active !== 'play') search += `&t=${active}`;
-  const next = `${window.location.pathname}${search}${window.location.hash}`;
-  const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  if (next !== cur) history.replaceState(null, '', next);
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('p', serializePuzzleTargets(puzzleData));
+  if (active !== 'play') url.searchParams.set('t', active);
+  if (url.toString() !== window.location.href) history.replaceState(null, '', url);
 }
 
 /** Share link: puzzle only, no tab param. */
 export function puzzleShareUrl(data: PuzzleData): string {
-  const base = `${window.location.origin}${window.location.pathname}`;
-  const hash = window.location.hash || '';
-  return `${base}?p=${serializePuzzleTargets(data)}${hash}`;
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('p', serializePuzzleTargets(data));
+  return url.toString();
 }
