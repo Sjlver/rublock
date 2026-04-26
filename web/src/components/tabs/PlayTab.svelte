@@ -18,6 +18,7 @@
     undoInput,
   } from '../../state/puzzle.svelte';
   import { puzzleShareUrl } from '../../state/url.svelte';
+  import { trackEvent } from '../../analytics';
 
   interface Props {
     selectedSize: number;
@@ -122,6 +123,7 @@
   async function shareCurrentPuzzle(): Promise<void> {
     if (!playState.puzzleData) return;
     const url = puzzleShareUrl(playState.puzzleData);
+    trackEvent('rublock/play/share');
     shareError = false;
     shareFeedback = '';
     try {

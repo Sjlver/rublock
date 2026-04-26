@@ -1,4 +1,5 @@
 import type { PuzzleData, TabName } from './types';
+import { trackEvent } from '../analytics';
 
 const VALID_TABS = new Set<TabName>(['play', 'solve', 'print', 'howto']);
 
@@ -47,6 +48,7 @@ export function tabFromUrl(): TabName {
 
 export function setTab(name: TabName): void {
   tabState.active = name;
+  trackEvent(`rublock/${name}/tab-view`);
 }
 
 /**

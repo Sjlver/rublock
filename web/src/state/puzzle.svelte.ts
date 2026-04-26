@@ -1,5 +1,6 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { generatePuzzle, solvePuzzle } from '../wasm/api';
+import { trackEvent } from '../analytics';
 import type {
   CellNotes,
   CellOperation,
@@ -103,6 +104,7 @@ export function setPuzzle(data: PuzzleData, options?: { preserveProgressIfSame?:
 
 export function loadRandomPuzzle(size: number): void {
   setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
+  trackEvent('rublock/play/generate');
 }
 
 function clearWrongCell(row: number, col: number): void {
@@ -269,11 +271,13 @@ function autoCheckCompletion(): void {
   }
   playState.feedback = 'Puzzle solved! 🎉';
   playState.feedbackError = false;
+  trackEvent('rublock/play/complete');
   for (const cb of solveCallbacks) cb();
 }
 
 export function checkCurrentPuzzle(): void {
   if (!playState.puzzleData) return;
+  trackEvent('rublock/play/check');
 
   const response: SolveResponse = solvePuzzle(playState.puzzleData);
   playState.wrongCells.clear();

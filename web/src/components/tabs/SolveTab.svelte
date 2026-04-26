@@ -3,6 +3,7 @@
   import { setPuzzle } from '../../state/puzzle.svelte';
   import { parseTargetsText, serializePuzzleTargets } from '../../state/url.svelte';
   import { solvePuzzle } from '../../wasm/api';
+  import { trackEvent } from '../../analytics';
   import { playState } from '../../state/puzzle.svelte';
   import type { SolvedPuzzle } from '../../state/types';
 
@@ -44,6 +45,7 @@
     }
 
     feedback = 'Solved.';
+    trackEvent('rublock/solve/solve');
     solved = response;
     setPuzzle(parsed, { preserveProgressIfSame: true });
   }
