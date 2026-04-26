@@ -28,6 +28,8 @@ This project is primarily a vehicle for learning Rust — exploring ownership, i
 
 Because of that, I prefer code that is simple over code that maximizes performance at all costs. I also want code that is highly idiomatic and corresponds to best practices.
 
+The web interface (under `web/`) has grown popular among friends and family, so it has picked up a secondary role as a **Svelte 5 + TypeScript** learning project. Rust remains the main goal; the frontend exists to make the solver fun to use, and to give the same "prefer simple, idiomatic code" treatment to a different stack. See issue #12 for the migration to Vite + Svelte + TypeScript.
+
 ### Binaries
 
 There are multiple solvers, accessible via `src/main.rs`.
@@ -69,3 +71,7 @@ Common checks:
 mise exec -- cargo test
 mise exec -- wasm-pack build --target web --release --features wasm
 ```
+
+### Web interface
+
+The web app lives under `web/` and is a static site that loads the WASM build of the solver. It is being migrated to **Vite + Svelte 5 (runes) + TypeScript** (see issue #12); during the migration, the canonical build/copy steps are tracked in `.github/workflows/deploy.yml`. Once the migration lands, `npm run dev` and `npm run build` (run from `web/`) will become the primary frontend commands.
