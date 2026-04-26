@@ -3,12 +3,12 @@ import { trackEvent } from '../analytics';
 
 const VALID_TABS = new Set<TabName>(['play', 'solve', 'print', 'howto']);
 
-const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export const tabState = $state({ active: 'play' as TabName });
 
 export function serializePuzzleTargets(data: PuzzleData): string {
-  return [...data.row_targets, ...data.col_targets].map((n) => BASE58[n]).join('');
+  return [...data.row_targets, ...data.col_targets].map((n) => BASE62[n]).join('');
 }
 
 export function parseTargetsText(text: string): { error: string } | PuzzleData {
@@ -35,7 +35,7 @@ export function parseTargetsText(text: string): { error: string } | PuzzleData {
 }
 
 function decodeBase58Targets(p: string): PuzzleData | null {
-  const values = [...p].map((c) => BASE58.indexOf(c));
+  const values = [...p].map((c) => BASE62.indexOf(c));
   if (values.some((n) => n < 0)) return null;
   if (values.length % 2 !== 0) return null;
   const size = values.length / 2;
@@ -66,7 +66,7 @@ export function setTab(name: TabName): void {
 
 /**
  * Keep the address bar in sync with app state: current puzzle as `p=`
- * (base58-encoded) and `t=` when the tab is not Play.
+ * (base62-encoded, 0-9a-zA-Z) and `t=` when the tab is not Play.
  */
 export function syncUrl(puzzleData: PuzzleData | null, active: TabName): void {
   if (!puzzleData) return;
