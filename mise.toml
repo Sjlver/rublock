@@ -1,12 +1,36 @@
 [tools]
 "cargo:wasm-pack" = "latest"
+node = "lts"
 rust = "latest"
 
+# Build the wasm + Vite production bundle and serve it locally for a final
+# preview. The wasm-pack output lives at ./pkg/; we stage it into
+# web/src/wasm/pkg/ so Vite imports it as a normal module.
 [tasks.web]
-description = "Build the web interface and run a server"
+description = "Build the web interface and preview the production bundle"
 run = [
   "wasm-pack build --target web --release --features wasm",
-  "mkdir -p web/pkg",
-  "cp pkg/rublock_bg.wasm pkg/rublock.js web/pkg/",
-  "(cd web && python -m http.server)",
+  "mkdir -p web/src/wasm/pkg",
+  "cp pkg/rublock_bg.wasm pkg/rublock.js web/src/wasm/pkg/",
+  "(cd web && npm install && npm run build && npm run preview)",
+]
+
+# Same staging, but hand off to Vite's dev server with HMR.
+[tasks.web-dev]
+description = "Run the Vite dev server (rebuilds wasm first)"
+run = [
+  "wasm-pack build --target web --release --features wasm",
+  "mkdir -p web/src/wasm/pkg",
+  "cp pkg/rublock_bg.wasm pkg/rublock.js web/src/wasm/pkg/",
+  "(cd web && npm install && npm run dev)",
+]
+
+# Format both halves of the project. Useful as a pre-commit step because the
+# repo crosses the Rust/Node boundary — `cargo fmt` only handles Rust, and
+# `prettier` only handles the web sources.
+[tasks.fmt]
+description = "Format Rust and web sources (good as a pre-commit step)"
+run = [
+  "cargo fmt",
+  "(cd web && npm install && npm run format)",
 ]

@@ -28,7 +28,7 @@ This project is primarily a vehicle for learning Rust — exploring ownership, i
 
 Because of that, I prefer code that is simple over code that maximizes performance at all costs. I also want code that is highly idiomatic and corresponds to best practices.
 
-The web interface (under `web/`) has grown popular among friends and family, so it has picked up a secondary role as a **Svelte 5 + TypeScript** learning project. Rust remains the main goal; the frontend exists to make the solver fun to use, and to give the same "prefer simple, idiomatic code" treatment to a different stack. See issue #12 for the migration to Vite + Svelte + TypeScript.
+The web interface (under `web/`) has grown popular among friends and family, so it has picked up a secondary role as a **Vite + Svelte 5 + TypeScript** learning project. Rust remains the main goal; the frontend exists to make the solver fun to use, and to give the same "prefer simple, idiomatic code" treatment to a different stack.
 
 ### Binaries
 
@@ -74,4 +74,12 @@ mise exec -- wasm-pack build --target web --release --features wasm
 
 ### Web interface
 
-The web app lives under `web/` and is a static site that loads the WASM build of the solver. It is being migrated to **Vite + Svelte 5 (runes) + TypeScript** (see issue #12); during the migration, the canonical build/copy steps are tracked in `.github/workflows/deploy.yml`. Once the migration lands, `npm run dev` and `npm run build` (run from `web/`) will become the primary frontend commands.
+The web app lives under `web/` and is a **Vite + Svelte 5 (runes) + TypeScript** static site that loads the WASM build of the solver.
+
+```sh
+mise run web        # full build + local preview (wasm + Vite)
+mise run web-dev    # Vite dev server with HMR (rebuilds wasm first)
+mise run fmt        # cargo fmt + prettier — good as a pre-commit step
+```
+
+If you'd rather drive npm directly: build the wasm, copy `pkg/rublock_bg.wasm` and `pkg/rublock.js` into `web/src/wasm/pkg/`, then run `npm install && npm run build` in `web/`. The full sequence is in `.github/workflows/deploy.yml`.
