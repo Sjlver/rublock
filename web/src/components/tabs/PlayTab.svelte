@@ -123,7 +123,7 @@
   async function shareCurrentPuzzle(): Promise<void> {
     if (!playState.puzzleData) return;
     const url = puzzleShareUrl(playState.puzzleData);
-    trackEvent('rublock/play/share');
+    trackEvent(`rublock/play/share/${playState.puzzleData.size}`);
     shareError = false;
     shareFeedback = '';
     try {
