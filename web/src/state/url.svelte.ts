@@ -11,6 +11,10 @@ export function serializePuzzleTargets(data: PuzzleData): string {
   return [...data.row_targets, ...data.col_targets].map((n) => BASE62[n]).join('');
 }
 
+export function formatTargetsText(data: PuzzleData): string {
+  return [...data.row_targets, ...data.col_targets].join(',');
+}
+
 export function parseTargetsText(text: string): { error: string } | PuzzleData {
   const cleaned = text.trim();
   if (!cleaned) return { error: 'Enter targets in r1,...,rN,c1,...,cN format.' };

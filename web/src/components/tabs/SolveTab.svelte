@@ -1,13 +1,13 @@
 <script lang="ts">
   import PuzzleGrid from '../PuzzleGrid.svelte';
   import { setPuzzle } from '../../state/puzzle.svelte';
-  import { parseTargetsText, serializePuzzleTargets } from '../../state/url.svelte';
+  import { parseTargetsText, formatTargetsText } from '../../state/url.svelte';
   import { solvePuzzle } from '../../wasm/api';
   import { trackEvent } from '../../analytics';
   import { playState } from '../../state/puzzle.svelte';
   import type { SolvedPuzzle } from '../../state/types';
 
-  let inputText = $state(playState.puzzleData ? serializePuzzleTargets(playState.puzzleData) : '');
+  let inputText = $state(playState.puzzleData ? formatTargetsText(playState.puzzleData) : '');
   let feedback = $state('');
   let error = $state(false);
   let solved = $state<SolvedPuzzle | null>(null);
@@ -18,7 +18,7 @@
   $effect(() => {
     const data = playState.puzzleData;
     if (!data) return;
-    const serialized = serializePuzzleTargets(data);
+    const serialized = formatTargetsText(data);
     if (lastSeenKey === null || lastSeenKey !== serialized) {
       inputText = serialized;
       lastSeenKey = serialized;
