@@ -22,14 +22,13 @@
         <label for="print-size">Size</label>
         <select
           id="print-size"
-          value={selectedSize}
           onchange={(e) =>
             (selectedSize = Number.parseInt((e.currentTarget as HTMLSelectElement).value, 10))}
         >
-          <option value="5">5 × 5</option>
-          <option value="6">6 × 6</option>
-          <option value="7">7 × 7</option>
-          <option value="8">8 × 8</option>
+          <option value="5" selected={selectedSize === 5}>5 × 5</option>
+          <option value="6" selected={selectedSize === 6}>6 × 6</option>
+          <option value="7" selected={selectedSize === 7}>7 × 7</option>
+          <option value="8" selected={selectedSize === 8}>8 × 8</option>
         </select>
       </div>
       <div class="field">

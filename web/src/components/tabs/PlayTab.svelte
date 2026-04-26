@@ -157,11 +157,11 @@
     <div class="controls-row">
       <div class="field">
         <label for="play-size">Size</label>
-        <select id="play-size" value={selectedSize} onchange={onSizeSelectChange}>
-          <option value="5">5 × 5</option>
-          <option value="6">6 × 6</option>
-          <option value="7">7 × 7</option>
-          <option value="8">8 × 8</option>
+        <select id="play-size" onchange={onSizeSelectChange}>
+          <option value="5" selected={selectedSize === 5}>5 × 5</option>
+          <option value="6" selected={selectedSize === 6}>6 × 6</option>
+          <option value="7" selected={selectedSize === 7}>7 × 7</option>
+          <option value="8" selected={selectedSize === 8}>8 × 8</option>
         </select>
       </div>
       <button class="btn-ghost" type="button" onclick={() => loadRandomPuzzle(selectedSize)}>

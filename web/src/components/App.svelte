@@ -18,13 +18,8 @@
   let printBusy = $state(false);
   let printOutputEl: HTMLDivElement;
 
-  // Shared "size to generate" between the Play and Print dropdowns. Initialises
-  // to the loaded puzzle's size and stays in sync whenever the puzzle changes.
+  // Shared "size to generate" between the Play and Print dropdowns.
   let selectedSize = $state(6);
-
-  $effect(() => {
-    if (playState.puzzleData) selectedSize = playState.puzzleData.size;
-  });
 
   // Keep the URL in sync with state changes.
   $effect(() => {
@@ -32,9 +27,10 @@
   });
 
   onMount(async () => {
+    const fromUrl = parsePuzzleFromUrl();
+    if (fromUrl) selectedSize = fromUrl.size;
     try {
       await initWasm();
-      const fromUrl = parsePuzzleFromUrl();
       if (fromUrl) {
         setPuzzle(fromUrl, { preserveProgressIfSame: false });
       } else {
