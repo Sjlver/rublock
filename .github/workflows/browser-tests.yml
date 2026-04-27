@@ -1,17 +1,10 @@
-name: Build & Deploy to GitHub Pages
+name: Browser Tests
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-# Allow only one concurrent deployment
-concurrency:
-  group: pages
-  cancel-in-progress: true
+  pull_request:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,12 +35,6 @@ jobs:
           mkdir -p web/src/wasm/pkg
           cp pkg/rublock_bg.wasm pkg/rublock.js web/src/wasm/pkg/
 
-      - name: Upload staged wasm for reuse by the test job
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-pkg
-          path: web/src/wasm/pkg/
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -58,40 +45,6 @@ jobs:
       - name: Install web dependencies
         working-directory: web
         run: npm ci
-
-      - name: Build web app (production — analytics included)
-        working-directory: web
-        run: npm run build
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web/dist/
-
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install web dependencies
-        working-directory: web
-        run: npm ci
-
-      # Re-use the wasm built by the build job — avoids re-running wasm-pack
-      # (~5 min) while still building the web bundle fresh with --mode test.
-      - name: Download staged wasm
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-pkg
-          path: web/src/wasm/pkg/
 
       - name: Build web app (test mode — analytics excluded)
         working-directory: web
@@ -115,20 +68,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-deploy
+          name: playwright-report
           path: web/playwright-report/
           retention-days: 30
-
-  deploy:
-    needs: [build, test]
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
