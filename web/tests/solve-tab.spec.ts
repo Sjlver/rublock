@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 // Helpers for the solve panel.
 const solveInput = (page: import('@playwright/test').Page) => page.locator('#solve-input');

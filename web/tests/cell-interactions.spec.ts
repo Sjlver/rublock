@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 async function waitForReady(page: import('@playwright/test').Page) {
   await expect(page.locator('[role="status"]')).toHaveText('Ready', { timeout: 15_000 });

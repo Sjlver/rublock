@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 // A 5×5 puzzle: row_targets=[5,10,15,20,25], col_targets=[3,6,9,12,15].
 // Old comma-separated format — used by early shared links and must keep working.

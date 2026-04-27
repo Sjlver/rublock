@@ -5,7 +5,8 @@ declare global {
 }
 
 export function trackEvent(name: string): void {
-  if (import.meta.env.PROD) {
+  // Exclude localhost so tests and local preview runs don't skew numbers.
+  if (import.meta.env.PROD && window.location.hostname !== 'localhost') {
     window.goatcounter?.count({ path: name, event: true });
   }
 }
