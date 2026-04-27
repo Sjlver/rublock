@@ -37,7 +37,7 @@ run = "(cd web && npm install && npm run test:install-browsers)"
 [tasks.test-web]
 description = "Build the app and run Playwright browser tests"
 depends = ["build-wasm", "install-playwright-browsers"]
-run = "(cd web && npm ci && npm run build && npm run test)"
+run = "(cd web && npm ci && npm run build:test && npm run test)"
 
 # Format both halves of the project. Useful as a pre-commit step because the
 # repo crosses the Rust/Node boundary — `cargo fmt` only handles Rust, and

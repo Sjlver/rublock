@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "format": "prettier --write .",
+    "build:test": "svelte-check --tsconfig ./tsconfig.json && vite build --mode test",
     "test": "playwright test",
     "test:install-browsers": "playwright install --with-deps chromium"
   },

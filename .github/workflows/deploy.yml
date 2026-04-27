@@ -42,6 +42,12 @@ jobs:
           mkdir -p web/src/wasm/pkg
           cp pkg/rublock_bg.wasm pkg/rublock.js web/src/wasm/pkg/
 
+      - name: Upload staged wasm for reuse by the test job
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-pkg
+          path: web/src/wasm/pkg/
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -53,15 +59,9 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Build web app
+      - name: Build web app (production — analytics included)
         working-directory: web
         run: npm run build
-
-      - name: Upload dist for browser tests
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: web/dist/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -85,11 +85,17 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Download built app
+      # Re-use the wasm built by the build job — avoids re-running wasm-pack
+      # (~5 min) while still building the web bundle fresh with --mode test.
+      - name: Download staged wasm
         uses: actions/download-artifact@v4
         with:
-          name: web-dist
-          path: web/dist/
+          name: wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Build web app (test mode — analytics excluded)
+        working-directory: web
+        run: npm run build:test
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
