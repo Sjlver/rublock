@@ -12,7 +12,7 @@ test('puzzle grid is visible on the Play tab after load', async ({ page }) => {
   await expect(page.locator('[role="status"]')).toHaveText('Ready', { timeout: 15_000 });
 
   // The grid is a <table class="puzzle"> rendered by PuzzleGrid.
-  await expect(page.locator('table.puzzle')).toBeVisible();
+  await expect(page.locator('.preview table.puzzle')).toBeVisible();
 });
 
 test('Play tab is active by default', async ({ page }) => {

@@ -82,5 +82,7 @@ test('solving a puzzle on Solve tab loads it on the Play tab', async ({ page }) 
   await page.locator('nav.tabs').getByRole('button', { name: 'Play' }).click();
 
   // The Play tab should show the same puzzle (row target 7 in first row).
-  await expect(page.locator('table.puzzle th[scope="row"].target').first()).toHaveText('7');
+  await expect(page.locator('.preview table.puzzle th[scope="row"].target').first()).toHaveText(
+    '7'
+  );
 });

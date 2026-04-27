@@ -8,7 +8,7 @@ test('clicking a cell selects it', async ({ page }) => {
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
 
   await expect(firstCell).toHaveClass(/selected/);
@@ -21,7 +21,7 @@ test('input bar buttons are enabled after a cell is selected', async ({ page }) 
   // Before selection, input bar buttons are disabled.
   await expect(page.locator('.input-bar button').first()).toBeDisabled();
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
 
   // After selection, buttons become enabled.
@@ -32,7 +32,7 @@ test('clicking the BLACK input button marks a cell as black', async ({ page }) =
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
 
   await page.locator('.input-bar button', { hasText: 'BLACK' }).click();
@@ -45,7 +45,7 @@ test('clicking a digit button places a digit in the selected cell', async ({ pag
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
 
   // Click the "1" input button (always present for sizes 5–8).
@@ -58,7 +58,7 @@ test('clicking CLEAR removes a placed value', async ({ page }) => {
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
   await page.locator('.input-bar button', { hasText: '1' }).click();
 
@@ -73,7 +73,7 @@ test('keyboard digit entry places a value in the selected cell', async ({ page }
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
   await page.keyboard.press('2');
 
@@ -84,7 +84,7 @@ test('keyboard B key marks selected cell as black', async ({ page }) => {
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click();
   await page.keyboard.press('b');
 
@@ -95,7 +95,7 @@ test('clicking the same cell twice toggles into notes mode', async ({ page }) =>
   await page.goto('/');
   await waitForReady(page);
 
-  const firstCell = page.locator('table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
   await firstCell.click(); // select
   await firstCell.click(); // toggle mode
 
@@ -138,7 +138,7 @@ test('entering a correct complete solution shows "Puzzle solved!" feedback', asy
 
   // Enter each value cell by cell.
   const size = 6;
-  const rows = page.locator('table.puzzle tbody tr');
+  const rows = page.locator('.preview table.puzzle tbody tr');
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       const cell = rows.nth(r).locator('td').nth(c);

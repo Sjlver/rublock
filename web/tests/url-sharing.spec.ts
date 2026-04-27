@@ -18,7 +18,7 @@ test('old comma-separated URL format loads the correct puzzle', async ({ page })
   await waitForReady(page);
 
   // The row targets should appear as row header cells in the puzzle grid.
-  const rowTargets = page.locator('table.puzzle th[scope="row"].target');
+  const rowTargets = page.locator('.preview table.puzzle th[scope="row"].target');
   await expect(rowTargets).toHaveText(['5', '10', '15', '20', '25']);
 });
 
@@ -34,10 +34,10 @@ test('base62 URL round-trips: load → same targets shown → URL unchanged', as
   await page.goto(`/?p=${BASE62_PARAM}`);
   await waitForReady(page);
 
-  const rowTargets = page.locator('table.puzzle th[scope="row"].target');
+  const rowTargets = page.locator('.preview table.puzzle th[scope="row"].target');
   await expect(rowTargets).toHaveText(['5', '10', '15', '20', '25']);
 
-  const colTargets = page.locator('table.puzzle th[scope="col"].target');
+  const colTargets = page.locator('.preview table.puzzle th[scope="col"].target');
   await expect(colTargets).toHaveText(['3', '6', '9', '12', '15']);
 
   await expect(page).toHaveURL(new RegExp(`p=${BASE62_PARAM}`));
