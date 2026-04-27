@@ -134,7 +134,7 @@ test('entering a correct complete solution shows "Puzzle solved!" feedback', asy
   }
 
   // Go back to Play tab (same puzzle is set, progress should be empty).
-  await page.locator('nav.tabs').getByRole('button', { name: 'Play' }).click();
+  await page.locator('nav.tabs').getByRole('button', { name: 'Play', exact: true }).click();
 
   // Enter each value cell by cell.
   const size = 6;

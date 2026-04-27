@@ -53,8 +53,8 @@ test('entering invalid targets shows a parse error', async ({ page }) => {
 test('entering unsolvable targets shows an error', async ({ page }) => {
   await openSolveTab(page);
 
-  // All targets set to 99 — impossible to satisfy.
-  await solveInput(page).fill('99,99,99,99,99,99,99,99,99,99,99,99');
+  // All targets = max_sum (10 for N=6): contradicts itself via black-cell placement.
+  await solveInput(page).fill('10,10,10,10,10,10,10,10,10,10,10,10');
   await solveButton(page).click();
 
   await expect(solveFeedback(page)).toHaveClass(/error/);
@@ -81,7 +81,7 @@ test('solving a puzzle on Solve tab loads it on the Play tab', async ({ page }) 
 
   // setPuzzle is called with preserveProgressIfSame:true; the puzzle is now
   // loaded in the Play tab.
-  await page.locator('nav.tabs').getByRole('button', { name: 'Play' }).click();
+  await page.locator('nav.tabs').getByRole('button', { name: 'Play', exact: true }).click();
 
   // The Play tab should show the same puzzle (row target 7 in first row).
   await expect(page.locator('.preview table.puzzle th[scope="row"].target').first()).toHaveText(

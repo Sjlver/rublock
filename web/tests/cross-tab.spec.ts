@@ -20,7 +20,7 @@ test('switching back to Play tab removes ?t= from the URL', async ({ page }) => 
   await page.locator('nav.tabs').getByRole('button', { name: 'Solve' }).click();
   await expect(page).toHaveURL(/[?&]t=solve/);
 
-  await page.locator('nav.tabs').getByRole('button', { name: 'Play' }).click();
+  await page.locator('nav.tabs').getByRole('button', { name: 'Play', exact: true }).click();
 
   // Play is the default tab — syncUrl omits the ?t= param for it.
   await expect(page).not.toHaveURL(/[?&]t=/);
@@ -65,7 +65,7 @@ test('partial progress is preserved after switching to Solve tab and back', asyn
 
   // Switch to Solve tab and back.
   await page.locator('nav.tabs').getByRole('button', { name: 'Solve' }).click();
-  await page.locator('nav.tabs').getByRole('button', { name: 'Play' }).click();
+  await page.locator('nav.tabs').getByRole('button', { name: 'Play', exact: true }).click();
 
   // The digit entered before must still be present.
   await expect(firstCell.locator('.cell-value')).toHaveText('1');
@@ -89,7 +89,7 @@ test('partial progress is preserved after peeking at solution on Solve tab', asy
   await expect(page.locator('.solve-result table.puzzle')).toBeVisible({ timeout: 10_000 });
 
   // Return to Play tab — progress must be intact.
-  await page.locator('nav.tabs').getByRole('button', { name: 'Play' }).click();
+  await page.locator('nav.tabs').getByRole('button', { name: 'Play', exact: true }).click();
   await expect(firstCell.locator('.cell-value')).toHaveText('1');
 });
 
