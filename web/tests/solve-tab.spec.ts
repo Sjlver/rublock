@@ -2,10 +2,12 @@ import { test, expect } from '@playwright/test';
 
 // Helpers for the solve panel.
 const solveInput = (page: import('@playwright/test').Page) => page.locator('#solve-input');
+const solveSection = (page: import('@playwright/test').Page) =>
+  page.locator('section:has(#solve-input)');
 const solveButton = (page: import('@playwright/test').Page) =>
-  page.locator('.panel-card').getByRole('button', { name: 'Solve' });
+  solveSection(page).getByRole('button', { name: 'Solve' });
 const solveFeedback = (page: import('@playwright/test').Page) =>
-  page.locator('.panel-card .feedback');
+  solveSection(page).locator('.feedback');
 
 async function openSolveTab(page: import('@playwright/test').Page) {
   await page.goto('/');

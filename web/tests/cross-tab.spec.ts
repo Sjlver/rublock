@@ -54,7 +54,7 @@ test('partial progress is preserved after switching to Solve tab and back', asyn
   await waitForReady(page);
 
   // Click the first data cell in the puzzle grid (first <td> in the first body row).
-  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:nth-child(2)');
   await firstCell.click();
 
   // Enter digit 1 via keyboard (valid for 6×6 where digits are 1–4).
@@ -77,7 +77,7 @@ test('partial progress is preserved after peeking at solution on Solve tab', asy
   await waitForReady(page);
 
   // Enter a value on the Play tab.
-  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:first-child');
+  const firstCell = page.locator('.preview table.puzzle tbody tr:first-child td:nth-child(2)');
   await firstCell.click();
   await page.keyboard.press('1');
   await expect(firstCell.locator('.cell-value')).toHaveText('1');
