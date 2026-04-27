@@ -3,27 +3,41 @@
 node = "lts"
 rust = "latest"
 
-# Build the wasm + Vite production bundle and serve it locally for a final
-# preview. The wasm-pack output lives at ./pkg/; we stage it into
-# web/src/wasm/pkg/ so Vite imports it as a normal module.
-[tasks.web]
-description = "Build the web interface and preview the production bundle"
+# Shared step: compile the Rust WASM crate and stage the output files into the
+# directory where the Vite build expects them.
+[tasks.build-wasm]
+description = "Build the WASM library and stage into web/src/wasm/pkg/"
 run = [
   "wasm-pack build --target web --release --features wasm",
   "mkdir -p web/src/wasm/pkg",
   "cp pkg/rublock_bg.wasm pkg/rublock.js web/src/wasm/pkg/",
-  "(cd web && npm install && npm run build && npm run preview)",
 ]
+
+# Build the wasm + Vite production bundle and serve it locally for a final
+# preview.
+[tasks.web]
+description = "Build the web interface and preview the production bundle"
+depends = ["build-wasm"]
+run = "(cd web && npm install && npm run build && npm run preview)"
 
 # Same staging, but hand off to Vite's dev server with HMR.
 [tasks.web-dev]
 description = "Run the Vite dev server (rebuilds wasm first)"
-run = [
-  "wasm-pack build --target web --release --features wasm",
-  "mkdir -p web/src/wasm/pkg",
-  "cp pkg/rublock_bg.wasm pkg/rublock.js web/src/wasm/pkg/",
-  "(cd web && npm install && npm run dev)",
-]
+depends = ["build-wasm"]
+run = "(cd web && npm install && npm run dev)"
+
+# One-time local setup: download the Chromium binary that Playwright uses.
+# Re-running this is harmless (playwright install is idempotent).
+[tasks.install-playwright-browsers]
+description = "Install Playwright browsers (one-time local setup)"
+run = "(cd web && npm install && npm run test:install-browsers)"
+
+# Build the app and run the full Playwright browser test suite against the
+# production preview server.
+[tasks.test-web]
+description = "Build the app and run Playwright browser tests"
+depends = ["build-wasm", "install-playwright-browsers"]
+run = "(cd web && npm ci && npm run build && npm run test)"
 
 # Format both halves of the project. Useful as a pre-commit step because the
 # repo crosses the Rust/Node boundary — `cargo fmt` only handles Rust, and

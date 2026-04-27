@@ -1,17 +1,11 @@
-name: Build & Deploy to GitHub Pages
+name: Browser Tests
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
-
-# Allow only one concurrent deployment
-concurrency:
-  group: pages
-  cancel-in-progress: true
+  pull_request:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,40 +51,6 @@ jobs:
         working-directory: web
         run: npm run build
 
-      - name: Upload dist for browser tests
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: web/dist/
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web/dist/
-
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install web dependencies
-        working-directory: web
-        run: npm ci
-
-      - name: Download built app
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: web/dist/
-
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -109,20 +69,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-deploy
+          name: playwright-report
           path: web/playwright-report/
           retention-days: 30
-
-  deploy:
-    needs: [build, test]
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4

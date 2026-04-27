@@ -3,3 +3,5 @@
 /web/node_modules
 /web/dist
 /web/src/wasm/pkg
+/web/playwright-report
+/web/test-results

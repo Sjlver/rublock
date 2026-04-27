@@ -7,9 +7,12 @@
     "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test": "playwright test",
+    "test:install-browsers": "playwright install --with-deps chromium"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tsconfig/svelte": "^5.0.4",
     "prettier": "^3.3.3",
