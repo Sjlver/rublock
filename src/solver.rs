@@ -216,6 +216,11 @@ pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
     /// path), propagating consequences.  See [`take_branch`](Self::take_branch).
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain);
 
+    /// Return the solved grid as `-1` for black and positive digits otherwise.
+    ///
+    /// Returns `None` when the state is not fully solved.
+    fn solved_cells(&self) -> Option<[[i8; N]; N]>;
+
     // ── Provided backtracking entry points ────────────────────────────────────
     //
     // These forward to free generic functions in `crate::backtrack` so the

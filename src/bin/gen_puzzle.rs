@@ -43,11 +43,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
-use rand::seq::SliceRandom;
 use rublock::basic_solver::BasicSolverState;
 use rublock::black_solver::BlackSolverState;
 use rublock::enumerate::SolverChoice;
-use rublock::grid::{Cell, Grid};
+use rublock::grid::random_grid;
 use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, SolveOutcome, Solver};
 
@@ -323,10 +322,7 @@ fn worker<const N: usize, S: Solver<N>>(
     let mut rng = rand::rng();
 
     while !shared.done.load(Ordering::Relaxed) {
-        let mut cells = [[Cell::Empty; N]; N];
-        let Some(grid) = dfs::<N>(&mut cells, 0, &mut rng) else {
-            continue;
-        };
+        let grid = random_grid::<N>(&mut rng);
 
         shared.grids.fetch_add(1, Ordering::Relaxed);
 
@@ -413,66 +409,4 @@ fn report<const N: usize, S: Solver<N>>(
             elapsed.as_secs_f64()
         );
     }
-}
-
-// Attempt to fill `cells` from `pos` onward, trying candidates in a random
-// order at each position. Returns `Some(Grid)` if a complete grid was reached,
-// or `None` if every candidate at some position was exhausted (dead end).
-fn dfs<const N: usize>(
-    cells: &mut [[Cell; N]; N],
-    pos: usize,
-    rng: &mut impl rand::Rng,
-) -> Option<Grid<N>> {
-    if pos == N * N {
-        return Some(Grid { cells: *cells });
-    }
-
-    let row = pos / N;
-    let col = pos % N;
-
-    let row_blacks = (0..col).filter(|&c| cells[row][c] == Cell::Black).count();
-    let col_blacks = (0..row).filter(|&r| cells[r][col] == Cell::Black).count();
-    let row_digit_mask: u64 = (0..col)
-        .filter_map(|c| {
-            if let Cell::Number(n) = cells[row][c] {
-                Some(1u64 << n)
-            } else {
-                None
-            }
-        })
-        .fold(0, |a, b| a | b);
-    let col_digit_mask: u64 = (0..row)
-        .filter_map(|r| {
-            if let Cell::Number(n) = cells[r][col] {
-                Some(1u64 << n)
-            } else {
-                None
-            }
-        })
-        .fold(0, |a, b| a | b);
-
-    let digits: u8 = (N - 2) as u8;
-    let mut candidates: Vec<Cell> = std::iter::once(Cell::Black)
-        .chain((1..=digits).map(Cell::Number))
-        .filter(|&c| match c {
-            Cell::Black => row_blacks < 2 && col_blacks < 2,
-            Cell::Number(d) => {
-                let bit = 1u64 << d;
-                row_digit_mask & bit == 0 && col_digit_mask & bit == 0
-            }
-            Cell::Empty => unreachable!(),
-        })
-        .collect();
-
-    candidates.shuffle(rng);
-
-    for candidate in candidates {
-        cells[row][col] = candidate;
-        if let Some(grid) = dfs(cells, pos + 1, rng) {
-            return Some(grid);
-        }
-    }
-
-    cells[row][col] = Cell::Empty;
-    None
 }

@@ -624,6 +624,10 @@ impl<const N: usize> Solver<N> for BlackSolverState<N> {
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
         self.clear_mask(r, c, bit, Rule::Backtracking);
     }
+
+    fn solved_cells(&self) -> Option<[[i8; N]; N]> {
+        Self::solved_cells(self)
+    }
 }
 
 impl<const N: usize> std::fmt::Display for BlackSolverState<N> {
