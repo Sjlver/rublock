@@ -4,39 +4,32 @@ use crate::solver::{CellDomain, Puzzle, Solver, Tables};
 use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
+// A LiveTuple for this solver works a bit differently from how it's currently
+// done in other solvers. Its pattern always covers the full row. There is BLACK
+// at the start position, then `len` times the inner domain, then BLACK, then
+// `N - 2 - len` times the outer domain.
+//
+// I guess other solvers could do this too, but you've first seen the idea here :)
 
 #[derive(Clone, Debug)]
 struct LiveTuple<const N: usize> {
-    start: u8,
-    len: u8,
     pattern: [CellDomain; N],
 }
 
 impl<const N: usize> LiveTuple<N> {
-    fn new(start: usize, len: usize, digit_mask: CellDomain) -> Self {
+    fn new(start: usize, digit_mask: CellDomain) -> Self {
+        let len = digit_mask.count_ones() as usize;
         let mut pattern = [0 as CellDomain; N];
-        pattern[0] = BlackSolverState::<N>::BLACK;
-        pattern[1..=len].fill(digit_mask);
-        pattern[len + 1] = BlackSolverState::<N>::BLACK;
-        Self {
-            start: start as u8,
-            len: (len + 2) as u8,
-            pattern,
+        pattern[start] = BlackSolverState::<N>::BLACK;
+        pattern[(start + len + 1) % N] = BlackSolverState::<N>::BLACK;
+        for p in 0..len {
+            pattern[(start + p + 1) % N] = digit_mask;
         }
-    }
-
-    fn pos_of(&self, c: usize) -> Option<usize> {
-        let pos = (c + N - self.start as usize) % N;
-        if pos < self.len as usize {
-            Some(pos)
-        } else {
-            None
+        for p in 0..N - 2 - len {
+            pattern[(start + len + p + 2) % N] = BlackSolverState::<N>::DIGITS & !digit_mask;
         }
-    }
 
-    /// Yields (position_in_grid, pattern_value) for each slot.
-    fn cells(&self) -> impl Iterator<Item = (usize, CellDomain)> + '_ {
-        (0..self.len as usize).map(move |p| ((self.start as usize + p) % N, self.pattern[p]))
+        Self { pattern }
     }
 }
 
@@ -102,6 +95,15 @@ impl<const N: usize> std::fmt::Debug for BlackSolverState<N> {
             }
             writeln!(f)?;
         }
+        writeln!(f, "  domain_size =")?;
+        for r in 0..N {
+            write!(f, "   ")?;
+            for c in 0..N {
+                write!(f, " ")?;
+                write!(f, "{}", self.domain_size[r][c])?;
+            }
+            writeln!(f)?;
+        }
         writeln!(f, "}}")?;
         Ok(())
     }
@@ -115,7 +117,8 @@ impl<const N: usize> BlackSolverState<N> {
     #[instrument(skip(puzzle))]
     pub fn new(puzzle: Puzzle<N>) -> Self {
         // Initialize counters from the full domain (before any clear_mask).
-        let domain_size: [[u8; N]; N] = [[N as u8; N]; N];
+        // Domains can be the
+        let domain_size: [[u8; N]; N] = [[Self::FULL_DOMAIN.count_ones() as u8; N]; N];
 
         // Digit indices 1..=N-2 are valid; 0 and N-1 are not digit bits.
         let candidates_for_bits: [u8; N] =
@@ -160,43 +163,17 @@ impl<const N: usize> BlackSolverState<N> {
         let tables = Tables::build(N - 2);
 
         for r in 0..N {
-            let inside_target = self.puzzle.row_targets[r] as usize;
-            let outside_target = tables.max_sum - inside_target;
+            let target = self.puzzle.row_targets[r] as usize;
 
-            // Inside (non-wrapping)
-            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
+            for (len, digit_mask) in tables.valid_tuples_for_target(target) {
                 for start in 0..N {
                     if start + len + 2 <= N {
-                        let t = LiveTuple::new(start, len, digit_mask);
+                        let t = LiveTuple::new(start, digit_mask);
                         trace!(
                             row = r,
                             start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if t.len > 2 { t.pattern[1] } else { 0 },
-                                width = N - 1
-                            ),
-                            "inside row tuple live"
-                        );
-                        self.live_tuples_row[r].push(t);
-                    }
-                }
-            }
-
-            // Outside (wrapping):
-            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
-                for start in 0..N {
-                    if start + len + 2 > N {
-                        let t = LiveTuple::new(start, len, digit_mask);
-                        trace!(
-                            row = r,
-                            start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if t.len > 2 { t.pattern[1] } else { 0 },
-                                width = N - 1
-                            ),
-                            "outside row tuple live"
+                            bits = format_args!("{:0width$b}", digit_mask, width = N - 1),
+                            "row tuple live"
                         );
                         self.live_tuples_row[r].push(t);
                     }
@@ -205,43 +182,17 @@ impl<const N: usize> BlackSolverState<N> {
         }
 
         for c in 0..N {
-            let inside_target = self.puzzle.col_targets[c] as usize;
-            let outside_target = tables.max_sum - inside_target;
+            let target = self.puzzle.col_targets[c] as usize;
 
-            // Inside (non-wrapping)
-            for (len, digit_mask) in tables.valid_tuples_for_target(inside_target) {
+            for (len, digit_mask) in tables.valid_tuples_for_target(target) {
                 for start in 0..N {
                     if start + len + 2 <= N {
-                        let t = LiveTuple::new(start, len, digit_mask);
+                        let t = LiveTuple::new(start, digit_mask);
                         trace!(
                             col = c,
                             start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if t.len > 2 { t.pattern[1] } else { 0 },
-                                width = N - 1
-                            ),
-                            "inside col tuple live"
-                        );
-                        self.live_tuples_col[c].push(t);
-                    }
-                }
-            }
-
-            // Outside (wrapping)
-            for (len, digit_mask) in tables.valid_tuples_for_target(outside_target) {
-                for start in 0..N {
-                    if start + len + 2 > N {
-                        let t = LiveTuple::new(start, len, digit_mask);
-                        trace!(
-                            col = c,
-                            start = start,
-                            bits = format_args!(
-                                "{:0width$b}",
-                                if t.len > 2 { t.pattern[1] } else { 0 },
-                                width = N - 1
-                            ),
-                            "outside row tuple live"
+                            bits = format_args!("{:0width$b}", digit_mask, width = N - 1),
+                            "col tuple live"
                         );
                         self.live_tuples_col[c].push(t);
                     }
@@ -252,11 +203,12 @@ impl<const N: usize> BlackSolverState<N> {
         // Initialize support counts from live tuples.
         for r in 0..N {
             for t in &self.live_tuples_row[r] {
-                for (c2, mut bits) in t.cells() {
+                for c in 0..N {
+                    let mut bits = t.pattern[c];
                     while bits != 0 {
                         let b = bits.trailing_zeros() as usize;
                         bits &= bits - 1;
-                        self.tuple_support_row[r][c2][b] += 1;
+                        self.tuple_support_row[r][c][b] += 1;
                     }
                 }
             }
@@ -264,11 +216,12 @@ impl<const N: usize> BlackSolverState<N> {
 
         for c in 0..N {
             for t in &self.live_tuples_col[c] {
-                for (r2, mut bits) in t.cells() {
+                for r in 0..N {
+                    let mut bits = t.pattern[r];
                     while bits != 0 {
                         let b = bits.trailing_zeros() as usize;
                         bits &= bits - 1;
-                        self.tuple_support_col[r2][c][b] += 1;
+                        self.tuple_support_col[r][c][b] += 1;
                     }
                 }
             }
@@ -276,25 +229,22 @@ impl<const N: usize> BlackSolverState<N> {
     }
 
     /// Seed queue with bits that have no support.
-    //
-    // The `r`/`c` range loops below are paired with cross-indexing into
-    // `live_tuples_row[r]` / `live_tuples_col[c]`, so the clippy-suggested
-    // `iter_mut().enumerate()` rewrite actually hurts readability here.
-    #[allow(clippy::needless_range_loop)]
     fn seed_queue(&mut self) {
+        // TODO: I'm essentially OR-ing all of self.live_tuples_row[r].
+        // There is probably a shorter way to do that.
         let mut row_tuple_supported_bits: [[CellDomain; N]; N] = [[0; N]; N];
         for r in 0..N {
             for t in &self.live_tuples_row[r] {
-                for (c2, pat) in t.cells() {
-                    row_tuple_supported_bits[r][c2] |= pat;
+                for c in 0..N {
+                    row_tuple_supported_bits[r][c] |= t.pattern[c];
                 }
             }
         }
         let mut col_tuple_supported_bits: [[CellDomain; N]; N] = [[0; N]; N];
         for c in 0..N {
             for t in &self.live_tuples_col[c] {
-                for (r2, pat) in t.cells() {
-                    col_tuple_supported_bits[r2][c] |= pat;
+                for r in 0..N {
+                    col_tuple_supported_bits[r][c] |= t.pattern[r];
                 }
             }
         }
@@ -311,10 +261,10 @@ impl<const N: usize> BlackSolverState<N> {
     // ── Core mutation primitives ──────────────────────────────────────────────
 
     #[instrument(skip(self), fields(mask = format_args!("{mask:0width$b}", width = N - 1)))]
-    fn clear_mask(&mut self, r: usize, c: usize, mask: CellDomain, rule: Rule) {
-        let before = self.domains[r][c];
-        self.domains[r][c] &= !mask;
-        let removed = before & !self.domains[r][c];
+    fn clear_mask(&mut self, row: usize, col: usize, mask: CellDomain, rule: Rule) {
+        let before = self.domains[row][col];
+        self.domains[row][col] &= !mask;
+        let removed = before & !self.domains[row][col];
         if removed != 0 {
             self.stats.incr_bits(rule, removed.count_ones());
         }
@@ -323,12 +273,12 @@ impl<const N: usize> BlackSolverState<N> {
             let b = bits & bits.wrapping_neg();
             bits &= bits - 1;
             trace!(b = format_args!("{}", BitName::<N>(b)), "bit removed");
-            self.queue.push((r, c, b));
+            self.queue.push((row, col, b));
         }
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn set_cell(&mut self, r: usize, c: usize, bit: CellDomain, rule: Rule) {
+    fn set_cell(&mut self, row: usize, col: usize, bit: CellDomain, rule: Rule) {
         debug_assert_eq!(bit.count_ones(), 1, "set_cell requires exactly one bit");
         debug_assert_eq!(
             bit & !Self::FULL_DOMAIN,
@@ -337,15 +287,29 @@ impl<const N: usize> BlackSolverState<N> {
         );
         trace!(bit = format_args!("{}", BitName::<N>(bit)), "setting cell");
 
+        self.clear_mask(row, col, !bit & Self::FULL_DOMAIN, rule);
+
         if bit & Self::DIGITS != 0 {
-            for col in (0..N).filter(|&col| col != c) {
-                self.clear_mask(r, col, bit, rule);
-            }
-            for row in (0..N).filter(|&row| row != r) {
+            for c in (0..N).filter(|&c| c != col) {
                 self.clear_mask(row, c, bit, rule);
             }
+            for r in (0..N).filter(|&r| r != row) {
+                self.clear_mask(r, col, bit, rule);
+            }
+        } else {
+            // We've set a black cell. Check if the row/column now has exactly
+            // two black bits. If so, remove black from all other cells.
+            if let Some(row_black2) = (0..N).find(|&c| c != col && self.domains[row][c] == bit) {
+                for c in (0..N).filter(|&c| c != col && c != row_black2) {
+                    self.clear_mask(row, c, bit, rule);
+                }
+            }
+            if let Some(col_black2) = (0..N).find(|&r| r != row && self.domains[r][col] == bit) {
+                for r in (0..N).filter(|&r| r != row && r != col_black2) {
+                    self.clear_mask(r, col, bit, rule);
+                }
+            }
         }
-        self.clear_mask(r, c, !bit & Self::FULL_DOMAIN, rule);
     }
 
     // ── Update handlers ───────────────────────────────────────────────────────
@@ -371,53 +335,49 @@ impl<const N: usize> BlackSolverState<N> {
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn update_hidden_singles(&mut self, r: usize, c: usize, bit: CellDomain) {
+    fn update_hidden_singles(&mut self, row: usize, col: usize, bit: CellDomain) {
         let b = bit.trailing_zeros() as usize;
 
-        self.row_candidates[r][b] -= 1;
+        self.row_candidates[row][b] -= 1;
         if (bit & Self::DIGITS != 0)
-            && (self.row_candidates[r][b] == 1)
-            && let Some(c2) = (0..N).find(|&c2| self.domains[r][c2] & bit != 0)
+            && (self.row_candidates[row][b] == 1)
+            && let Some(c) = (0..N).find(|&c| self.domains[row][c] & bit != 0)
         {
-            self.set_cell(r, c2, bit, Rule::HiddenSingle);
+            self.set_cell(row, c, bit, Rule::HiddenSingle);
         }
         if (bit == Self::BLACK)
-            && (self.row_candidates[r][b] == 2)
-            && let Some(c2) = (0..N).find(|&c2| self.domains[r][c2] & bit != 0)
-            && let Some(c3) = (c2 + 1..N).find(|&c3| self.domains[r][c3] & bit != 0)
+            && (self.row_candidates[row][b] == 2)
+            && let Some(c1) = (0..N).find(|&c| self.domains[row][c] & bit != 0)
+            && let Some(c2) = (c1 + 1..N).find(|&c| self.domains[row][c] & bit != 0)
         {
-            self.set_cell(r, c2, bit, Rule::HiddenSingle);
-            self.set_cell(r, c3, bit, Rule::HiddenSingle);
+            self.set_cell(row, c1, bit, Rule::HiddenSingle);
+            self.set_cell(row, c2, bit, Rule::HiddenSingle);
         }
 
-        self.col_candidates[c][b] -= 1;
+        self.col_candidates[col][b] -= 1;
         if (bit & Self::DIGITS != 0)
-            && (self.col_candidates[c][b] == 1)
-            && let Some(r2) = (0..N).find(|&r2| self.domains[r2][c] & bit != 0)
+            && (self.col_candidates[col][b] == 1)
+            && let Some(r) = (0..N).find(|&r| self.domains[r][col] & bit != 0)
         {
-            self.set_cell(r2, c, bit, Rule::HiddenSingle);
+            self.set_cell(r, col, bit, Rule::HiddenSingle);
         }
         if (bit == Self::BLACK)
-            && (self.col_candidates[c][b] == 2)
-            && let Some(r2) = (0..N).find(|&r2| self.domains[r2][c] & bit != 0)
-            && let Some(r3) = (r2 + 1..N).find(|&r3| self.domains[r3][c] & bit != 0)
+            && (self.col_candidates[col][b] == 2)
+            && let Some(r1) = (0..N).find(|&r| self.domains[r][col] & bit != 0)
+            && let Some(r2) = (r1 + 1..N).find(|&r| self.domains[r][col] & bit != 0)
         {
-            self.set_cell(r2, c, bit, Rule::HiddenSingle);
-            self.set_cell(r3, c, bit, Rule::HiddenSingle);
+            self.set_cell(r1, col, bit, Rule::HiddenSingle);
+            self.set_cell(r2, col, bit, Rule::HiddenSingle);
         }
     }
 
     #[instrument(skip(self), fields(bit = format_args!("{}", BitName::<N>(bit))))]
-    fn update_arc(&mut self, r: usize, c: usize, bit: CellDomain) {
-        // Row direction: check tuples in live_row[r] that cover column c.
+    fn update_arc(&mut self, row: usize, col: usize, bit: CellDomain) {
+        // Row direction: check tuples in live_row[row] that cover column col.
         let mut i = 0;
-        while i < self.live_tuples_row[r].len() {
-            let t = &self.live_tuples_row[r][i];
-            let Some(pos) = t.pos_of(c) else {
-                i += 1;
-                continue;
-            };
-            if t.pattern[pos] & bit == 0 {
+        while i < self.live_tuples_row[row].len() {
+            let t = &self.live_tuples_row[row][i];
+            if t.pattern[col] & bit == 0 {
                 i += 1;
                 continue;
             }
@@ -425,30 +385,23 @@ impl<const N: usize> BlackSolverState<N> {
             // We check two things here: the tuple might be dead because the current
             // cell no longer supports it, or because there is no more cell that
             // has `bit`.
-            if (self.domains[r][c] & t.pattern[pos] != 0)
-                && t.cells().any(|(c2, _)| self.domains[r][c2] & bit != 0)
+            if (self.domains[row][col] & t.pattern[col] != 0)
+                && (0..N).any(|c| self.domains[row][c] & t.pattern[c] & bit != 0)
             {
                 i += 1;
                 continue;
             }
             // Tuple is dead: remove and update support counts.
-            trace!(
-                start = t.start,
-                bits = format_args!(
-                    "{:0width$b}",
-                    if t.len > 2 { t.pattern[1] } else { 0 },
-                    width = N - 1
-                ),
-                "row tuple killed"
-            );
-            let dead = self.live_tuples_row[r].swap_remove(i);
-            for (c2, mut bits) in dead.cells() {
+            trace!("row tuple killed");
+            let dead = self.live_tuples_row[row].swap_remove(i);
+            for c in 0..N {
+                let mut bits = dead.pattern[c];
                 while bits != 0 {
                     let b = bits.trailing_zeros() as usize;
                     bits &= bits - 1;
-                    self.tuple_support_row[r][c2][b] -= 1;
-                    if self.tuple_support_row[r][c2][b] == 0 {
-                        self.clear_mask(r, c2, 1 << b, Rule::ArcConsistency);
+                    self.tuple_support_row[row][c][b] -= 1;
+                    if self.tuple_support_row[row][c][b] == 0 {
+                        self.clear_mask(row, c, 1 << b, Rule::ArcConsistency);
                     }
                 }
             }
@@ -457,39 +410,28 @@ impl<const N: usize> BlackSolverState<N> {
 
         // Column direction: check tuples in live_col[c] that cover row r.
         let mut i = 0;
-        while i < self.live_tuples_col[c].len() {
-            let t = &self.live_tuples_col[c][i];
-            let Some(pos) = t.pos_of(r) else {
-                i += 1;
-                continue;
-            };
-            if t.pattern[pos] & bit == 0 {
+        while i < self.live_tuples_col[col].len() {
+            let t = &self.live_tuples_col[col][i];
+            if t.pattern[row] & bit == 0 {
                 i += 1;
                 continue;
             }
-            if (self.domains[r][c] & t.pattern[pos] != 0)
-                && t.cells().any(|(r2, _)| self.domains[r2][c] & bit != 0)
+            if (self.domains[row][col] & t.pattern[row] != 0)
+                && (0..N).any(|r| self.domains[r][col] & t.pattern[r] & bit != 0)
             {
                 i += 1;
                 continue;
             }
-            trace!(
-                start = t.start,
-                bits = format_args!(
-                    "{:0width$b}",
-                    if t.len > 2 { t.pattern[1] } else { 0 },
-                    width = N - 1
-                ),
-                "col tuple killed"
-            );
-            let dead = self.live_tuples_col[c].swap_remove(i);
-            for (r2, mut bits) in dead.cells() {
+            trace!("col tuple killed");
+            let dead = self.live_tuples_col[col].swap_remove(i);
+            for r in 0..N {
+                let mut bits = dead.pattern[r];
                 while bits != 0 {
                     let b = bits.trailing_zeros() as usize;
                     bits &= bits - 1;
-                    self.tuple_support_col[r2][c][b] -= 1;
-                    if self.tuple_support_col[r2][c][b] == 0 {
-                        self.clear_mask(r2, c, 1 << b, Rule::ArcConsistency);
+                    self.tuple_support_col[r][col][b] -= 1;
+                    if self.tuple_support_col[r][col][b] == 0 {
+                        self.clear_mask(r, col, 1 << b, Rule::ArcConsistency);
                     }
                 }
             }
@@ -680,27 +622,37 @@ mod tests {
     use crate::solver::SolveOutcome;
 
     #[test]
-    fn live_tuple_pos_at_works() {
-        // A zero-digit tuple: [BLACK1_ROW, BLACK2_ROW]
-        let t0 = LiveTuple::<6>::new(0, 0, 0);
-        assert_eq!(t0.pos_of(0), Some(0));
-        assert_eq!(t0.pos_of(1), Some(1));
-        assert_eq!(t0.pos_of(2), None);
-        assert_eq!(t0.pos_of(3), None);
-        assert_eq!(t0.pos_of(4), None);
-        assert_eq!(t0.pos_of(5), None);
+    fn live_tuple_init_works_for_zero_digits() {
+        // A zero-digit tuple: [BLACK, BLACK]
+        let t = LiveTuple::<6>::new(0, 0);
+        assert_eq!(
+            t.pattern,
+            [
+                BlackSolverState::<6>::BLACK,
+                BlackSolverState::<6>::BLACK,
+                BlackSolverState::<6>::DIGITS,
+                BlackSolverState::<6>::DIGITS,
+                BlackSolverState::<6>::DIGITS,
+                BlackSolverState::<6>::DIGITS
+            ]
+        )
     }
 
     #[test]
-    fn live_tuple_pos_at_works_with_wrapping() {
+    fn live_tuple_init_works_with_wrapping() {
         // A one-digit wrapping tuple: [BLACK, digit(1), BLACK]
-        let t0 = LiveTuple::<6>::new(5, 1, 1 << 1);
-        assert_eq!(t0.pos_of(0), Some(1));
-        assert_eq!(t0.pos_of(1), Some(2));
-        assert_eq!(t0.pos_of(2), None);
-        assert_eq!(t0.pos_of(3), None);
-        assert_eq!(t0.pos_of(4), None);
-        assert_eq!(t0.pos_of(5), Some(0));
+        let t = LiveTuple::<6>::new(5, 1 << 1);
+        assert_eq!(
+            t.pattern,
+            [
+                1 << 1,
+                BlackSolverState::<6>::BLACK,
+                1 << 2 | 1 << 3 | 1 << 4,
+                1 << 2 | 1 << 3 | 1 << 4,
+                1 << 2 | 1 << 3 | 1 << 4,
+                BlackSolverState::<6>::BLACK
+            ]
+        )
     }
 
     #[test]
@@ -711,7 +663,8 @@ mod tests {
         let expected_domains: [[CellDomain; 4]; 4] = [[BlackSolverState::<4>::FULL_DOMAIN; 4]; 4];
         assert_eq!(state.domains, expected_domains);
 
-        assert_eq!(state.domain_size, [[4; 4]; 4]);
+        // domains are BLACK and digits 1 and 2.
+        assert_eq!(state.domain_size, [[3; 4]; 4]);
 
         // row_candidates: digits 1,2 and black have 4 candidates each
         assert_eq!(state.row_candidates, [[4, 4, 4, 0]; 4]);
@@ -732,6 +685,32 @@ mod tests {
         );
         let bit1 = 1 << 1;
         assert_eq!(state.domains[0].map(|d| d & bit1), [bit1, 0, 0, 0, 0, bit1]);
+    }
+
+    #[test]
+    fn black_solver_can_fully_propagate() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        // Black solver used to require backtracking on: 2 0 0 3 6 3 0 0 2 0
+        let state = BlackSolverState::new(Puzzle::new([2, 0, 0, 3, 6], [3, 0, 0, 2, 0]));
+        assert!(state.is_solved());
+        assert_eq!(
+            state.to_string(),
+            concat!(
+                "     3   0   0   2   0\n",
+                "   +---+---+---+---+---+\n",
+                " 2 | 3 | # | 2 | # | 1 |\n",
+                "   +---+---+---+---+---+\n",
+                " 0 | # | # | 1 | 2 | 3 |\n",
+                "   +---+---+---+---+---+\n",
+                " 0 | 1 | 3 | # | # | 2 |\n",
+                "   +---+---+---+---+---+\n",
+                " 3 | 2 | 1 | # | 3 | # |\n",
+                "   +---+---+---+---+---+\n",
+                " 6 | # | 2 | 3 | 1 | # |\n",
+                "   +---+---+---+---+---+\n"
+            )
+        );
     }
 
     #[test]
