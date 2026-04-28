@@ -1,4 +1,5 @@
 use rublock::basic_solver::BasicSolverState;
+use rublock::black_solver::BlackSolverState;
 use rublock::enumerate::SolverChoice;
 use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, SolveOutcome, Solver};
@@ -20,6 +21,7 @@ fn parse_args() -> (SolverChoice, Vec<u8>) {
             solver = match val {
                 "basic" => SolverChoice::Basic,
                 "queue" => SolverChoice::Queue,
+                "black" => SolverChoice::Black,
                 _ => usage(),
             };
         } else {
@@ -72,6 +74,11 @@ fn run<const N: usize>(nums: &[u8], solver: SolverChoice) {
         }
         SolverChoice::Queue => {
             let state = QueueSolverState::new(puzzle);
+            let outcome = state.solve();
+            report(outcome, state.stats());
+        }
+        SolverChoice::Black => {
+            let state = BlackSolverState::new(puzzle);
             let outcome = state.solve();
             report(outcome, state.stats());
         }

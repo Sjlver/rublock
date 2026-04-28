@@ -45,6 +45,7 @@ use std::time::{Duration, Instant};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
 use rublock::basic_solver::BasicSolverState;
+use rublock::black_solver::BlackSolverState;
 use rublock::enumerate::SolverChoice;
 use rublock::grid::{Cell, Grid};
 use rublock::queue_solver::QueueSolverState;
@@ -104,6 +105,7 @@ fn parse_args() -> Args {
             args.solver = match val {
                 "basic" => SolverChoice::Basic,
                 "queue" => SolverChoice::Queue,
+                "black" => SolverChoice::Black,
                 _ => usage(),
             };
         } else {
@@ -196,6 +198,7 @@ fn dispatch_solver<const N: usize>(args: Args) {
     match args.solver {
         SolverChoice::Basic => run::<N, BasicSolverState<N>>(args),
         SolverChoice::Queue => run::<N, QueueSolverState<N>>(args),
+        SolverChoice::Black => run::<N, BlackSolverState<N>>(args),
     }
 }
 

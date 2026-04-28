@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::basic_solver::BasicSolverState;
+use crate::black_solver::BlackSolverState;
 use crate::grid::{Cell, Grid};
 use crate::queue_solver::QueueSolverState;
 use crate::solver::{Puzzle, Solver};
@@ -280,6 +281,7 @@ fn uniqueness_ruled_out<const N: usize>(
 pub enum SolverChoice {
     Basic,
     Queue,
+    Black,
 }
 
 impl std::fmt::Display for SolverChoice {
@@ -287,6 +289,7 @@ impl std::fmt::Display for SolverChoice {
         match self {
             SolverChoice::Basic => f.write_str("basic"),
             SolverChoice::Queue => f.write_str("queue"),
+            SolverChoice::Black => f.write_str("black"),
         }
     }
 }
@@ -301,6 +304,7 @@ fn is_valid_puzzle<const N: usize>(
     match solver {
         SolverChoice::Basic => BasicSolverState::new(puzzle).count_solutions(2) == 1,
         SolverChoice::Queue => QueueSolverState::new(puzzle).count_solutions(2) == 1,
+        SolverChoice::Black => BlackSolverState::new(puzzle).count_solutions(2) == 1,
     }
 }
 

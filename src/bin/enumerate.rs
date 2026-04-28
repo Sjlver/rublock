@@ -25,6 +25,7 @@ fn parse_args() -> (usize, SolverChoice) {
             solver = match val {
                 "basic" => SolverChoice::Basic,
                 "queue" => SolverChoice::Queue,
+                "black" => SolverChoice::Black,
                 _ => usage(),
             };
         } else {
