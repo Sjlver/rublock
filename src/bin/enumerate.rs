@@ -43,8 +43,7 @@ fn parse_args() -> (usize, SolverChoice) {
 
 fn run<const N: usize>(solver: SolverChoice) {
     let started_at = Instant::now();
-    let num_threads = rayon::current_num_threads();
-    let target = num_threads * 1000;
+    let target = 100_000;
 
     // ── Build work queue ──────────────────────────────────────────────────────
 
@@ -54,11 +53,6 @@ fn run<const N: usize>(solver: SolverChoice) {
     work_items.shuffle(&mut rand::rng());
 
     println!("Enumerating grids of size {} using {} solver", N, solver);
-    println!(
-        "Work queue: {} items ({} threads × 1000 target).",
-        work_items.len(),
-        num_threads,
-    );
 
     // ── Shared atomic counters ────────────────────────────────────────────────
     //

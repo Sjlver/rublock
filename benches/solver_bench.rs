@@ -1,5 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rublock::basic_solver::BasicSolverState;
+use rublock::black_solver::BlackSolverState;
 use rublock::queue_solver::QueueSolverState;
 use rublock::solver::{Puzzle, Solver};
 
@@ -47,6 +48,16 @@ fn bench_solver(c: &mut Criterion) {
             b.iter(|| {
                 assert_eq!(
                     QueueSolverState::new(black_box(Puzzle::new(row_targets, col_targets)))
+                        .count_solutions(2),
+                    1
+                );
+            })
+        });
+
+        group.bench_function(format!("black/{i}"), |b| {
+            b.iter(|| {
+                assert_eq!(
+                    BlackSolverState::new(black_box(Puzzle::new(row_targets, col_targets)))
                         .count_solutions(2),
                     1
                 );
