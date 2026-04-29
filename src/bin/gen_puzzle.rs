@@ -31,11 +31,10 @@
 //
 // ## Solver dispatch
 //
-// Both [`run`] and [`worker`] are generic over `S: Solver<N>`: the choice
-// between [`BasicSolverState`] and [`QueueSolverState`] is made exactly once
-// in [`dispatch_solver`] (called from `main`) and monomorphised from there.
-// Previously this decision was repeated as a two-arm match in three separate
-// hot-loop bodies.
+// Both [`run`] and [`worker`] are generic over `S: Solver<N>`: the solver
+// choice is made exactly once in [`dispatch_solver`] (called from `main`)
+// and monomorphised from there. Previously this decision was repeated as
+// a two-arm match in three separate hot-loop bodies.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
@@ -66,7 +65,7 @@ struct Args {
 
 fn usage() -> ! {
     eprintln!(
-        "Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--threads=T] [--solver=basic|queue]"
+        "Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--threads=T] [--solver=basic|queue|black]"
     );
     eprintln!("  --size       grid side length, 3–11 (default: 6)");
     eprintln!(
@@ -76,7 +75,7 @@ fn usage() -> ! {
         "  --max-nodes  maximum search-tree nodes the solver must visit (inclusive, default: unbounded)"
     );
     eprintln!("  --threads    worker threads (default: available parallelism)");
-    eprintln!("  --solver     solver implementation to use (default: queue)");
+    eprintln!("  --solver     solver implementation to use (default: black)");
     std::process::exit(1);
 }
 
@@ -88,7 +87,7 @@ fn parse_args() -> Args {
         threads: thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1),
-        solver: SolverChoice::Queue,
+        solver: SolverChoice::Black,
     };
 
     for arg in std::env::args().skip(1) {

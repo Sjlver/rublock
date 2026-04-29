@@ -8,15 +8,15 @@ use rayon::prelude::*;
 use rublock::enumerate::{PartialGrid, SolverChoice, count_from_partial, generate_partial_grids};
 
 fn usage() -> ! {
-    eprintln!("Usage: enumerate [--size=N] [--solver=basic|queue]");
+    eprintln!("Usage: enumerate [--size=N] [--solver=basic|queue|black]");
     eprintln!("  --size    grid side length, 3–11 (default: 6)");
-    eprintln!("  --solver  basic or queue (default: queue)");
+    eprintln!("  --solver  basic, queue, or black (default: black)");
     std::process::exit(1);
 }
 
 fn parse_args() -> (usize, SolverChoice) {
     let mut size = 6usize;
-    let mut solver = SolverChoice::Queue;
+    let mut solver = SolverChoice::Black;
 
     for arg in std::env::args().skip(1) {
         if let Some(val) = arg.strip_prefix("--size=") {

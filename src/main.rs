@@ -6,14 +6,15 @@ use rublock::solver::{Puzzle, SolveOutcome, Solver};
 use rublock::stats::Stats;
 
 fn usage() -> ! {
-    eprintln!("Usage: rublock [--solver=basic|queue] <2N numbers>");
+    eprintln!("Usage: rublock [--solver=basic|queue|black] <2N numbers>");
     eprintln!("  The 2N numbers are the row targets followed by the column targets.");
     eprintln!("  N must be between 3 and 11.");
+    eprintln!("  --solver  solver implementation to use (default: black)");
     std::process::exit(1);
 }
 
 fn parse_args() -> (SolverChoice, Vec<u8>) {
-    let mut solver = SolverChoice::Queue;
+    let mut solver = SolverChoice::Black;
     let mut nums: Vec<u8> = Vec::new();
 
     for arg in std::env::args().skip(1) {
