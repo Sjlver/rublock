@@ -1,8 +1,8 @@
 use rand::seq::SliceRandom;
 use wasm_bindgen::prelude::*;
 
+use crate::black_solver::BlackSolverState;
 use crate::grid::{Cell, Grid};
-use crate::queue_solver::QueueSolverState;
 use crate::solver::{Puzzle, SolveOutcome, Solver};
 
 #[wasm_bindgen]
@@ -40,7 +40,7 @@ fn generate_puzzle_n<const N: usize>() -> String {
         };
         let (row_targets, col_targets) = grid.compute_targets();
         let puzzle = Puzzle::new(row_targets, col_targets);
-        let mut st = QueueSolverState::<N>::new(puzzle);
+        let mut st = BlackSolverState::<N>::new(puzzle);
         st.propagate();
         if st.is_solved() {
             return to_json::<N>(&row_targets, &col_targets);
@@ -57,7 +57,7 @@ fn solve_puzzle_n<const N: usize>(row_targets: Vec<u8>, col_targets: Vec<u8>) ->
     };
 
     let puzzle = Puzzle::<N>::new(row_targets, col_targets);
-    let state = QueueSolverState::<N>::new(puzzle.clone());
+    let state = BlackSolverState::<N>::new(puzzle.clone());
     match state.solve() {
         SolveOutcome::Unsolvable => error_json("puzzle is unsolvable"),
         SolveOutcome::Multiple(_) => error_json("puzzle has multiple solutions"),

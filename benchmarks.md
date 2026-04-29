@@ -103,3 +103,11 @@ Work queue: 8000 items (8 threads × 1000 target).
 Total valid grids:             283046400
 Valid puzzles (unique soln):    80165380
 Time: 1766.200 seconds (160257.3 grids per second)
+
+------------------
+
+Enumerating grids of size 6 using black solver
+[00:07:38] [========================================] 100000/100000 items  grids=done  (0s remaining)
+Total valid grids:             283044672
+Valid puzzles (unique soln):    80165380
+Time: 458.607 seconds (617183.0 grids per second)
