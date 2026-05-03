@@ -76,9 +76,6 @@ export function clearUrlParams(): void {
   history.replaceState(null, '', url);
 }
 
-// No-op: URL stays clean after initial load. Share links are generated on demand.
-export function syncUrl(_puzzleData: PuzzleData | null, _active: TabName): void {}
-
 /** Share link: puzzle only, no tab param. */
 export function puzzleShareUrl(data: PuzzleData): string {
   const url = new URL(window.location.href);

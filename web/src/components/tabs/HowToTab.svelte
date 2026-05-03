@@ -42,13 +42,13 @@
   ]);
 
   const controls = [
-    { action: 'Place a note',         touch: 'Tap button',       kb: 'Space, then digit' },
-    { action: 'Place an answer',       touch: 'Hold button',      kb: 'Digit (default)'   },
-    { action: 'Toggle note/value mode',touch: '—',                kb: 'Space'             },
-    { action: 'Mark cell black',       touch: 'Hold ■',           kb: '0, B, or X'        },
-    { action: 'Mark digits-only',      touch: 'Tap ○',            kb: '9 or O'            },
-    { action: 'Erase cell',            touch: 'Tap eraser',       kb: 'Backspace / Delete'},
-    { action: 'Move selection',        touch: 'Tap cell',         kb: 'Arrow keys / WASD' },
+    { action: 'Place a note', touch: 'Tap button', kb: 'Space, then digit' },
+    { action: 'Place an answer', touch: 'Hold button', kb: 'Digit (default)' },
+    { action: 'Toggle note/value mode', touch: '—', kb: 'Space' },
+    { action: 'Mark cell black', touch: 'Hold ■', kb: '0, B, or X' },
+    { action: 'Mark digits-only', touch: 'Tap ○', kb: '9 or O' },
+    { action: 'Erase cell', touch: 'Tap eraser', kb: 'Backspace / Delete' },
+    { action: 'Move selection', touch: 'Tap cell', kb: 'Arrow keys / WASD' },
   ];
 </script>
 
@@ -57,15 +57,17 @@
 <div class="tab-content">
   <div class="card">
     <p class="howto-prose">
-      Each row and column has a <strong style="color:var(--ink)">target</strong> at its head.
-      Place the digits and two black squares so the puzzle makes sense:
+      Each row and column has a <strong style="color:var(--ink)">target</strong> at its head. Place the
+      digits and two black squares so the puzzle makes sense:
     </p>
 
     <div class="rule-row">
       <div class="rule-number">1</div>
       <div>
         <div class="rule-title">Two blacks</div>
-        <div class="rule-body">Each row and each column contains exactly <strong>two black squares</strong>.</div>
+        <div class="rule-body">
+          Each row and each column contains exactly <strong>two black squares</strong>.
+        </div>
       </div>
     </div>
 
@@ -74,7 +76,8 @@
       <div>
         <div class="rule-title">A permutation in between</div>
         <div class="rule-body">
-          The other cells in each row and column hold the digits <strong>1 to N − 2</strong> — each appearing once.
+          The other cells in each row and column hold the digits <strong>1 to N − 2</strong> — each appearing
+          once.
         </div>
       </div>
     </div>
@@ -84,8 +87,8 @@
       <div>
         <div class="rule-title">Sum to the target</div>
         <div class="rule-body">
-          The numbers <strong>between</strong> the two blacks must add up to the target shown.
-          A target of <strong>0</strong> means the two blacks are adjacent.
+          The numbers <strong>between</strong> the two blacks must add up to the target shown. A
+          target of <strong>0</strong> means the two blacks are adjacent.
         </div>
       </div>
     </div>
@@ -120,8 +123,8 @@
       Step 2 — Column 5 target 0 means the blacks are neighbours
     </h3>
     <p class="howto-prose" style="font-size:13px;">
-      Target 0 means nothing between the blacks — they must be adjacent.
-      Column 5 already has a black in row 1, so the second black sits immediately below in row 2.
+      Target 0 means nothing between the blacks — they must be adjacent. Column 5 already has a
+      black in row 1, so the second black sits immediately below in row 2.
     </p>
 
     <div class="howto-step">
@@ -141,16 +144,19 @@
     </div>
 
     <p class="howto-prose" style="font-size:13px; margin-top:10px;">
-      Each deduction unlocks the next. Keep going until the puzzle is complete —
-      there is always exactly one solution.
+      Each deduction unlocks the next. Keep going until the puzzle is complete — there is always
+      exactly one solution.
     </p>
 
     <div class="divider"></div>
 
     <h2 style="font-size:13.5px; font-weight:700; margin-bottom:8px;">Controls</h2>
     <div class="controls-table">
-      <div class="controls-row-item" style="padding-bottom:6px; font-size:11px; font-weight:700;
-           color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;">
+      <div
+        class="controls-row-item"
+        style="padding-bottom:6px; font-size:11px; font-weight:700;
+           color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;"
+      >
         <div>Action</div>
         <div>Touch / mouse</div>
         <div>Keyboard</div>
@@ -166,8 +172,12 @@
 
     <p style="margin-top:12px; font-size:12px; color:var(--muted); line-height:1.5;">
       Source code:
-      <a href="https://github.com/Sjlver/rublock" target="_blank" rel="noopener noreferrer"
-         style="color:var(--accent); text-decoration:none;">
+      <a
+        href="https://github.com/Sjlver/rublock"
+        target="_blank"
+        rel="noopener noreferrer"
+        style="color:var(--accent); text-decoration:none;"
+      >
         github.com/Sjlver/rublock
       </a>
     </p>

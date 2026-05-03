@@ -24,7 +24,13 @@
 
   let showEmojiRain = $state(false);
   let hintDismissed = $state<boolean>(
-    (() => { try { return localStorage.getItem('rublock-hint-dismissed') === '1'; } catch { return false; } })()
+    (() => {
+      try {
+        return localStorage.getItem('rublock-hint-dismissed') === '1';
+      } catch {
+        return false;
+      }
+    })()
   );
 
   // Toast system: transient messages under the page title
@@ -49,9 +55,11 @@
     const text = playState.feedback;
     if (!text || text === prevFeedback) return;
     prevFeedback = text;
-    const tone: ToastTone = playState.feedbackError ? 'error'
-      : text.includes('solved') ? 'success'
-      : 'info';
+    const tone: ToastTone = playState.feedbackError
+      ? 'error'
+      : text.includes('solved')
+        ? 'success'
+        : 'info';
     showToast(text, tone);
   });
 
@@ -62,9 +70,7 @@
   });
 
   let displayStatus = $derived(toastText || status);
-  let displayTone = $derived(
-    toastText ? toastTone : 'info'
-  );
+  let displayTone = $derived(toastText ? toastTone : 'info');
 
   onMount(() => {
     const offSolved = onSolved(() => {
@@ -91,10 +97,14 @@
 
     const key = event.key.toLowerCase();
     const moves: Record<string, [number, number]> = {
-      arrowup: [-1, 0], w: [-1, 0],
-      arrowdown: [1, 0], s: [1, 0],
-      arrowleft: [0, -1], a: [0, -1],
-      arrowright: [0, 1], d: [0, 1],
+      arrowup: [-1, 0],
+      w: [-1, 0],
+      arrowdown: [1, 0],
+      s: [1, 0],
+      arrowleft: [0, -1],
+      a: [0, -1],
+      arrowright: [0, 1],
+      d: [0, 1],
     };
 
     if (key in moves) {
@@ -179,10 +189,12 @@
 
   function dismissHint(): void {
     hintDismissed = true;
-    try { localStorage.setItem('rublock-hint-dismissed', '1'); } catch {}
+    try {
+      localStorage.setItem('rublock-hint-dismissed', '1');
+    } catch {}
   }
 
-  let cellExtras = $derived(() => {
+  let cellExtras = $derived.by(() => {
     const map = new Map<string, { wrong?: boolean }>();
     for (const k of playState.wrongCells) map.set(k, { wrong: true });
     return map;
@@ -228,10 +240,18 @@
       onclick={handleNewPuzzle}
     >
       <!-- Refresh icon -->
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 8a8 8 0 10-1 9.5"/>
-        <path d="M20 4v4h-4"/>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M20 8a8 8 0 10-1 9.5" />
+        <path d="M20 4v4h-4" />
       </svg>
       New puzzle
     </button>
@@ -250,7 +270,7 @@
         notes={playState.cellNotes}
         selected={playState.selectedCell}
         inputMode={playState.inputMode}
-        cellExtras={cellExtras()}
+        {cellExtras}
         onCellClick={selectCell}
       />
     {/if}
@@ -265,10 +285,18 @@
       onclick={undoInput}
       aria-label="Undo"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 7L4.5 11.5 9 16"/>
-        <path d="M4.5 11.5h10a5 5 0 010 10H12"/>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M9 7L4.5 11.5 9 16" />
+        <path d="M4.5 11.5h10a5 5 0 010 10H12" />
       </svg>
       Undo
     </button>
@@ -279,10 +307,18 @@
       onclick={redoInput}
       aria-label="Redo"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M15 7l4.5 4.5L15 16"/>
-        <path d="M19.5 11.5h-10a5 5 0 100 10H12"/>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M15 7l4.5 4.5L15 16" />
+        <path d="M19.5 11.5h-10a5 5 0 100 10H12" />
       </svg>
       Redo
     </button>
@@ -293,10 +329,18 @@
       onclick={checkCurrentPuzzle}
       aria-label="Check answers"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="8.5"/>
-        <path d="M8 12.2l2.7 2.7L16 9.6"/>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M8 12.2l2.7 2.7L16 9.6" />
       </svg>
       Check
     </button>
@@ -306,10 +350,17 @@
   {#if notesMode && !inputDisabled}
     <div style="margin-bottom:8px; display:flex; align-items:center; gap:6px;">
       <span class="mode-badge">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M14.5 5.5l4 4"/>
-          <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z"/>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M14.5 5.5l4 4" />
+          <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z" />
         </svg>
         Notes mode
       </span>
@@ -320,16 +371,31 @@
   <!-- Hint chip (dismissible, teaches the long-press gesture) -->
   {#if !hintDismissed}
     <div class="hint-chip" style="margin-bottom:10px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14.5 5.5l4 4"/>
-        <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z"/>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M14.5 5.5l4 4" />
+        <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z" />
       </svg>
       <span class="hint-chip-text">Tap for a note · hold for the answer</span>
       <button type="button" class="hint-dismiss" onclick={dismissHint} aria-label="Dismiss hint">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M6 6l12 12M18 6L6 18"/>
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M6 6l12 12M18 6L6 18" />
         </svg>
       </button>
     </div>

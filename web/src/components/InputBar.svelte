@@ -30,13 +30,24 @@
 
   function ensureState(id: string): BtnState {
     if (!states[id]) {
-      states[id] = { pressed: false, progress: 0, timerId: null, rafId: null, longFired: false, startedAt: 0 };
+      states[id] = {
+        pressed: false,
+        progress: 0,
+        timerId: null,
+        rafId: null,
+        longFired: false,
+        startedAt: 0,
+      };
     }
     return states[id];
   }
 
-  function pressed(id: string): boolean { return states[id]?.pressed ?? false; }
-  function progress(id: string): number { return states[id]?.progress ?? 0; }
+  function pressed(id: string): boolean {
+    return states[id]?.pressed ?? false;
+  }
+  function progress(id: string): number {
+    return states[id]?.progress ?? 0;
+  }
 
   function startPress(id: string, onLong: (() => void) | null, e: MouseEvent | TouchEvent): void {
     if (disabled) return;
@@ -66,8 +77,14 @@
     if (!s) return;
     s.pressed = false;
     s.progress = 0;
-    if (s.timerId) { clearTimeout(s.timerId); s.timerId = null; }
-    if (s.rafId) { cancelAnimationFrame(s.rafId); s.rafId = null; }
+    if (s.timerId) {
+      clearTimeout(s.timerId);
+      s.timerId = null;
+    }
+    if (s.rafId) {
+      cancelAnimationFrame(s.rafId);
+      s.rafId = null;
+    }
     if (fire && !s.longFired) onTap();
   }
 
@@ -87,15 +104,20 @@
     onmouseup={() => endPress('black', true, () => onPlaceNote('black'))}
     onmouseleave={() => endPress('black', false, () => {})}
     ontouchstart={(e) => startPress('black', () => onPlaceValue('black'), e)}
-    ontouchend={(e) => { e.preventDefault(); endPress('black', true, () => onPlaceNote('black')); }}
+    ontouchend={(e) => {
+      e.preventDefault();
+      endPress('black', true, () => onPlaceNote('black'));
+    }}
     oncontextmenu={(e) => e.preventDefault()}
   >
-    <div class="pad-progress"
-         style:transform="scaleX({progress('black')})"
-         style:opacity={progress('black') > 0 ? 1 : 0}></div>
+    <div
+      class="pad-progress"
+      style:transform="scaleX({progress('black')})"
+      style:opacity={progress('black') > 0 ? 1 : 0}
+    ></div>
     <span class="pad-btn-icon">
       <svg width="22" height="22" viewBox="0 0 24 24">
-        <rect x="3" y="3" width="18" height="18" rx="2.5" fill="currentColor"/>
+        <rect x="3" y="3" width="18" height="18" rx="2.5" fill="currentColor" />
       </svg>
     </span>
   </button>
@@ -112,12 +134,17 @@
       onmouseup={() => endPress(String(d), true, () => onPlaceNote(d))}
       onmouseleave={() => endPress(String(d), false, () => {})}
       ontouchstart={(e) => startPress(String(d), () => onPlaceValue(d), e)}
-      ontouchend={(e) => { e.preventDefault(); endPress(String(d), true, () => onPlaceNote(d)); }}
+      ontouchend={(e) => {
+        e.preventDefault();
+        endPress(String(d), true, () => onPlaceNote(d));
+      }}
       oncontextmenu={(e) => e.preventDefault()}
     >
-      <div class="pad-progress"
-           style:transform="scaleX({progress(String(d))})"
-           style:opacity={progress(String(d)) > 0 ? 1 : 0}></div>
+      <div
+        class="pad-progress"
+        style:transform="scaleX({progress(String(d))})"
+        style:opacity={progress(String(d)) > 0 ? 1 : 0}
+      ></div>
       <span class="pad-btn-digit">{d}</span>
     </button>
   {/each}
@@ -133,16 +160,28 @@
     onmouseup={() => endPress('o', true, () => onPlaceNote('digits-only'))}
     onmouseleave={() => endPress('o', false, () => {})}
     ontouchstart={(e) => startPress('o', null, e)}
-    ontouchend={(e) => { e.preventDefault(); endPress('o', true, () => onPlaceNote('digits-only')); }}
+    ontouchend={(e) => {
+      e.preventDefault();
+      endPress('o', true, () => onPlaceNote('digits-only'));
+    }}
     oncontextmenu={(e) => e.preventDefault()}
   >
-    <div class="pad-progress"
-         style:transform="scaleX({progress('o')})"
-         style:opacity={progress('o') > 0 ? 1 : 0}></div>
+    <div
+      class="pad-progress"
+      style:transform="scaleX({progress('o')})"
+      style:opacity={progress('o') > 0 ? 1 : 0}
+    ></div>
     <span class="pad-btn-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-        <circle cx="12" cy="12" r="6.5"/>
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+      >
+        <circle cx="12" cy="12" r="6.5" />
       </svg>
     </span>
   </button>
@@ -158,19 +197,34 @@
     onmouseup={() => endPress('erase', true, onErase)}
     onmouseleave={() => endPress('erase', false, () => {})}
     ontouchstart={(e) => startPress('erase', onErase, e)}
-    ontouchend={(e) => { e.preventDefault(); endPress('erase', true, onErase); }}
+    ontouchend={(e) => {
+      e.preventDefault();
+      endPress('erase', true, onErase);
+    }}
     oncontextmenu={(e) => e.preventDefault()}
   >
-    <div class="pad-progress"
-         style:transform="scaleX({progress('erase')})"
-         style:opacity={progress('erase') > 0 ? 1 : 0}></div>
+    <div
+      class="pad-progress"
+      style:transform="scaleX({progress('erase')})"
+      style:opacity={progress('erase') > 0 ? 1 : 0}
+    ></div>
     <span class="pad-btn-icon">
       <!-- Eraser icon — not an X, per design notes -->
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16.8 3.2l4 4a1.6 1.6 0 010 2.3L11.5 19.7a1.6 1.6 0 01-2.3 0l-4.9-4.9a1.6 1.6 0 010-2.3L14.5 3.2a1.6 1.6 0 012.3 0z"/>
-        <path d="M9 9.5l5.5 5.5"/>
-        <path d="M3 21h11" stroke-opacity="0.55"/>
+      <svg
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M16.8 3.2l4 4a1.6 1.6 0 010 2.3L11.5 19.7a1.6 1.6 0 01-2.3 0l-4.9-4.9a1.6 1.6 0 010-2.3L14.5 3.2a1.6 1.6 0 012.3 0z"
+        />
+        <path d="M9 9.5l5.5 5.5" />
+        <path d="M3 21h11" stroke-opacity="0.55" />
       </svg>
     </span>
   </button>

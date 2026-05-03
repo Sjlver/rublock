@@ -87,21 +87,27 @@
       class="solve-input"
       placeholder="r1,r2,…,rN,c1,c2,…,cN"
       bind:value={inputText}
-      onkeydown={(e) => { if (e.key === 'Enter') solveFromInput(); }}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') solveFromInput();
+      }}
     />
-    <button
-      type="button"
-      class="solve-btn"
-      onclick={solveFromInput}
-    >
+    <button type="button" class="solve-btn" onclick={solveFromInput}>
       <!-- Wand icon -->
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M5 19L15 9"/>
-        <path d="M14 8l2 2"/>
-        <path d="M18 4v3M16.5 5.5h3"/>
-        <path d="M6 5v2M5 6h2"/>
-        <path d="M19 14v2M18 15h2"/>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M5 19L15 9" />
+        <path d="M14 8l2 2" />
+        <path d="M18 4v3M16.5 5.5h3" />
+        <path d="M6 5v2M5 6h2" />
+        <path d="M19 14v2M18 15h2" />
       </svg>
       Solve
     </button>
@@ -109,7 +115,9 @@
 
   {#if solved}
     <div class="card" style="margin-top:14px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div
+        style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"
+      >
         <span style="font-size:13px; font-weight:600; color:var(--ink);">Solution</span>
         <span class="solve-badge">Unique</span>
       </div>

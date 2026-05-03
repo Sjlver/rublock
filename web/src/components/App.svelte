@@ -9,7 +9,13 @@
   import PuzzleGrid from './PuzzleGrid.svelte';
   import { initWasm, generatePuzzle } from '../wasm/api';
   import { loadRandomPuzzle, setPuzzle } from '../state/puzzle.svelte';
-  import { parsePuzzleFromUrl, clearUrlParams, tabFromUrl, tabState, setTab } from '../state/url.svelte';
+  import {
+    parsePuzzleFromUrl,
+    clearUrlParams,
+    tabFromUrl,
+    tabState,
+    setTab,
+  } from '../state/url.svelte';
   import { trackEvent } from '../analytics';
 
   const PUZZLES_PER_PAGE = 6;
@@ -28,11 +34,11 @@
       } else {
         loadRandomPuzzle(6);
       }
-      // Per DESIGN_NOTES.md: clear the URL param after loading — keep URL clean.
-      clearUrlParams();
-
       const t = tabFromUrl();
       if (t !== 'play') setTab(t);
+
+      // Per DESIGN_NOTES.md: clear the URL param after loading — keep URL clean.
+      clearUrlParams();
 
       // Pre-generate one page so Ctrl+P works immediately.
       await fillPrintOutput(6, 1);

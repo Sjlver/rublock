@@ -1,23 +1,25 @@
 import { test, expect } from '@playwright/test';
 
-test('app loads and WASM initializes to Ready status', async ({ page }) => {
+test('app loads and the puzzle grid is visible on the Play tab', async ({ page }) => {
   await page.goto('/');
 
-  // The status span transitions from "Loading…" to "Ready" once WASM is up.
-  await expect(page.locator('[role="status"]')).toHaveText('Ready', { timeout: 15_000 });
+  // The puzzle grid is rendered once WASM has initialized and a puzzle has
+  // been generated. Use it as the readiness signal.
+  await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
 });
 
-test('puzzle grid is visible on the Play tab after load', async ({ page }) => {
+test('Play tab shows "Ready" status after load', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('[role="status"]')).toHaveText('Ready', { timeout: 15_000 });
+  await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
 
-  // The grid is a <table class="puzzle"> rendered by PuzzleGrid.
-  await expect(page.locator('.preview table.puzzle')).toBeVisible();
+  // PageHeader renders a [role="status"] element with the current tab status.
+  await expect(page.locator('[role="status"]')).toHaveText('Ready');
 });
 
 test('Play tab is active by default', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('[role="status"]')).toHaveText('Ready', { timeout: 15_000 });
+  await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
 
-  await expect(page.locator('nav.tabs button.active')).toHaveText('Play');
+  // Bottom nav: the active button has class "active" and contains the label "Play".
+  await expect(page.locator('nav.bottom-nav button.active')).toContainText('Play');
 });

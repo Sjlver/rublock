@@ -112,13 +112,27 @@
 }
 
 /* Fixed digit positions: 1=TL, 2=TC, 3=TR, 4=ML, 5=MC, 6=MR, 7=BL */
-.puzzle .cell .cell-notes .note-1 { grid-area: 1 / 1; }
-.puzzle .cell .cell-notes .note-2 { grid-area: 1 / 2; }
-.puzzle .cell .cell-notes .note-3 { grid-area: 1 / 3; }
-.puzzle .cell .cell-notes .note-4 { grid-area: 2 / 1; }
-.puzzle .cell .cell-notes .note-5 { grid-area: 2 / 2; }
-.puzzle .cell .cell-notes .note-6 { grid-area: 2 / 3; }
-.puzzle .cell .cell-notes .note-7 { grid-area: 3 / 1; }
+.puzzle .cell .cell-notes .note-1 {
+  grid-area: 1 / 1;
+}
+.puzzle .cell .cell-notes .note-2 {
+  grid-area: 1 / 2;
+}
+.puzzle .cell .cell-notes .note-3 {
+  grid-area: 1 / 3;
+}
+.puzzle .cell .cell-notes .note-4 {
+  grid-area: 2 / 1;
+}
+.puzzle .cell .cell-notes .note-5 {
+  grid-area: 2 / 2;
+}
+.puzzle .cell .cell-notes .note-6 {
+  grid-area: 2 / 3;
+}
+.puzzle .cell .cell-notes .note-7 {
+  grid-area: 3 / 1;
+}
 
 /* o / x marker share the bottom-right corner */
 .puzzle .cell .cell-notes .note-marker {
@@ -157,7 +171,9 @@
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  transition: transform 80ms ease, background 120ms ease;
+  transition:
+    transform 80ms ease,
+    background 120ms ease;
   font-family: inherit;
 }
 
@@ -217,20 +233,34 @@
 /* ── Print styles ── */
 
 @media print {
+  .puzzle {
+    color: #000;
+  }
   .puzzle td,
   .puzzle th {
     width: 9mm;
     height: 9mm;
     font-size: 8pt;
+    border: 1px solid #000;
+    color: #000;
+    background: #fff;
   }
   .puzzle-wrap {
     border-radius: 0;
     box-shadow: none;
-  }
-  .puzzle .cell {
-    border-color: #333;
+    background: #fff;
   }
   .puzzle .target {
-    background: none;
+    background: #fff;
+    color: #000;
+  }
+  .puzzle thead th:first-child {
+    border: none;
+    background: transparent;
+  }
+  .puzzle .cell.black {
+    background: #000;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }

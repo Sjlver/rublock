@@ -8,28 +8,31 @@
 
 :root {
   /* Warm-neutral palette + one indigo accent */
-  --bg-page:  oklch(96% 0.004 80);
-  --paper:    oklch(98.5% 0.004 80);
-  --card:     #ffffff;
-  --ink:      oklch(20% 0.01 280);
-  --ink-2:    oklch(38% 0.01 280);
-  --muted:    oklch(58% 0.008 280);
-  --line:     oklch(91% 0.005 280);
-  --line-2:   oklch(86% 0.006 280);
-  --tint:     oklch(96.5% 0.012 285);
-  --accent:   oklch(48% 0.18 277);
-  --accent-ink:      #ffffff;
-  --accent-soft:     oklch(94% 0.04 277);
+  --bg-page: oklch(96% 0.004 80);
+  --paper: oklch(98.5% 0.004 80);
+  --card: #ffffff;
+  --ink: oklch(20% 0.01 280);
+  --ink-2: oklch(38% 0.01 280);
+  --muted: oklch(58% 0.008 280);
+  --line: oklch(91% 0.005 280);
+  --line-2: oklch(86% 0.006 280);
+  --tint: oklch(96.5% 0.012 285);
+  --accent: oklch(48% 0.18 277);
+  --accent-ink: #ffffff;
+  --accent-soft: oklch(94% 0.04 277);
   --accent-soft-ink: oklch(38% 0.16 277);
-  --danger:      oklch(58% 0.18 25);
+  --danger: oklch(58% 0.18 25);
   --danger-soft: oklch(94% 0.04 25);
-  --success:     oklch(60% 0.14 145);
-  --radius:    14px;
+  --success: oklch(60% 0.14 145);
+  --radius: 14px;
   --radius-lg: 20px;
-  --shadow-card: 0 1px 0 rgba(20,20,40,0.03), 0 1px 2px rgba(20,20,40,0.04), 0 6px 18px -8px rgba(20,20,40,0.08);
+  --shadow-card:
+    0 1px 0 rgba(20, 20, 40, 0.03), 0 1px 2px rgba(20, 20, 40, 0.04),
+    0 6px 18px -8px rgba(20, 20, 40, 0.08);
 }
 
-html, body {
+html,
+body {
   height: 100%;
 }
 
@@ -123,8 +126,12 @@ body {
   color: var(--muted);
   transition: color 200ms;
 }
-.page-status.error { color: var(--danger); }
-.page-status.success { color: var(--success); }
+.page-status.error {
+  color: var(--danger);
+}
+.page-status.success {
+  color: var(--success);
+}
 
 /* ── Share button ── */
 
@@ -170,7 +177,9 @@ body {
   overflow-x: auto;
   scrollbar-width: none;
 }
-.bottom-nav-inner::-webkit-scrollbar { display: none; }
+.bottom-nav-inner::-webkit-scrollbar {
+  display: none;
+}
 
 .nav-btn {
   flex: 1 1 0;
@@ -186,7 +195,9 @@ body {
   color: var(--muted);
   -webkit-tap-highlight-color: transparent;
 }
-.nav-btn.active { color: var(--accent); }
+.nav-btn.active {
+  color: var(--accent);
+}
 
 .nav-btn-pill {
   width: 44px;
@@ -198,7 +209,9 @@ body {
   background: transparent;
   transition: background 160ms ease;
 }
-.nav-btn.active .nav-btn-pill { background: var(--accent-soft); }
+.nav-btn.active .nav-btn-pill {
+  background: var(--accent-soft);
+}
 
 .nav-btn-label {
   font-size: 10.5px;
@@ -209,7 +222,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.nav-btn.active .nav-btn-label { font-weight: 600; }
+.nav-btn.active .nav-btn-label {
+  font-weight: 600;
+}
 
 /* ── Tab content area ── */
 
@@ -306,8 +321,13 @@ body {
   font-family: inherit;
   width: 100%;
 }
-.btn-primary:hover:not(:disabled) { opacity: 0.92; }
-.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+}
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 /* ── Field rows ── */
 
@@ -523,9 +543,18 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.controls-action { font-weight: 600; color: var(--ink); }
-.controls-touch  { color: var(--ink-2); }
-.controls-kb     { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.controls-action {
+  font-weight: 600;
+  color: var(--ink);
+}
+.controls-touch {
+  color: var(--ink-2);
+}
+.controls-kb {
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+}
 
 /* ── Walkthrough placeholder ── */
 
@@ -547,7 +576,9 @@ body {
   font-size: 0.88rem;
   color: var(--ink-2);
 }
-.feedback.error { color: var(--danger); }
+.feedback.error {
+  color: var(--danger);
+}
 
 /* ── Emoji rain ── */
 
