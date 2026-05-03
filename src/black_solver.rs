@@ -239,27 +239,21 @@ impl<const N: usize, R: Recorder> BlackSolverState<N, R> {
 
     /// Seed queue with bits that have no support.
     fn seed_queue(&mut self) {
-        // TODO: I'm essentially OR-ing all of self.live_tuples_row[r].
-        // There is probably a shorter way to do that.
-        let mut row_tuple_supported_bits: [[CellDomain; N]; N] = [[0; N]; N];
-        for r in 0..N {
-            for t in &self.live_tuples_row[r] {
-                for c in 0..N {
-                    row_tuple_supported_bits[r][c] |= t.pattern[c];
-                }
-            }
-        }
-        let mut col_tuple_supported_bits: [[CellDomain; N]; N] = [[0; N]; N];
-        for c in 0..N {
-            for t in &self.live_tuples_col[c] {
-                for r in 0..N {
-                    col_tuple_supported_bits[r][c] |= t.pattern[r];
-                }
-            }
-        }
+        let row_tuple_supported_bits: [[CellDomain; N]; N] = std::array::from_fn(|r| {
+            self.live_tuples_row[r].iter().fold([0; N], |acc, t| {
+                std::array::from_fn(|c| acc[c] | t.pattern[c])
+            })
+        });
+
+        let col_tuple_supported_bits: [[CellDomain; N]; N] = std::array::from_fn(|c| {
+            self.live_tuples_col[c].iter().fold([0; N], |acc, t| {
+                std::array::from_fn(|r| acc[r] | t.pattern[r])
+            })
+        });
+
         for r in 0..N {
             for c in 0..N {
-                let supported = row_tuple_supported_bits[r][c] & col_tuple_supported_bits[r][c];
+                let supported = row_tuple_supported_bits[r][c] & col_tuple_supported_bits[c][r];
                 // Bits with no live-tuple support before any propagation has
                 // run: distinct from `ArcConsistency`, which fires later when
                 // a tuple's last support disappears.
