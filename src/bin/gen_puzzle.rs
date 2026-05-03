@@ -47,6 +47,7 @@ use rublock::black_solver::BlackSolverState;
 use rublock::enumerate::SolverChoice;
 use rublock::grid::random_grid;
 use rublock::queue_solver::QueueSolverState;
+use rublock::recorder::Recorder;
 use rublock::solver::{Puzzle, SolveOutcome, Solver};
 
 // ── Arguments ─────────────────────────────────────────────────────────────────
@@ -350,7 +351,7 @@ fn worker<const N: usize, S: Solver<N>>(
         }
 
         let unique_nodes = match S::new(puzzle).solve() {
-            SolveOutcome::Unique(solved) => Some(solved.stats().search_nodes),
+            SolveOutcome::Unique(solved) => Some(solved.recorder().search_nodes()),
             _ => None,
         };
 

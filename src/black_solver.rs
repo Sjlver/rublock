@@ -1,7 +1,9 @@
+use std::collections::VecDeque;
+
 use tracing::{instrument, trace};
 
+use crate::recorder::{Recorder, Rule, SearchNodes};
 use crate::solver::{CellDomain, Puzzle, Solver, Tables};
-use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 // A LiveTuple for this solver works a bit differently from how it's currently
@@ -35,11 +37,18 @@ impl<const N: usize> LiveTuple<N> {
 
 // ── BlackSolverState ──────────────────────────────────────────────────────────
 
+/// State of the black solver, generic over the propagation event recorder
+/// (see [`crate::recorder`]).  Defaults to [`SearchNodes`], the cheapest
+/// recorder that still tracks search-tree size.
 #[derive(Clone)]
-pub struct BlackSolverState<const N: usize> {
+pub struct BlackSolverState<const N: usize, R: Recorder = SearchNodes> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
-    queue: Vec<(usize, usize, CellDomain)>,
+    /// FIFO queue of pending domain-bit removals.  We use `VecDeque` so the
+    /// `propagate()` loop can drain entries in insertion order and detect
+    /// "wave" boundaries (one `on_step_start` per wave) — see
+    /// [`Self::propagate`].
+    queue: VecDeque<(usize, usize, CellDomain)>,
 
     // ── Singleton constraint ──────────────────────────────────────────────────
     // How many value-choices does this cell have?
@@ -59,8 +68,7 @@ pub struct BlackSolverState<const N: usize> {
     tuple_support_row: [[[u16; N]; N]; N],
     tuple_support_col: [[[u16; N]; N]; N],
 
-    /// Debug-only propagation statistics.  See `stats.rs`.
-    stats: StatsHandle,
+    recorder: R,
 }
 
 struct BitName<const N: usize>(CellDomain);
@@ -78,7 +86,7 @@ impl<const N: usize> std::fmt::Display for BitName<N> {
     }
 }
 
-impl<const N: usize> std::fmt::Debug for BlackSolverState<N> {
+impl<const N: usize, R: Recorder> std::fmt::Debug for BlackSolverState<N, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "BlackSolverState {{")?;
         writeln!(
@@ -109,13 +117,13 @@ impl<const N: usize> std::fmt::Debug for BlackSolverState<N> {
     }
 }
 
-impl<const N: usize> BlackSolverState<N> {
+impl<const N: usize, R: Recorder> BlackSolverState<N, R> {
     const BLACK: CellDomain = 1 << 0;
     const DIGITS: CellDomain = ((1 << (N - 2)) - 1) << 1;
     const FULL_DOMAIN: CellDomain = Self::BLACK | Self::DIGITS;
 
     #[instrument(skip(puzzle))]
-    pub fn new(puzzle: Puzzle<N>) -> Self {
+    pub fn with_recorder(puzzle: Puzzle<N>) -> Self {
         // Initialize counters from the full domain (before any clear_mask).
         // Domains can be the
         let domain_size: [[u8; N]; N] = [[Self::FULL_DOMAIN.count_ones() as u8; N]; N];
@@ -135,7 +143,7 @@ impl<const N: usize> BlackSolverState<N> {
         let mut state = Self {
             puzzle,
             domains: [[Self::FULL_DOMAIN; N]; N],
-            queue: Vec::new(),
+            queue: VecDeque::new(),
             domain_size,
             row_candidates,
             col_candidates,
@@ -143,19 +151,20 @@ impl<const N: usize> BlackSolverState<N> {
             live_tuples_col,
             tuple_support_row,
             tuple_support_col,
-            stats: StatsHandle::new(),
+            recorder: R::default(),
         };
 
         state.init_live_tuples();
+        state.recorder.on_step_start();
         state.seed_queue();
         state.propagate();
 
         state
     }
 
-    /// Return a snapshot of the stats collected so far.
-    pub fn stats(&self) -> Stats {
-        self.stats.snapshot()
+    /// The recorder this state writes events to.
+    pub fn recorder(&self) -> &R {
+        &self.recorder
     }
 
     /// Enumerate the live tuples
@@ -251,9 +260,10 @@ impl<const N: usize> BlackSolverState<N> {
         for r in 0..N {
             for c in 0..N {
                 let supported = row_tuple_supported_bits[r][c] & col_tuple_supported_bits[r][c];
-                // Seeding is driven by live-tuple support, so attribute these
-                // removals to the arc-consistency rule.
-                self.clear_mask(r, c, !supported & Self::FULL_DOMAIN, Rule::ArcConsistency);
+                // Bits with no live-tuple support before any propagation has
+                // run: distinct from `ArcConsistency`, which fires later when
+                // a tuple's last support disappears.
+                self.clear_mask(r, c, !supported & Self::FULL_DOMAIN, Rule::TargetTuples);
             }
         }
     }
@@ -264,16 +274,17 @@ impl<const N: usize> BlackSolverState<N> {
     fn clear_mask(&mut self, row: usize, col: usize, mask: CellDomain, rule: Rule) {
         let before = self.domains[row][col];
         self.domains[row][col] &= !mask;
-        let removed = before & !self.domains[row][col];
+        let after = self.domains[row][col];
+        let removed = before & !after;
         if removed != 0 {
-            self.stats.incr_bits(rule, removed.count_ones());
+            self.recorder.on_bits_removed(row, col, before, after, rule);
         }
         let mut bits = removed;
         while bits != 0 {
             let b = bits & bits.wrapping_neg();
             bits &= bits - 1;
             trace!(b = format_args!("{}", BitName::<N>(b)), "bit removed");
-            self.queue.push((row, col, b));
+            self.queue.push_back((row, col, b));
         }
     }
 
@@ -441,13 +452,17 @@ impl<const N: usize> BlackSolverState<N> {
     // ── Propagation ───────────────────────────────────────────────────────────
 
     pub fn propagate(&mut self) {
-        while let Some((r, c, bit)) = self.queue.pop() {
-            // Return early if a contradiction is detected
-            if self.domains[r][c] == 0 {
-                return;
+        while !self.queue.is_empty() {
+            self.recorder.on_step_start();
+            let mut wave = self.queue.len();
+            while wave > 0 {
+                let (r, c, bit) = self.queue.pop_front().unwrap();
+                wave -= 1;
+                if self.domains[r][c] == 0 {
+                    return;
+                }
+                self.update(r, c, bit);
             }
-
-            self.update(r, c, bit);
         }
     }
 
@@ -524,19 +539,25 @@ impl<const N: usize> BlackSolverState<N> {
 // Mirror of the adapter in `basic_solver.rs`: each required trait method
 // forwards to the identically-named inherent method above.  `take_branch` /
 // `reject_branch` delegate to the internal propagation primitives, tagging the
-// change as a `Backtracking` decision for the stats counters.
+// change as a `Backtracking` decision so the recorder attributes it
+// appropriately.
 
-impl<const N: usize> Solver<N> for BlackSolverState<N> {
+impl<const N: usize> BlackSolverState<N, SearchNodes> {
+    /// Construct a solver with the default [`SearchNodes`] recorder.
+    pub fn new(puzzle: Puzzle<N>) -> Self {
+        Self::with_recorder(puzzle)
+    }
+}
+
+impl<const N: usize, R: Recorder> Solver<N> for BlackSolverState<N, R> {
+    type Recorder = R;
+
     fn new(puzzle: Puzzle<N>) -> Self {
-        Self::new(puzzle)
+        Self::with_recorder(puzzle)
     }
 
-    fn stats(&self) -> Stats {
-        self.stats.snapshot()
-    }
-
-    fn stats_handle(&self) -> &StatsHandle {
-        &self.stats
+    fn recorder(&self) -> &R {
+        &self.recorder
     }
 
     fn propagate(&mut self) {
@@ -560,10 +581,12 @@ impl<const N: usize> Solver<N> for BlackSolverState<N> {
     }
 
     fn take_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.recorder.on_step_start();
         self.set_cell(r, c, bit, Rule::Backtracking);
     }
 
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.recorder.on_step_start();
         self.clear_mask(r, c, bit, Rule::Backtracking);
     }
 
@@ -572,7 +595,7 @@ impl<const N: usize> Solver<N> for BlackSolverState<N> {
     }
 }
 
-impl<const N: usize> std::fmt::Display for BlackSolverState<N> {
+impl<const N: usize, R: Recorder> std::fmt::Display for BlackSolverState<N, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "    ")?;
         for (c, &t) in self.puzzle.col_targets.iter().enumerate() {
@@ -747,17 +770,50 @@ mod tests {
 
     // ── Stats tests ───────────────────────────────────────────────────────────
 
-    #[cfg(debug_assertions)]
     #[test]
     fn stats_track_bits_removed_and_search_nodes() {
-        let state = BlackSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        use crate::recorder::FullStats;
+        let state = BlackSolverState::<6, FullStats>::with_recorder(Puzzle::new(
+            [8, 2, 3, 8, 9, 0],
+            [0, 0, 5, 9, 0, 4],
+        ));
         let _ = state.solve();
-        let s = state.stats();
+        let s = state.recorder().snapshot();
         assert!(s.search_nodes >= 1, "search_nodes = {}", s.search_nodes);
+        // `seed_queue` always removes some bits via `Rule::TargetTuples`
+        // for any non-trivial puzzle.
         assert!(
-            s.bits_arc_consistency > 0,
-            "bits_arc_consistency = {}",
-            s.bits_arc_consistency
+            s.bits_target_tuples > 0,
+            "bits_target_tuples = {}",
+            s.bits_target_tuples
         );
+    }
+
+    #[test]
+    fn explain_records_steps_for_solvable_puzzle() {
+        use crate::recorder::Explain;
+        // Newspaper puzzle with a unique solution.
+        let state = BlackSolverState::<6, Explain>::with_recorder(Puzzle::new(
+            [8u8, 2, 3, 8, 9, 0],
+            [0u8, 0, 5, 9, 0, 4],
+        ));
+        let outcome = state.solve();
+        assert!(
+            matches!(&outcome, SolveOutcome::Unique(_)),
+            "expected Unique solution"
+        );
+        let steps = state.recorder().steps();
+        // Propagation always produces at least the seed step.
+        assert!(!steps.is_empty(), "no steps recorded");
+        // Every recorded step must have at least one event (empty steps are discarded).
+        for (i, step) in steps.iter().enumerate() {
+            assert!(!step.events.is_empty(), "step {i} has no events");
+        }
+        // At least one step must be attributed to TargetTuples (seed pass).
+        let has_target_tuples = steps
+            .iter()
+            .flat_map(|s| &s.events)
+            .any(|e| e.rule == crate::recorder::Rule::TargetTuples);
+        assert!(has_target_tuples, "no TargetTuples events recorded");
     }
 }

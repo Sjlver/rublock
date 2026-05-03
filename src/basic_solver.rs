@@ -2,8 +2,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::changeset::ChangeSet;
+use crate::recorder::{Recorder, Rule, SearchNodes};
 use crate::solver::{CellDomain, Puzzle, Solver, Tables};
-use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── BasicSolverState ───────────────────────────────────────────────────────────────
 //
@@ -13,38 +13,45 @@ use crate::stats::{Rule, Stats, StatsHandle};
 // snapshot before committing to a guess). Copy is intentionally absent —
 // accidental copies of this large struct would silently produce stale state.
 
+/// State of the basic solver, generic over the propagation event recorder
+/// (see [`crate::recorder`]).  Defaults to [`SearchNodes`].
 #[derive(Clone)]
-pub struct BasicSolverState<const N: usize> {
+pub struct BasicSolverState<const N: usize, R: Recorder = SearchNodes> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
     tables: Arc<Tables>,
-    /// Debug-only propagation statistics.  In release builds this is a
-    /// zero-sized handle; cloning it costs nothing.  See `stats.rs`.
-    stats: StatsHandle,
+    recorder: R,
 }
 
-impl<const N: usize> BasicSolverState<N> {
-    pub fn new(puzzle: Puzzle<N>) -> Self {
+impl<const N: usize, R: Recorder> BasicSolverState<N, R> {
+    pub fn with_recorder(puzzle: Puzzle<N>) -> Self {
         // All value bits set: bit 1 through bit N+2.
         let full_cell: CellDomain = ((1 << (N + 2)) - 1) << 1;
         Self {
             puzzle,
             domains: [[full_cell; N]; N],
             tables: Arc::new(Tables::build(N - 2)),
-            stats: StatsHandle::new(),
+            recorder: R::default(),
         }
     }
 
-    /// Return a snapshot of the stats collected so far.
-    pub fn stats(&self) -> Stats {
-        self.stats.snapshot()
+    /// The recorder this state writes events to.
+    pub fn recorder(&self) -> &R {
+        &self.recorder
     }
 }
 
-// We implement `Debug` manually because `StatsHandle` deliberately avoids a
-// derived `Debug` in release (it's a unit struct).  Showing the domain grid
-// and puzzle targets is all we need here.
-impl<const N: usize> fmt::Debug for BasicSolverState<N> {
+impl<const N: usize> BasicSolverState<N, SearchNodes> {
+    /// Construct a solver with the default [`SearchNodes`] recorder.
+    pub fn new(puzzle: Puzzle<N>) -> Self {
+        Self::with_recorder(puzzle)
+    }
+}
+
+// We implement `Debug` manually to avoid requiring `R: Debug` and to keep
+// the printed output focused on the state we care about — puzzle targets
+// and the domain grid.
+impl<const N: usize, R: Recorder> fmt::Debug for BasicSolverState<N, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BasicSolverState")
             .field("puzzle", &self.puzzle)
@@ -55,7 +62,7 @@ impl<const N: usize> fmt::Debug for BasicSolverState<N> {
 
 // ── Solver rules ──────────────────────────────────────────────────────────────
 
-impl<const N: usize> BasicSolverState<N> {
+impl<const N: usize, R: Recorder> BasicSolverState<N, R> {
     // Bit positions for the "black" value variants.
     const BLACK1_ROW: CellDomain = 1 << (N - 1);
     const BLACK2_ROW: CellDomain = 1 << N;
@@ -82,8 +89,7 @@ impl<const N: usize> BasicSolverState<N> {
         let after = before & !mask;
         self.domains[row][col] = after;
         if after != before {
-            // XOR isolates the bits that actually changed (popped from 1 to 0).
-            self.stats.incr_bits(rule, (before ^ after).count_ones());
+            self.recorder.on_bits_removed(row, col, before, after, rule);
             cs.set_row(row);
             cs.set_col(col);
         }
@@ -470,6 +476,7 @@ impl<const N: usize> BasicSolverState<N> {
     pub fn propagate(&mut self) {
         let mut changed = ChangeSet::all(N);
         while changed.any() {
+            self.recorder.on_step_start();
             changed = self.apply_general_arc_consistency(changed)
                 | self.apply_black_consistency_rule(changed)
                 | self.apply_singleton_rule(changed)
@@ -586,17 +593,15 @@ impl<const N: usize> BasicSolverState<N> {
 // named inherent method via `Self::method(...)` — that path always resolves to
 // the inherent method, so there's no accidental recursion.
 
-impl<const N: usize> Solver<N> for BasicSolverState<N> {
+impl<const N: usize, R: Recorder> Solver<N> for BasicSolverState<N, R> {
+    type Recorder = R;
+
     fn new(puzzle: Puzzle<N>) -> Self {
-        Self::new(puzzle)
+        Self::with_recorder(puzzle)
     }
 
-    fn stats(&self) -> Stats {
-        self.stats.snapshot()
-    }
-
-    fn stats_handle(&self) -> &StatsHandle {
-        &self.stats
+    fn recorder(&self) -> &R {
+        &self.recorder
     }
 
     fn propagate(&mut self) {
@@ -620,10 +625,12 @@ impl<const N: usize> Solver<N> for BasicSolverState<N> {
     }
 
     fn take_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.recorder.on_step_start();
         let _ = self.set_cell(r, c, bit, Rule::Backtracking);
     }
 
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.recorder.on_step_start();
         let _ = self.clear_mask(r, c, bit, Rule::Backtracking);
     }
 
@@ -634,7 +641,7 @@ impl<const N: usize> Solver<N> for BasicSolverState<N> {
 
 // ── Display ───────────────────────────────────────────────────────────────────
 
-impl<const N: usize> fmt::Display for BasicSolverState<N> {
+impl<const N: usize, R: Recorder> fmt::Display for BasicSolverState<N, R> {
     /// Print the board and, for unsolved cells, the remaining domain bits.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "    ")?;
@@ -1226,17 +1233,22 @@ mod tests {
 
     // ── Stats tests ───────────────────────────────────────────────────────────
 
-    #[cfg(debug_assertions)]
     #[test]
     fn stats_track_bits_removed_and_search_nodes() {
+        use crate::recorder::FullStats;
         // Solve a known-unique puzzle and check the counters are populated.
-        let state = BasicSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        let state = BasicSolverState::<6, FullStats>::with_recorder(Puzzle::new(
+            [8, 2, 3, 8, 9, 0],
+            [0, 0, 5, 9, 0, 4],
+        ));
         let _ = state.solve();
-        let s = state.stats();
+        let s = state.recorder().snapshot();
         // One top-level search call at minimum; a uniquely-solvable puzzle
         // with good propagation typically takes 1 node.
         assert!(s.search_nodes >= 1, "search_nodes = {}", s.search_nodes);
-        // Arc-consistency does the heavy lifting for this puzzle.
+        // Arc-consistency does the heavy lifting for this puzzle.  (The basic
+        // solver has no separate `seed_queue`, so its initial reduction is
+        // attributed to `ArcConsistency`, not `TargetTuples`.)
         assert!(
             s.bits_arc_consistency > 0,
             "bits_arc_consistency = {}",
@@ -1244,13 +1256,16 @@ mod tests {
         );
     }
 
-    #[cfg(debug_assertions)]
     #[test]
     fn stats_count_backtracks_on_underconstrained_puzzle() {
+        use crate::recorder::FullStats;
         // Multiple solutions → the search has to branch, so search_nodes > 1.
-        let state = BasicSolverState::new(Puzzle::new([10, 0, 0, 0, 3, 0], [10, 0, 0, 0, 3, 0]));
+        let state = BasicSolverState::<6, FullStats>::with_recorder(Puzzle::new(
+            [10, 0, 0, 0, 3, 0],
+            [10, 0, 0, 0, 3, 0],
+        ));
         let _ = state.solve();
-        let s = state.stats();
+        let s = state.recorder().snapshot();
         assert!(
             s.search_nodes > 1,
             "expected branching, got search_nodes = {}",

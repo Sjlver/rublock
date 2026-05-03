@@ -13,7 +13,7 @@
 use std::fmt;
 
 use crate::backtrack;
-use crate::stats::{Stats, StatsHandle};
+use crate::recorder::Recorder;
 
 // ── Puzzle ────────────────────────────────────────────────────────────────────
 
@@ -167,6 +167,13 @@ impl Tables {
 ///
 /// There is no `dyn Solver` anywhere in the crate, and none is needed.
 pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
+    /// The recorder type the solver state holds.  Defaults to
+    /// `recorder::SearchNodes` on each concrete state struct (set via the
+    /// type parameter default), so callers that don't care about stats just
+    /// write `BlackSolverState::<N>::new(puzzle)` and pay only for a single
+    /// search-node counter.
+    type Recorder: Recorder;
+
     /// Build a fresh solver for `puzzle`.
     ///
     /// Implementations may do some upfront work (e.g. the queue solver seeds
@@ -174,11 +181,10 @@ pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
     /// in a consistent, propagatable form.
     fn new(puzzle: Puzzle<N>) -> Self;
 
-    /// Snapshot of the stats counters aggregated so far.
-    fn stats(&self) -> Stats;
-
-    /// The shared stats handle, used by backtracking to bump per-node counts.
-    fn stats_handle(&self) -> &StatsHandle;
+    /// The recorder the state writes propagation events to.  `backtrack`
+    /// calls `recorder().on_search_node()` at every branch; user code can
+    /// downcast to a concrete type (e.g. `FullStats`) to read its data.
+    fn recorder(&self) -> &Self::Recorder;
 
     /// Run all propagation rules to a fixpoint (no rule shrinks a domain
     /// further).  After `propagate`, the state is either solved, contradictory,

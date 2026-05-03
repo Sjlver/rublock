@@ -11,6 +11,7 @@ use rublock::basic_solver::BasicSolverState;
 use rublock::black_solver::BlackSolverState;
 use rublock::grid::random_grid;
 use rublock::queue_solver::QueueSolverState;
+use rublock::recorder::Recorder;
 use rublock::solver::{Puzzle, SolveOutcome, Solver};
 
 fn usage() -> ! {
@@ -56,7 +57,7 @@ fn summarize<S: Solver<N>, const N: usize>(state: &S) -> SolveSummary<N> {
     SolveSummary {
         variant,
         cells,
-        search_nodes: state.stats().search_nodes,
+        search_nodes: state.recorder().search_nodes(),
     }
 }
 

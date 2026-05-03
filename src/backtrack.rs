@@ -11,6 +11,7 @@
 //! default methods delegate to them — callers still write `state.solve()` at
 //! the call site, but the implementation only lives here.
 
+use crate::recorder::Recorder;
 use crate::solver::{SolveOutcome, Solver};
 
 /// Core backtracking search.
@@ -47,7 +48,7 @@ where
     };
 
     let bit = state.pick_branching_bit(row, col);
-    state.stats_handle().incr_node();
+    state.recorder().on_search_node();
     let mut branch = state.clone();
     branch.take_branch(row, col, bit);
     let left = search(&mut branch, max, out.as_deref_mut());
@@ -67,7 +68,7 @@ pub fn count_solutions<S, const N: usize>(solver: &S, max: usize) -> usize
 where
     S: Solver<N>,
 {
-    solver.stats_handle().incr_node();
+    solver.recorder().on_search_node();
     let mut state = solver.clone();
     search(&mut state, max, None)
 }
@@ -80,7 +81,7 @@ pub fn solve<S, const N: usize>(solver: &S) -> SolveOutcome<S>
 where
     S: Solver<N>,
 {
-    solver.stats_handle().incr_node();
+    solver.recorder().on_search_node();
     let mut state = solver.clone();
     let mut found: Vec<S> = Vec::with_capacity(2);
     search(&mut state, 2, Some(&mut found));

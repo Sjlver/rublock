@@ -1,7 +1,9 @@
+use std::collections::VecDeque;
+
 use tracing::{instrument, trace};
 
+use crate::recorder::{Recorder, Rule, SearchNodes};
 use crate::solver::{CellDomain, Puzzle, Solver, Tables};
-use crate::stats::{Rule, Stats, StatsHandle};
 
 // ── LiveTuple ─────────────────────────────────────────────────────────────────
 
@@ -48,11 +50,14 @@ impl<const N: usize> LiveTuple<N> {
 
 // ── QueueSolverState ──────────────────────────────────────────────────────────
 
+/// State of the queue solver, generic over the propagation event recorder
+/// (see [`crate::recorder`]).  Defaults to [`SearchNodes`].
 #[derive(Clone)]
-pub struct QueueSolverState<const N: usize> {
+pub struct QueueSolverState<const N: usize, R: Recorder = SearchNodes> {
     pub puzzle: Puzzle<N>,
     domains: [[CellDomain; N]; N],
-    queue: Vec<(usize, usize, CellDomain)>,
+    /// FIFO queue of pending domain-bit removals.  See [`Self::propagate`].
+    queue: VecDeque<(usize, usize, CellDomain)>,
 
     // ── Singleton constraint ──────────────────────────────────────────────────
     // How many value-choices does this cell have in the row / col view?
@@ -89,8 +94,7 @@ pub struct QueueSolverState<const N: usize> {
     tuple_support_col_digit: [[[u16; N]; N]; N],
     tuple_support_col_black: [[[u16; 2]; N]; N],
 
-    /// Debug-only propagation statistics.  See `stats.rs`.
-    stats: StatsHandle,
+    recorder: R,
 }
 
 struct BitName<const N: usize>(CellDomain);
@@ -114,7 +118,7 @@ impl<const N: usize> std::fmt::Display for BitName<N> {
     }
 }
 
-impl<const N: usize> std::fmt::Debug for QueueSolverState<N> {
+impl<const N: usize, R: Recorder> std::fmt::Debug for QueueSolverState<N, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "QueueSolverState {{")?;
         writeln!(
@@ -136,7 +140,7 @@ impl<const N: usize> std::fmt::Debug for QueueSolverState<N> {
     }
 }
 
-impl<const N: usize> QueueSolverState<N> {
+impl<const N: usize, R: Recorder> QueueSolverState<N, R> {
     const BLACK1_ROW: CellDomain = 1 << (N - 1);
     const BLACK2_ROW: CellDomain = 1 << N;
     const BLACK1_COL: CellDomain = 1 << (N + 1);
@@ -148,7 +152,7 @@ impl<const N: usize> QueueSolverState<N> {
     const ALL_BLACKS: CellDomain = Self::ROW_BLACKS | Self::COL_BLACKS;
 
     #[instrument(skip(puzzle))]
-    pub fn new(puzzle: Puzzle<N>) -> Self {
+    pub fn with_recorder(puzzle: Puzzle<N>) -> Self {
         let full_cell: CellDomain = Self::ALL_DIGITS | Self::ALL_BLACKS;
 
         // Initialize counters from the full domain (before any clear_mask).
@@ -176,7 +180,7 @@ impl<const N: usize> QueueSolverState<N> {
         let mut state = Self {
             puzzle,
             domains: [[full_cell; N]; N],
-            queue: Vec::new(),
+            queue: VecDeque::new(),
             row_domain_size,
             col_domain_size,
             row_candidates_digit,
@@ -191,19 +195,20 @@ impl<const N: usize> QueueSolverState<N> {
             tuple_support_row_black,
             tuple_support_col_digit,
             tuple_support_col_black,
-            stats: StatsHandle::new(),
+            recorder: R::default(),
         };
 
         state.init_live_tuples();
+        state.recorder.on_step_start();
         state.seed_queue();
         state.propagate();
 
         state
     }
 
-    /// Return a snapshot of the stats collected so far.
-    pub fn stats(&self) -> Stats {
-        self.stats.snapshot()
+    /// The recorder this state writes events to.
+    pub fn recorder(&self) -> &R {
+        &self.recorder
     }
 
     /// Enumerate the live tuples
@@ -388,9 +393,10 @@ impl<const N: usize> QueueSolverState<N> {
                     | (row_tuple_supported_bits[r][c]
                         & col_tuple_supported_bits[r][c]
                         & Self::ALL_DIGITS);
-                // Seeding is driven by live-tuple support, so attribute these
-                // removals to the arc-consistency rule.
-                self.clear_mask(r, c, !supported & full_cell, Rule::ArcConsistency);
+                // Bits with no live-tuple support before any propagation has
+                // run.  Distinct from `ArcConsistency`, which fires later
+                // when a tuple's last support disappears.
+                self.clear_mask(r, c, !supported & full_cell, Rule::TargetTuples);
             }
         }
     }
@@ -401,16 +407,17 @@ impl<const N: usize> QueueSolverState<N> {
     fn clear_mask(&mut self, r: usize, c: usize, mask: CellDomain, rule: Rule) {
         let before = self.domains[r][c];
         self.domains[r][c] &= !mask;
-        let removed = before & !self.domains[r][c];
+        let after = self.domains[r][c];
+        let removed = before & !after;
         if removed != 0 {
-            self.stats.incr_bits(rule, removed.count_ones());
+            self.recorder.on_bits_removed(r, c, before, after, rule);
         }
         let mut bits = removed;
         while bits != 0 {
             let b = bits & bits.wrapping_neg();
             bits &= bits - 1;
             trace!(b = format_args!("{}", BitName::<N>(b)), "bit removed");
-            self.queue.push((r, c, b));
+            self.queue.push_back((r, c, b));
         }
     }
 
@@ -657,13 +664,17 @@ impl<const N: usize> QueueSolverState<N> {
     // ── Propagation ───────────────────────────────────────────────────────────
 
     pub fn propagate(&mut self) {
-        while let Some((r, c, bit)) = self.queue.pop() {
-            // Return early if a contradiction is detected
-            if self.domains[r][c] == 0 {
-                return;
+        while !self.queue.is_empty() {
+            self.recorder.on_step_start();
+            let mut wave = self.queue.len();
+            while wave > 0 {
+                let (r, c, bit) = self.queue.pop_front().unwrap();
+                wave -= 1;
+                if self.domains[r][c] == 0 {
+                    return;
+                }
+                self.update(r, c, bit);
             }
-
-            self.update(r, c, bit);
         }
     }
 
@@ -750,19 +761,25 @@ impl<const N: usize> QueueSolverState<N> {
 // Mirror of the adapter in `basic_solver.rs`: each required trait method
 // forwards to the identically-named inherent method above.  `take_branch` /
 // `reject_branch` delegate to the internal propagation primitives, tagging the
-// change as a `Backtracking` decision for the stats counters.
+// change as a `Backtracking` decision so the recorder attributes it
+// appropriately.
 
-impl<const N: usize> Solver<N> for QueueSolverState<N> {
+impl<const N: usize> QueueSolverState<N, SearchNodes> {
+    /// Construct a solver with the default [`SearchNodes`] recorder.
+    pub fn new(puzzle: Puzzle<N>) -> Self {
+        Self::with_recorder(puzzle)
+    }
+}
+
+impl<const N: usize, R: Recorder> Solver<N> for QueueSolverState<N, R> {
+    type Recorder = R;
+
     fn new(puzzle: Puzzle<N>) -> Self {
-        Self::new(puzzle)
+        Self::with_recorder(puzzle)
     }
 
-    fn stats(&self) -> Stats {
-        self.stats.snapshot()
-    }
-
-    fn stats_handle(&self) -> &StatsHandle {
-        &self.stats
+    fn recorder(&self) -> &R {
+        &self.recorder
     }
 
     fn propagate(&mut self) {
@@ -786,10 +803,12 @@ impl<const N: usize> Solver<N> for QueueSolverState<N> {
     }
 
     fn take_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.recorder.on_step_start();
         self.set_cell(r, c, bit, Rule::Backtracking);
     }
 
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain) {
+        self.recorder.on_step_start();
         self.clear_mask(r, c, bit, Rule::Backtracking);
     }
 
@@ -798,7 +817,7 @@ impl<const N: usize> Solver<N> for QueueSolverState<N> {
     }
 }
 
-impl<const N: usize> std::fmt::Display for QueueSolverState<N> {
+impl<const N: usize, R: Recorder> std::fmt::Display for QueueSolverState<N, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "    ")?;
         for (c, &t) in self.puzzle.col_targets.iter().enumerate() {
@@ -980,17 +999,22 @@ mod tests {
 
     // ── Stats tests ───────────────────────────────────────────────────────────
 
-    #[cfg(debug_assertions)]
     #[test]
     fn stats_track_bits_removed_and_search_nodes() {
-        let state = QueueSolverState::new(Puzzle::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]));
+        use crate::recorder::FullStats;
+        let state = QueueSolverState::<6, FullStats>::with_recorder(Puzzle::new(
+            [8, 2, 3, 8, 9, 0],
+            [0, 0, 5, 9, 0, 4],
+        ));
         let _ = state.solve();
-        let s = state.stats();
+        let s = state.recorder().snapshot();
         assert!(s.search_nodes >= 1, "search_nodes = {}", s.search_nodes);
+        // `seed_queue` always removes some bits via `Rule::TargetTuples`
+        // for any non-trivial puzzle.
         assert!(
-            s.bits_arc_consistency > 0,
-            "bits_arc_consistency = {}",
-            s.bits_arc_consistency
+            s.bits_target_tuples > 0,
+            "bits_target_tuples = {}",
+            s.bits_target_tuples
         );
     }
 }

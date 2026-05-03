@@ -2,8 +2,8 @@ use rublock::basic_solver::BasicSolverState;
 use rublock::black_solver::BlackSolverState;
 use rublock::enumerate::SolverChoice;
 use rublock::queue_solver::QueueSolverState;
+use rublock::recorder::{FullStats, Stats};
 use rublock::solver::{Puzzle, SolveOutcome, Solver};
-use rublock::stats::Stats;
 
 fn usage() -> ! {
     eprintln!("Usage: rublock [--solver=basic|queue|black] <2N numbers>");
@@ -69,19 +69,19 @@ fn run<const N: usize>(nums: &[u8], solver: SolverChoice) {
     let puzzle = Puzzle::new(row_targets, col_targets);
     match solver {
         SolverChoice::Basic => {
-            let state = BasicSolverState::new(puzzle);
+            let state = BasicSolverState::<N, FullStats>::with_recorder(puzzle);
             let outcome = state.solve();
-            report(outcome, state.stats());
+            report(outcome, state.recorder().snapshot());
         }
         SolverChoice::Queue => {
-            let state = QueueSolverState::new(puzzle);
+            let state = QueueSolverState::<N, FullStats>::with_recorder(puzzle);
             let outcome = state.solve();
-            report(outcome, state.stats());
+            report(outcome, state.recorder().snapshot());
         }
         SolverChoice::Black => {
-            let state = BlackSolverState::new(puzzle);
+            let state = BlackSolverState::<N, FullStats>::with_recorder(puzzle);
             let outcome = state.solve();
-            report(outcome, state.stats());
+            report(outcome, state.recorder().snapshot());
         }
     }
 }

@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::black_solver::BlackSolverState;
 use crate::grid::{Cell, Grid};
+use crate::recorder::{Explain, Rule, Step};
 use crate::solver::{Puzzle, SolveOutcome, Solver};
 
 #[wasm_bindgen]
@@ -13,6 +14,20 @@ pub fn generate_puzzle(size: u32) -> String {
         7 => generate_puzzle_n::<7>(),
         8 => generate_puzzle_n::<8>(),
         _ => r#"{"error":"size must be 5–8"}"#.to_string(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn explain_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
+    if row_targets.len() != col_targets.len() {
+        return error_json("row_targets and col_targets must have the same length");
+    }
+    match row_targets.len() {
+        5 => explain_puzzle_n::<5>(row_targets, col_targets),
+        6 => explain_puzzle_n::<6>(row_targets, col_targets),
+        7 => explain_puzzle_n::<7>(row_targets, col_targets),
+        8 => explain_puzzle_n::<8>(row_targets, col_targets),
+        _ => error_json("size must be 5–8"),
     }
 }
 
@@ -113,6 +128,93 @@ fn solved_to_json<const N: usize>(
         rows.join(","),
         cols.join(","),
         cells_json
+    )
+}
+
+fn explain_puzzle_n<const N: usize>(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
+    let Ok(row_targets) = row_targets.try_into() else {
+        return error_json("row_targets length does not match puzzle size");
+    };
+    let Ok(col_targets) = col_targets.try_into() else {
+        return error_json("col_targets length does not match puzzle size");
+    };
+
+    let puzzle = Puzzle::<N>::new(row_targets, col_targets);
+    let state = BlackSolverState::<N, Explain>::with_recorder(puzzle.clone());
+    match state.solve() {
+        SolveOutcome::Unsolvable => error_json("puzzle is unsolvable"),
+        SolveOutcome::Multiple(_) => error_json("puzzle has multiple solutions"),
+        SolveOutcome::Unique(solved) => {
+            let Some(cells) = solved.solved_cells() else {
+                return error_json("solver returned an incomplete state");
+            };
+            let steps = state.recorder().steps();
+            explain_to_json(&puzzle.row_targets, &puzzle.col_targets, &cells, &steps)
+        }
+    }
+}
+
+fn explain_to_json<const N: usize>(
+    row_targets: &[u8; N],
+    col_targets: &[u8; N],
+    cells: &[[i8; N]; N],
+    steps: &[Step],
+) -> String {
+    let rows: Vec<String> = row_targets.iter().map(|n| n.to_string()).collect();
+    let cols: Vec<String> = col_targets.iter().map(|n| n.to_string()).collect();
+    let cells_json = cells
+        .iter()
+        .map(|row| {
+            let vals = row
+                .iter()
+                .map(|v| {
+                    if *v < 0 {
+                        r#""black""#.to_string()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{}]", vals)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let steps_json = steps
+        .iter()
+        .map(|step| {
+            let events_json = step
+                .events
+                .iter()
+                .map(|e| {
+                    let rule_str = match e.rule {
+                        Rule::TargetTuples => "TargetTuples",
+                        Rule::ArcConsistency => "ArcConsistency",
+                        Rule::Singleton => "Singleton",
+                        Rule::HiddenSingle => "HiddenSingle",
+                        Rule::BlackConsistency => "BlackConsistency",
+                        Rule::Backtracking => "Backtracking",
+                    };
+                    format!(
+                        r#"{{"row":{},"col":{},"before":{},"after":{},"rule":"{}"}}"#,
+                        e.row, e.col, e.before, e.after, rule_str
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(r#"{{"events":[{}]}}"#, events_json)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+
+    format!(
+        r#"{{"size":{},"row_targets":[{}],"col_targets":[{}],"cells":[{}],"steps":[{}]}}"#,
+        N,
+        rows.join(","),
+        cols.join(","),
+        cells_json,
+        steps_json
     )
 }
 
