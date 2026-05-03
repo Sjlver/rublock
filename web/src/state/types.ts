@@ -35,4 +35,28 @@ export interface SelectedCell {
 
 export type InputMode = 'value' | 'notes';
 
-export type TabName = 'play' | 'solve' | 'print' | 'howto';
+export type TabName = 'play' | 'solve' | 'explain' | 'print' | 'howto';
+
+export type RuleName =
+  | 'TargetTuples'
+  | 'ArcConsistency'
+  | 'Singleton'
+  | 'HiddenSingle'
+  | 'BlackConsistency'
+  | 'Backtracking';
+
+export interface ExplainEvent {
+  row: number;
+  col: number;
+  before: number;
+  after: number;
+  rule: RuleName;
+}
+
+export interface ExplainStep {
+  events: ExplainEvent[];
+}
+
+export interface ExplainResponse extends SolvedPuzzle {
+  steps: ExplainStep[];
+}

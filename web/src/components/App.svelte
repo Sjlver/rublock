@@ -3,6 +3,7 @@
   import Header from './Header.svelte';
   import PlayTab from './tabs/PlayTab.svelte';
   import SolveTab from './tabs/SolveTab.svelte';
+  import ExplainTab from './tabs/ExplainTab.svelte';
   import PrintTab from './tabs/PrintTab.svelte';
   import HowToTab from './tabs/HowToTab.svelte';
   import PuzzleGrid from './PuzzleGrid.svelte';
@@ -104,6 +105,9 @@
   </div>
   <div style:display={tabState.active === 'solve' ? 'block' : 'none'}>
     <SolveTab />
+  </div>
+  <div style:display={tabState.active === 'explain' ? 'block' : 'none'}>
+    <ExplainTab />
   </div>
   <div style:display={tabState.active === 'print' ? 'block' : 'none'}>
     <PrintTab bind:selectedSize onPrint={generateAndPrint} busy={printBusy || !ready} />
