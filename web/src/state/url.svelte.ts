@@ -1,7 +1,7 @@
 import type { PuzzleData, TabName } from './types';
 import { trackEvent } from '../analytics';
 
-const VALID_TABS = new Set<TabName>(['play', 'solve', 'print', 'howto']);
+const VALID_TABS = new Set<TabName>(['play', 'solve', 'print', 'howto', 'steps']);
 
 const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -68,18 +68,16 @@ export function setTab(name: TabName): void {
   trackEvent(`rublock/${name}/tab-view`);
 }
 
-/**
- * Keep the address bar in sync with app state: current puzzle as `p=`
- * (base62-encoded, 0-9a-zA-Z) and `t=` when the tab is not Play.
- */
-export function syncUrl(puzzleData: PuzzleData | null, active: TabName): void {
-  if (!puzzleData) return;
+/** Clear all URL params — call after reading the share URL on load. */
+export function clearUrlParams(): void {
   const url = new URL(window.location.href);
+  if (url.search === '') return;
   url.search = '';
-  url.searchParams.set('p', serializePuzzleTargets(puzzleData));
-  if (active !== 'play') url.searchParams.set('t', active);
-  if (url.toString() !== window.location.href) history.replaceState(null, '', url);
+  history.replaceState(null, '', url);
 }
+
+// No-op: URL stays clean after initial load. Share links are generated on demand.
+export function syncUrl(_puzzleData: PuzzleData | null, _active: TabName): void {}
 
 /** Share link: puzzle only, no tab param. */
 export function puzzleShareUrl(data: PuzzleData): string {

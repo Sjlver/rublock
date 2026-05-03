@@ -35,4 +35,4 @@ export interface SelectedCell {
 
 export type InputMode = 'value' | 'notes';
 
-export type TabName = 'play' | 'solve' | 'print' | 'howto';
+export type TabName = 'play' | 'solve' | 'print' | 'howto' | 'steps';

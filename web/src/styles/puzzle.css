@@ -1,10 +1,17 @@
 .puzzle-wrap {
   display: inline-block;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line-2);
+  background: var(--card);
+  user-select: none;
 }
+
 .puzzle {
   border-collapse: collapse;
-  color: #374151;
+  color: var(--ink);
 }
+
 .puzzle td,
 .puzzle th {
   width: 2.5rem;
@@ -13,217 +20,201 @@
   vertical-align: middle;
   font-size: 1.05rem;
 }
+
 .puzzle .target {
   font-weight: 700;
-  color: #333;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  background: var(--tint);
+  letter-spacing: -0.02em;
 }
+
+.puzzle thead th:first-child {
+  background: transparent;
+}
+
 .puzzle .cell {
-  border: 1.5px solid #444;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   position: relative;
+  background: var(--card);
+  transition: background 120ms ease;
+  cursor: pointer;
 }
+
 .puzzle .cell.selected {
-  outline: 2.5px solid #4f46e5;
-  outline-offset: -2.5px;
-  background: #eef2ff;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-soft);
+  border-radius: 4px;
 }
+
 .puzzle .cell.selected.notes-mode {
   outline-style: dashed;
-  background: #f5f3ff;
+  background: oklch(97% 0.015 290);
 }
+
 .puzzle .cell.wrong {
-  background: #fee2e2;
-  border-color: #dc2626;
+  background: var(--danger-soft);
 }
+
 .puzzle .cell.selected.wrong {
-  background: #fecaca;
+  background: oklch(90% 0.06 25);
 }
-.puzzle .cell.selected.notes-mode.wrong {
-  background: #fce7f3;
-}
+
 .puzzle .cell.black {
-  background: #1a1a1a;
-  color: #1a1a1a;
+  background: var(--ink);
+  color: var(--ink);
 }
+
 .puzzle .cell.black.wrong {
-  outline: 3px solid #dc2626;
+  outline: 3px solid var(--danger);
   outline-offset: -4px;
+}
+
+.puzzle .cell.ex-new {
+  background: #fef9c3;
+  border-color: #d97706;
+}
+
+.puzzle .cell.black.ex-new {
+  outline: 2.5px solid #f59e0b;
+  outline-offset: -3px;
 }
 
 .puzzle .cell .cell-value {
   font-size: 1.05rem;
   font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
+
+/* Notes rendered in a 3×3 fixed-position grid */
 .puzzle .cell .cell-notes {
   position: absolute;
-  inset: 0;
+  inset: 4%;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
   pointer-events: none;
   font-size: 0.62rem;
   line-height: 1;
-  color: #4b5563;
+  color: var(--ink-2);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
+
 .puzzle .cell .cell-notes .note {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
 }
+
+/* Fixed digit positions: 1=TL, 2=TC, 3=TR, 4=ML, 5=MC, 6=MR, 7=BL */
+.puzzle .cell .cell-notes .note-1 { grid-area: 1 / 1; }
+.puzzle .cell .cell-notes .note-2 { grid-area: 1 / 2; }
+.puzzle .cell .cell-notes .note-3 { grid-area: 1 / 3; }
+.puzzle .cell .cell-notes .note-4 { grid-area: 2 / 1; }
+.puzzle .cell .cell-notes .note-5 { grid-area: 2 / 2; }
+.puzzle .cell .cell-notes .note-6 { grid-area: 2 / 3; }
+.puzzle .cell .cell-notes .note-7 { grid-area: 3 / 1; }
+
+/* o / x marker share the bottom-right corner */
 .puzzle .cell .cell-notes .note-marker {
   grid-area: 3 / 3;
   font-weight: 700;
 }
-.puzzle .cell .cell-notes .note-1 {
-  grid-area: 1 / 1;
-}
-.puzzle .cell .cell-notes .note-2 {
-  grid-area: 1 / 2;
-}
-.puzzle .cell .cell-notes .note-3 {
-  grid-area: 1 / 3;
-}
-.puzzle .cell .cell-notes .note-4 {
-  grid-area: 2 / 1;
-}
-.puzzle .cell .cell-notes .note-5 {
-  grid-area: 2 / 2;
-}
-.puzzle .cell .cell-notes .note-6 {
-  grid-area: 2 / 3;
-}
-.puzzle .cell .cell-notes .note-7 {
-  grid-area: 3 / 1;
+
+/* ── Row headers (left column) ── */
+.puzzle tbody th {
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
-@media screen {
-  .puzzle th,
-  .puzzle td {
-    border: 1px solid #e5e7eb;
-  }
-  .puzzle th {
-    background: #f8fafc;
-    color: #1f2937;
-  }
-  .puzzle .cell {
-    border-color: #e5e7eb;
-  }
-}
-
-.input-mode-hint {
-  width: 100%;
-  max-width: min(100vw - 2rem, 34rem);
-  text-align: center;
-  font-size: 0.85rem;
-  color: #6b7280;
-  min-height: 1.25rem;
-}
+/* ── Input bar ── */
 
 .input-bar {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  max-width: min(100vw - 2rem, 34rem);
-  margin-bottom: 0.9rem;
-}
-.btn-input {
-  min-width: 2.8rem;
-  min-height: 2.8rem;
-  padding: 0.5rem 0.9rem;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 10px;
-  border: 1.5px solid #d1d5db;
-  background: #fff;
-  cursor: pointer;
-}
-.btn-input:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.preview {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.9rem;
-  min-height: 18rem;
-}
-
-.solve-result {
-  margin-top: 1rem;
-  min-height: 16rem;
-}
-
-.howto p {
-  margin-bottom: 0.7rem;
-  line-height: 1.5;
-  color: #374151;
-}
-.howto h2 {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin: 1.4rem 0 0.5rem;
-}
-.howto h2:first-child {
-  margin-top: 0;
-}
-.howto h3 {
-  font-size: 0.97rem;
-  font-weight: 700;
-  color: #312e81;
-  margin: 1.1rem 0 0.4rem;
-}
-.howto ul {
-  padding-left: 1.4rem;
-  margin-bottom: 0.7rem;
-}
-.howto li {
-  line-height: 1.6;
-  color: #374151;
-  margin-bottom: 0.2rem;
-}
-.howto table {
-  border-collapse: collapse;
+  gap: 6px;
   width: 100%;
-  max-width: 42rem;
-  margin-bottom: 0.7rem;
-  color: #374151;
 }
-.howto > table th,
-.howto > table td {
-  border: 1px solid #e5e7eb;
-  padding: 0.45rem 0.6rem;
-  text-align: left;
-  vertical-align: top;
+
+.pad-btn {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 1px 0 rgba(20, 20, 40, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  cursor: pointer;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: transform 80ms ease, background 120ms ease;
+  font-family: inherit;
 }
-.howto > table th {
-  background: #f8fafc;
-  color: #1f2937;
+
+.pad-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
+
+.pad-btn.pressed {
+  background: var(--tint);
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+.pad-btn-digit {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  position: relative;
+  z-index: 1;
+}
+
+.pad-btn-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Long-press progress bar at button bottom */
+.pad-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: opacity 200ms;
+}
+
+/* ── How-to example puzzles (smaller cells) ── */
+
 .howto-step {
-  margin-bottom: 1rem;
+  margin: 10px 0;
 }
-.howto-step .puzzle-wrap {
-  margin-top: 0.55rem;
-  display: inline-block;
-}
+
 .howto-step .puzzle td,
 .howto-step .puzzle th {
   width: 2.1rem;
   height: 2.1rem;
   font-size: 0.92rem;
 }
-.puzzle .cell.ex-new {
-  background: #fef9c3;
-  border-color: #d97706;
-}
-.puzzle .cell.black.ex-new {
-  outline: 2.5px solid #f59e0b;
-  outline-offset: -3px;
-}
+
+/* ── Print styles ── */
 
 @media print {
   .puzzle td,
@@ -232,7 +223,14 @@
     height: 9mm;
     font-size: 8pt;
   }
+  .puzzle-wrap {
+    border-radius: 0;
+    box-shadow: none;
+  }
   .puzzle .cell {
-    border: 0.8pt solid #333;
+    border-color: #333;
+  }
+  .puzzle .target {
+    background: none;
   }
 }

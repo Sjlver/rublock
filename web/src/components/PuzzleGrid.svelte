@@ -6,13 +6,10 @@
 
   interface Props {
     puzzle: PuzzleData;
-    /** Optional cell values: number, 'black', or null. Falls back to empty cells. */
     values?: CellValue[][] | null;
-    /** Optional pencil-mark notes. */
     notes?: CellNotes[][] | null;
     selected?: SelectedCell | null;
     inputMode?: 'value' | 'notes';
-    /** Per-cell extras keyed as `${row},${col}`. */
     cellExtras?: Map<string, CellExtras> | null;
     onCellClick?: (row: number, col: number) => void;
   }
@@ -69,7 +66,7 @@
               onclick={onCellClick ? () => onCellClick(r, c) : undefined}
             >
               {#if v === 'black'}
-                X
+                <!-- intentionally empty — black cell has dark bg -->
               {:else if v !== null}
                 <span class="cell-value">{v}</span>
               {:else if n && notesHaveContent(n)}
@@ -80,7 +77,7 @@
                     {/if}
                   {/each}
                   {#if n.marker === 'black' || n.marker === 'digits-only'}
-                    <span class="note note-marker">{n.marker === 'black' ? 'X' : 'O'}</span>
+                    <span class="note note-marker">{n.marker === 'black' ? 'x' : 'o'}</span>
                   {/if}
                 </div>
               {/if}

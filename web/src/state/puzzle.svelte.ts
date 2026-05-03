@@ -107,6 +107,58 @@ export function loadRandomPuzzle(size: number): void {
   trackEvent(`rublock/play/generate/${size}`);
 }
 
+interface PerSizeState {
+  puzzleData: PuzzleData;
+  cellValues: CellValue[][];
+  cellNotes: CellNotes[][];
+  selectedCell: SelectedCell | null;
+  history: CellOperation[];
+  historyIndex: number;
+}
+
+const sizeStates = new Map<number, PerSizeState>();
+
+function saveCurrentState(): void {
+  if (!playState.puzzleData) return;
+  sizeStates.set(playState.puzzleData.size, {
+    puzzleData: playState.puzzleData,
+    cellValues: playState.cellValues.map((row) => [...row]),
+    cellNotes: playState.cellNotes.map((row) => row.map((n) => cloneNotes(n))),
+    selectedCell: playState.selectedCell,
+    history: [...playState.history],
+    historyIndex: playState.historyIndex,
+  });
+}
+
+/** Switch to a new size, preserving in-progress puzzles per size. */
+export function switchToSize(size: number): void {
+  if (playState.puzzleData?.size === size) return;
+  saveCurrentState();
+
+  const saved = sizeStates.get(size);
+  if (saved) {
+    playState.puzzleData = saved.puzzleData;
+    playState.cellValues = saved.cellValues;
+    playState.cellNotes = saved.cellNotes;
+    playState.selectedCell = saved.selectedCell;
+    playState.history = saved.history;
+    playState.historyIndex = saved.historyIndex;
+    playState.wrongCells.clear();
+    playState.feedback = '';
+    playState.feedbackError = false;
+  } else {
+    setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
+    trackEvent(`rublock/play/generate/${size}`);
+  }
+}
+
+/** Generate a fresh puzzle for the current size, discarding any saved state. */
+export function newPuzzle(size: number): void {
+  sizeStates.delete(size);
+  setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
+  trackEvent(`rublock/play/generate/${size}`);
+}
+
 function clearWrongCell(row: number, col: number): void {
   playState.wrongCells.delete(cellKey(row, col));
   playState.feedback = '';
