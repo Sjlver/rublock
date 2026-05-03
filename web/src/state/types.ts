@@ -19,6 +19,32 @@ export interface SolvedPuzzle extends PuzzleData {
 
 export type SolveResponse = SolvedPuzzle | { error: string };
 
+export type ExplainRule =
+  | 'TargetTuples'
+  | 'ArcConsistency'
+  | 'Singleton'
+  | 'HiddenSingle'
+  | 'BlackConsistency'
+  | 'Backtracking';
+
+export interface ExplainEvent {
+  row: number;
+  col: number;
+  before: number;
+  after: number;
+  rule: ExplainRule;
+}
+
+export interface ExplainStep {
+  events: ExplainEvent[];
+}
+
+export interface ExplainedPuzzle extends SolvedPuzzle {
+  steps: ExplainStep[];
+}
+
+export type ExplainResponse = ExplainedPuzzle | { error: string };
+
 export interface CellOperation {
   row: number;
   col: number;
