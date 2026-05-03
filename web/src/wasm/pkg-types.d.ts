@@ -7,4 +7,5 @@ declare module './pkg/rublock.js' {
   ): Promise<unknown>;
   export function generate_puzzle(size: number): string;
   export function solve_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): string;
+  export function explain_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): string;
 }
