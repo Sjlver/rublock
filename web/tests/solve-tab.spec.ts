@@ -59,6 +59,18 @@ test('entering unsolvable targets shows an error', async ({ page }) => {
   await expect(solveFeedback(page)).toHaveClass(/error/);
 });
 
+test('entering an out-of-range target shows an error instead of crashing', async ({ page }) => {
+  await openSolveTab(page);
+
+  // 99 is well above the max cage sum for any supported size; without
+  // validation the wasm solver would index out of bounds and panic.
+  await solveInput(page).fill('99,0,0,0,0,0,0,0,0,0,0,0');
+  await solveButton(page).click();
+
+  await expect(solveFeedback(page)).toHaveClass(/error/);
+  await expect(solveFeedback(page)).toContainText(/out of range|max/);
+});
+
 test('solve input is pre-populated with the current puzzle targets', async ({ page }) => {
   // Load a specific puzzle so we know the expected targets.
   // row=[7,0,4,7,4,3], col=[0,10,4,1,0,0]

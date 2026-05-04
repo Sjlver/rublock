@@ -11,34 +11,23 @@ use crate::solver::{Puzzle, SolveOutcome, Solver};
 
 #[derive(Serialize)]
 struct PuzzleResp<'a> {
-    size: usize,
     row_targets: &'a [u8],
     col_targets: &'a [u8],
 }
 
 #[derive(Serialize)]
 struct SolvedResp<'a> {
-    size: usize,
     row_targets: &'a [u8],
     col_targets: &'a [u8],
-    cells: Vec<Vec<CellOut>>,
+    cells: Vec<&'a [Cell]>,
 }
 
 #[derive(Serialize)]
 struct ExplainResp<'a> {
-    size: usize,
     row_targets: &'a [u8],
     col_targets: &'a [u8],
-    cells: Vec<Vec<CellOut>>,
+    cells: Vec<&'a [Cell]>,
     steps: Vec<StepOut>,
-}
-
-/// `number | "black"` — matches the TS `CellValue` union.
-#[derive(Serialize)]
-#[serde(untagged)]
-enum CellOut {
-    Number(u8),
-    Black(&'static str),
 }
 
 #[derive(Serialize)]
@@ -90,21 +79,8 @@ fn to_js<T: Serialize>(v: &T) -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(v).map_err(|e| js_err(&e.to_string()))
 }
 
-fn cells_out<const N: usize>(cells: &[[i8; N]; N]) -> Vec<Vec<CellOut>> {
-    cells
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|&v| {
-                    if v < 0 {
-                        CellOut::Black("black")
-                    } else {
-                        CellOut::Number(v as u8)
-                    }
-                })
-                .collect()
-        })
-        .collect()
+fn cells_out<const N: usize>(grid: &Grid<N>) -> Vec<&[Cell]> {
+    grid.cells.iter().map(|row| &row[..]).collect()
 }
 
 fn steps_out(steps: &[Step]) -> Vec<StepOut> {
@@ -124,6 +100,19 @@ fn steps_out(steps: &[Step]) -> Vec<StepOut> {
                 .collect(),
         })
         .collect()
+}
+
+fn try_puzzle<const N: usize>(
+    row_targets: Vec<u8>,
+    col_targets: Vec<u8>,
+) -> Result<Puzzle<N>, JsValue> {
+    let row_targets: [u8; N] = row_targets
+        .try_into()
+        .map_err(|_| js_err("row_targets length does not match puzzle size"))?;
+    let col_targets: [u8; N] = col_targets
+        .try_into()
+        .map_err(|_| js_err("col_targets length does not match puzzle size"))?;
+    Puzzle::<N>::try_new(row_targets, col_targets).map_err(|e| js_err(&e))
 }
 
 // ── Exports ─────────────────────────────────────────────────────────────────
@@ -184,7 +173,6 @@ fn generate_puzzle_n<const N: usize>() -> Result<JsValue, JsValue> {
         st.propagate();
         if st.is_solved() {
             return to_js(&PuzzleResp {
-                size: N,
                 row_targets: &row_targets,
                 col_targets: &col_targets,
             });
@@ -196,27 +184,19 @@ fn solve_puzzle_n<const N: usize>(
     row_targets: Vec<u8>,
     col_targets: Vec<u8>,
 ) -> Result<JsValue, JsValue> {
-    let row_targets: [u8; N] = row_targets
-        .try_into()
-        .map_err(|_| js_err("row_targets length does not match puzzle size"))?;
-    let col_targets: [u8; N] = col_targets
-        .try_into()
-        .map_err(|_| js_err("col_targets length does not match puzzle size"))?;
-
-    let puzzle = Puzzle::<N>::new(row_targets, col_targets);
+    let puzzle = try_puzzle::<N>(row_targets, col_targets)?;
     let state = BlackSolverState::<N>::new(puzzle.clone());
     match state.solve() {
         SolveOutcome::Unsolvable => Err(js_err("puzzle is unsolvable")),
         SolveOutcome::Multiple(_) => Err(js_err("puzzle has multiple solutions")),
         SolveOutcome::Unique(solved) => {
-            let cells = solved
+            let grid = solved
                 .solved_cells()
                 .ok_or_else(|| js_err("solver returned an incomplete state"))?;
             to_js(&SolvedResp {
-                size: N,
                 row_targets: &puzzle.row_targets,
                 col_targets: &puzzle.col_targets,
-                cells: cells_out(&cells),
+                cells: cells_out(&grid),
             })
         }
     }
@@ -226,28 +206,20 @@ fn explain_puzzle_n<const N: usize>(
     row_targets: Vec<u8>,
     col_targets: Vec<u8>,
 ) -> Result<JsValue, JsValue> {
-    let row_targets: [u8; N] = row_targets
-        .try_into()
-        .map_err(|_| js_err("row_targets length does not match puzzle size"))?;
-    let col_targets: [u8; N] = col_targets
-        .try_into()
-        .map_err(|_| js_err("col_targets length does not match puzzle size"))?;
-
-    let puzzle = Puzzle::<N>::new(row_targets, col_targets);
+    let puzzle = try_puzzle::<N>(row_targets, col_targets)?;
     let state = BlackSolverState::<N, Explain>::with_recorder(puzzle.clone());
     match state.solve() {
         SolveOutcome::Unsolvable => Err(js_err("puzzle is unsolvable")),
         SolveOutcome::Multiple(_) => Err(js_err("puzzle has multiple solutions")),
         SolveOutcome::Unique(solved) => {
-            let cells = solved
+            let grid = solved
                 .solved_cells()
                 .ok_or_else(|| js_err("solver returned an incomplete state"))?;
             let steps = state.recorder().steps();
             to_js(&ExplainResp {
-                size: N,
                 row_targets: &puzzle.row_targets,
                 col_targets: &puzzle.col_targets,
-                cells: cells_out(&cells),
+                cells: cells_out(&grid),
                 steps: steps_out(&steps),
             })
         }

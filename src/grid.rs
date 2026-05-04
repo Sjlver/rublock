@@ -3,6 +3,9 @@ use rand::seq::SliceRandom;
 // ── Cell ──────────────────────────────────────────────────────────────────────
 
 /// The value of a single cell in a fully or partially filled grid.
+///
+/// On the wasm boundary, `Cell` serializes as `number | "black" | null`,
+/// matching the TS `CellValue` union in `web/src/state/types.ts`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cell {
     /// The cell has not been assigned yet (used during grid enumeration).
@@ -11,6 +14,17 @@ pub enum Cell {
     Black,
     /// The cell holds a digit from 1 to N-2.
     Number(u8),
+}
+
+#[cfg(feature = "wasm")]
+impl serde::Serialize for Cell {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Cell::Empty => ser.serialize_none(),
+            Cell::Black => ser.serialize_str("black"),
+            Cell::Number(n) => ser.serialize_u8(*n),
+        }
+    }
 }
 
 // ── Grid ──────────────────────────────────────────────────────────────────────

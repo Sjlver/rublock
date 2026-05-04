@@ -8,7 +8,6 @@ export interface CellNotes {
 }
 
 export interface PuzzleData {
-  size: number;
   row_targets: number[];
   col_targets: number[];
 }

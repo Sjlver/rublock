@@ -66,7 +66,13 @@ fn report<S: std::fmt::Display>(outcome: SolveOutcome<S>, stats: Stats) {
 fn run<const N: usize>(nums: &[u8], solver: SolverChoice) {
     let row_targets: [u8; N] = nums[..N].try_into().unwrap();
     let col_targets: [u8; N] = nums[N..].try_into().unwrap();
-    let puzzle = Puzzle::new(row_targets, col_targets);
+    let puzzle = match Puzzle::try_new(row_targets, col_targets) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
     match solver {
         SolverChoice::Basic => {
             let state = BasicSolverState::<N, FullStats>::with_recorder(puzzle);
