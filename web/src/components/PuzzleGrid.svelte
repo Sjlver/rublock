@@ -66,7 +66,7 @@
               onclick={onCellClick ? () => onCellClick(r, c) : undefined}
             >
               {#if v === 'black'}
-                <!-- intentionally empty — black cell has dark bg -->
+                <span class="cell-value">X</span>
               {:else if v !== null}
                 <span class="cell-value">{v}</span>
               {:else if n && notesHaveContent(n)}

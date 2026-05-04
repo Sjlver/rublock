@@ -86,7 +86,7 @@ test('the final wave shows a fully solved grid', async ({ page }) => {
   // A solved 6×6 puzzle has exactly 12 black cells (2 per row, 6 rows).
   await expect(lastWave.locator('.cell.black')).toHaveCount(12);
   // Every other cell is a determined digit (24 cells with `.cell-value`).
-  await expect(lastWave.locator('.cell .cell-value')).toHaveCount(24);
+  await expect(lastWave.locator('.cell:not(.black) .cell-value')).toHaveCount(24);
   // No more notes anywhere on the final wave.
   await expect(lastWave.locator('.cell .cell-notes')).toHaveCount(0);
 });

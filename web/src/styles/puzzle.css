@@ -74,12 +74,15 @@
 
 .puzzle .cell.ex-new {
   background: #fef9c3;
-  border-color: #d97706;
+}
+
+.puzzle .cell.ex-new:has(.cell-value) {
+  outline: 2.5px solid #f59e0b;
+  outline-offset: -3px;
 }
 
 .puzzle .cell.black.ex-new {
-  outline: 2.5px solid #f59e0b;
-  outline-offset: -3px;
+  background: var(--ink);
 }
 
 .puzzle .cell .cell-value {
