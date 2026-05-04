@@ -171,11 +171,10 @@
     if (key === lastKey) return;
     lastKey = key;
     trackEvent(`rublock/walkthrough/show/${puzzle.size}`);
-    const response = explainPuzzle(puzzle);
-    if ('error' in response) {
-      result = { ok: false, error: response.error };
-    } else {
-      result = { ok: true, data: response };
+    try {
+      result = { ok: true, data: explainPuzzle(puzzle) };
+    } catch (err) {
+      result = { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
 

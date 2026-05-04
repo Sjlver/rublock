@@ -4,7 +4,7 @@ import init, { generate_puzzle, solve_puzzle, explain_puzzle } from './pkg/rublo
 // the file like any other asset.
 import wasmUrl from './pkg/rublock_bg.wasm?url';
 
-import type { ExplainResponse, PuzzleData, SolveResponse } from '../state/types';
+import type { ExplainedPuzzle, PuzzleData, SolvedPuzzle } from '../state/types';
 
 let initPromise: Promise<unknown> | null = null;
 
@@ -13,20 +13,25 @@ export function initWasm(): Promise<unknown> {
   return initPromise;
 }
 
+// The wasm exports throw on the failure path (size out of range, unsolvable
+// puzzle, multiple solutions, …). Callers should wrap these in `try`/`catch`.
+// `serde-wasm-bindgen` builds plain JS objects on the Rust side, so no
+// `JSON.parse` is needed.
+
 export function generatePuzzle(size: number): PuzzleData {
-  const parsed = JSON.parse(generate_puzzle(size)) as PuzzleData & { error?: string };
-  if (parsed.error) throw new Error(parsed.error);
-  return parsed;
+  return generate_puzzle(size) as PuzzleData;
 }
 
-export function solvePuzzle(data: PuzzleData): SolveResponse {
-  return JSON.parse(
-    solve_puzzle(Uint8Array.from(data.row_targets), Uint8Array.from(data.col_targets))
-  ) as SolveResponse;
+export function solvePuzzle(data: PuzzleData): SolvedPuzzle {
+  return solve_puzzle(
+    Uint8Array.from(data.row_targets),
+    Uint8Array.from(data.col_targets)
+  ) as SolvedPuzzle;
 }
 
-export function explainPuzzle(data: PuzzleData): ExplainResponse {
-  return JSON.parse(
-    explain_puzzle(Uint8Array.from(data.row_targets), Uint8Array.from(data.col_targets))
-  ) as ExplainResponse;
+export function explainPuzzle(data: PuzzleData): ExplainedPuzzle {
+  return explain_puzzle(
+    Uint8Array.from(data.row_targets),
+    Uint8Array.from(data.col_targets)
+  ) as ExplainedPuzzle;
 }

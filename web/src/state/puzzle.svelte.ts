@@ -8,7 +8,7 @@ import type {
   InputMode,
   PuzzleData,
   SelectedCell,
-  SolveResponse,
+  SolvedPuzzle,
 } from './types';
 
 export function emptyNotes(): CellNotes {
@@ -331,15 +331,17 @@ export function checkCurrentPuzzle(): void {
   if (!playState.puzzleData) return;
   trackEvent(`rublock/play/check/${playState.puzzleData.size}`);
 
-  const response: SolveResponse = solvePuzzle(playState.puzzleData);
-  playState.wrongCells.clear();
-  playState.feedbackError = false;
-
-  if ('error' in response) {
+  let response: SolvedPuzzle;
+  try {
+    response = solvePuzzle(playState.puzzleData);
+  } catch (err) {
+    playState.wrongCells.clear();
     playState.feedbackError = true;
-    playState.feedback = response.error;
+    playState.feedback = err instanceof Error ? err.message : String(err);
     return;
   }
+  playState.wrongCells.clear();
+  playState.feedbackError = false;
 
   let entered = 0;
   for (let r = 0; r < playState.puzzleData.size; r++) {
