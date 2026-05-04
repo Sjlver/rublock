@@ -78,11 +78,12 @@
   }
 
   function buildWalkthrough(puzzle: PuzzleData, steps: ExplainStep[]): WalkthroughView {
-    const domain: number[][] = Array.from({ length: puzzle.size }, () =>
-      Array.from({ length: puzzle.size }, () => fullDomain(puzzle.size))
+    const size = puzzle.row_targets.length;
+    const domain: number[][] = Array.from({ length: size }, () =>
+      Array.from({ length: size }, () => fullDomain(size))
     );
 
-    const initialSnap = snapshotDomain(puzzle.size, domain);
+    const initialSnap = snapshotDomain(size, domain);
     const initial: WaveView = {
       index: 0,
       values: initialSnap.values,
@@ -99,7 +100,7 @@
         domain[ev.row][ev.col] = ev.after;
         touched.add(`${ev.row},${ev.col}`);
       }
-      const snap = snapshotDomain(puzzle.size, domain);
+      const snap = snapshotDomain(size, domain);
       const extras = new Map<string, { exNew: true }>();
       for (const k of touched) extras.set(k, { exNew: true });
       waves.push({
@@ -167,15 +168,15 @@
       lastKey = null;
       return;
     }
-    const key = `${puzzle.size}|${puzzle.row_targets.join(',')}|${puzzle.col_targets.join(',')}`;
+    const size = puzzle.row_targets.length;
+    const key = `${size}|${puzzle.row_targets.join(',')}|${puzzle.col_targets.join(',')}`;
     if (key === lastKey) return;
     lastKey = key;
-    trackEvent(`rublock/walkthrough/show/${puzzle.size}`);
-    const response = explainPuzzle(puzzle);
-    if ('error' in response) {
-      result = { ok: false, error: response.error };
-    } else {
-      result = { ok: true, data: response };
+    trackEvent(`rublock/walkthrough/show/${size}`);
+    try {
+      result = { ok: true, data: explainPuzzle(puzzle) };
+    } catch (err) {
+      result = { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
 
@@ -183,7 +184,6 @@
     if (!result || !result.ok) return null;
     return buildWalkthrough(
       {
-        size: result.data.size,
         row_targets: result.data.row_targets,
         col_targets: result.data.col_targets,
       },

@@ -1,4 +1,5 @@
 use rand::seq::SliceRandom;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use crate::black_solver::BlackSolverState;
@@ -6,47 +7,160 @@ use crate::grid::{Cell, Grid};
 use crate::recorder::{Explain, Rule, Step};
 use crate::solver::{Puzzle, SolveOutcome, Solver};
 
+// ── Response shapes (mirror web/src/state/types.ts) ──────────────────────────
+
+#[derive(Serialize)]
+struct PuzzleResp<'a> {
+    row_targets: &'a [u8],
+    col_targets: &'a [u8],
+}
+
+#[derive(Serialize)]
+struct SolvedResp<'a> {
+    row_targets: &'a [u8],
+    col_targets: &'a [u8],
+    cells: Vec<&'a [Cell]>,
+}
+
+#[derive(Serialize)]
+struct ExplainResp<'a> {
+    row_targets: &'a [u8],
+    col_targets: &'a [u8],
+    cells: Vec<&'a [Cell]>,
+    steps: Vec<StepOut>,
+}
+
+#[derive(Serialize)]
+struct StepOut {
+    events: Vec<EventOut>,
+}
+
+#[derive(Serialize)]
+struct EventOut {
+    row: usize,
+    col: usize,
+    before: u64,
+    after: u64,
+    rule: RuleOut,
+}
+
+/// Mirrors `Rule` but with `Serialize` derived. Kept here so `recorder.rs`
+/// stays free of serde.
+#[derive(Serialize)]
+enum RuleOut {
+    TargetTuples,
+    ArcConsistency,
+    Singleton,
+    HiddenSingle,
+    BlackConsistency,
+    Backtracking,
+}
+
+impl From<Rule> for RuleOut {
+    fn from(r: Rule) -> Self {
+        match r {
+            Rule::TargetTuples => RuleOut::TargetTuples,
+            Rule::ArcConsistency => RuleOut::ArcConsistency,
+            Rule::Singleton => RuleOut::Singleton,
+            Rule::HiddenSingle => RuleOut::HiddenSingle,
+            Rule::BlackConsistency => RuleOut::BlackConsistency,
+            Rule::Backtracking => RuleOut::Backtracking,
+        }
+    }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn js_err(msg: &str) -> JsValue {
+    JsValue::from_str(msg)
+}
+
+fn to_js<T: Serialize>(v: &T) -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(v).map_err(|e| js_err(&e.to_string()))
+}
+
+fn cells_out<const N: usize>(grid: &Grid<N>) -> Vec<&[Cell]> {
+    grid.cells.iter().map(|row| &row[..]).collect()
+}
+
+fn steps_out(steps: &[Step]) -> Vec<StepOut> {
+    steps
+        .iter()
+        .map(|s| StepOut {
+            events: s
+                .events
+                .iter()
+                .map(|e| EventOut {
+                    row: e.row,
+                    col: e.col,
+                    before: e.before,
+                    after: e.after,
+                    rule: e.rule.into(),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn try_puzzle<const N: usize>(
+    row_targets: Vec<u8>,
+    col_targets: Vec<u8>,
+) -> Result<Puzzle<N>, JsValue> {
+    let row_targets: [u8; N] = row_targets
+        .try_into()
+        .map_err(|_| js_err("row_targets length does not match puzzle size"))?;
+    let col_targets: [u8; N] = col_targets
+        .try_into()
+        .map_err(|_| js_err("col_targets length does not match puzzle size"))?;
+    Puzzle::<N>::try_new(row_targets, col_targets).map_err(|e| js_err(&e))
+}
+
+// ── Exports ─────────────────────────────────────────────────────────────────
+
 #[wasm_bindgen]
-pub fn generate_puzzle(size: u32) -> String {
+pub fn generate_puzzle(size: u32) -> Result<JsValue, JsValue> {
     match size {
         5 => generate_puzzle_n::<5>(),
         6 => generate_puzzle_n::<6>(),
         7 => generate_puzzle_n::<7>(),
         8 => generate_puzzle_n::<8>(),
-        _ => r#"{"error":"size must be 5–8"}"#.to_string(),
+        _ => Err(js_err("size must be 5–8")),
     }
 }
 
 #[wasm_bindgen]
-pub fn explain_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
+pub fn explain_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsValue, JsValue> {
     if row_targets.len() != col_targets.len() {
-        return error_json("row_targets and col_targets must have the same length");
+        return Err(js_err(
+            "row_targets and col_targets must have the same length",
+        ));
     }
     match row_targets.len() {
         5 => explain_puzzle_n::<5>(row_targets, col_targets),
         6 => explain_puzzle_n::<6>(row_targets, col_targets),
         7 => explain_puzzle_n::<7>(row_targets, col_targets),
         8 => explain_puzzle_n::<8>(row_targets, col_targets),
-        _ => error_json("size must be 5–8"),
+        _ => Err(js_err("size must be 5–8")),
     }
 }
 
 #[wasm_bindgen]
-pub fn solve_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
+pub fn solve_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsValue, JsValue> {
     if row_targets.len() != col_targets.len() {
-        return error_json("row_targets and col_targets must have the same length");
+        return Err(js_err(
+            "row_targets and col_targets must have the same length",
+        ));
     }
-
     match row_targets.len() {
         5 => solve_puzzle_n::<5>(row_targets, col_targets),
         6 => solve_puzzle_n::<6>(row_targets, col_targets),
         7 => solve_puzzle_n::<7>(row_targets, col_targets),
         8 => solve_puzzle_n::<8>(row_targets, col_targets),
-        _ => error_json("size must be 5–8"),
+        _ => Err(js_err("size must be 5–8")),
     }
 }
 
-fn generate_puzzle_n<const N: usize>() -> String {
+fn generate_puzzle_n<const N: usize>() -> Result<JsValue, JsValue> {
     let mut rng = rand::rng();
     loop {
         let mut cells = [[Cell::Empty; N]; N];
@@ -58,168 +172,58 @@ fn generate_puzzle_n<const N: usize>() -> String {
         let mut st = BlackSolverState::<N>::new(puzzle);
         st.propagate();
         if st.is_solved() {
-            return to_json::<N>(&row_targets, &col_targets);
+            return to_js(&PuzzleResp {
+                row_targets: &row_targets,
+                col_targets: &col_targets,
+            });
         }
     }
 }
 
-fn solve_puzzle_n<const N: usize>(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
-    let Ok(row_targets) = row_targets.try_into() else {
-        return error_json("row_targets length does not match puzzle size");
-    };
-    let Ok(col_targets) = col_targets.try_into() else {
-        return error_json("col_targets length does not match puzzle size");
-    };
-
-    let puzzle = Puzzle::<N>::new(row_targets, col_targets);
+fn solve_puzzle_n<const N: usize>(
+    row_targets: Vec<u8>,
+    col_targets: Vec<u8>,
+) -> Result<JsValue, JsValue> {
+    let puzzle = try_puzzle::<N>(row_targets, col_targets)?;
     let state = BlackSolverState::<N>::new(puzzle.clone());
     match state.solve() {
-        SolveOutcome::Unsolvable => error_json("puzzle is unsolvable"),
-        SolveOutcome::Multiple(_) => error_json("puzzle has multiple solutions"),
+        SolveOutcome::Unsolvable => Err(js_err("puzzle is unsolvable")),
+        SolveOutcome::Multiple(_) => Err(js_err("puzzle has multiple solutions")),
         SolveOutcome::Unique(solved) => {
-            let Some(cells) = solved.solved_cells() else {
-                return error_json("solver returned an incomplete state");
-            };
-            solved_to_json(&puzzle.row_targets, &puzzle.col_targets, &cells)
+            let grid = solved
+                .solved_cells()
+                .ok_or_else(|| js_err("solver returned an incomplete state"))?;
+            to_js(&SolvedResp {
+                row_targets: &puzzle.row_targets,
+                col_targets: &puzzle.col_targets,
+                cells: cells_out(&grid),
+            })
         }
     }
 }
 
-fn to_json<const N: usize>(row_targets: &[u8; N], col_targets: &[u8; N]) -> String {
-    let rows: Vec<String> = row_targets.iter().map(|n| n.to_string()).collect();
-    let cols: Vec<String> = col_targets.iter().map(|n| n.to_string()).collect();
-    format!(
-        r#"{{"size":{},"row_targets":[{}],"col_targets":[{}]}}"#,
-        N,
-        rows.join(","),
-        cols.join(",")
-    )
-}
-
-fn solved_to_json<const N: usize>(
-    row_targets: &[u8; N],
-    col_targets: &[u8; N],
-    cells: &[[i8; N]; N],
-) -> String {
-    let rows: Vec<String> = row_targets.iter().map(|n| n.to_string()).collect();
-    let cols: Vec<String> = col_targets.iter().map(|n| n.to_string()).collect();
-    let cells_json = cells
-        .iter()
-        .map(|row| {
-            let vals = row
-                .iter()
-                .map(|v| {
-                    if *v < 0 {
-                        r#""black""#.to_string()
-                    } else {
-                        v.to_string()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("[{}]", vals)
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-
-    format!(
-        r#"{{"size":{},"row_targets":[{}],"col_targets":[{}],"cells":[{}]}}"#,
-        N,
-        rows.join(","),
-        cols.join(","),
-        cells_json
-    )
-}
-
-fn explain_puzzle_n<const N: usize>(row_targets: Vec<u8>, col_targets: Vec<u8>) -> String {
-    let Ok(row_targets) = row_targets.try_into() else {
-        return error_json("row_targets length does not match puzzle size");
-    };
-    let Ok(col_targets) = col_targets.try_into() else {
-        return error_json("col_targets length does not match puzzle size");
-    };
-
-    let puzzle = Puzzle::<N>::new(row_targets, col_targets);
+fn explain_puzzle_n<const N: usize>(
+    row_targets: Vec<u8>,
+    col_targets: Vec<u8>,
+) -> Result<JsValue, JsValue> {
+    let puzzle = try_puzzle::<N>(row_targets, col_targets)?;
     let state = BlackSolverState::<N, Explain>::with_recorder(puzzle.clone());
     match state.solve() {
-        SolveOutcome::Unsolvable => error_json("puzzle is unsolvable"),
-        SolveOutcome::Multiple(_) => error_json("puzzle has multiple solutions"),
+        SolveOutcome::Unsolvable => Err(js_err("puzzle is unsolvable")),
+        SolveOutcome::Multiple(_) => Err(js_err("puzzle has multiple solutions")),
         SolveOutcome::Unique(solved) => {
-            let Some(cells) = solved.solved_cells() else {
-                return error_json("solver returned an incomplete state");
-            };
+            let grid = solved
+                .solved_cells()
+                .ok_or_else(|| js_err("solver returned an incomplete state"))?;
             let steps = state.recorder().steps();
-            explain_to_json(&puzzle.row_targets, &puzzle.col_targets, &cells, &steps)
+            to_js(&ExplainResp {
+                row_targets: &puzzle.row_targets,
+                col_targets: &puzzle.col_targets,
+                cells: cells_out(&grid),
+                steps: steps_out(&steps),
+            })
         }
     }
-}
-
-fn explain_to_json<const N: usize>(
-    row_targets: &[u8; N],
-    col_targets: &[u8; N],
-    cells: &[[i8; N]; N],
-    steps: &[Step],
-) -> String {
-    let rows: Vec<String> = row_targets.iter().map(|n| n.to_string()).collect();
-    let cols: Vec<String> = col_targets.iter().map(|n| n.to_string()).collect();
-    let cells_json = cells
-        .iter()
-        .map(|row| {
-            let vals = row
-                .iter()
-                .map(|v| {
-                    if *v < 0 {
-                        r#""black""#.to_string()
-                    } else {
-                        v.to_string()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("[{}]", vals)
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-
-    let steps_json = steps
-        .iter()
-        .map(|step| {
-            let events_json = step
-                .events
-                .iter()
-                .map(|e| {
-                    let rule_str = match e.rule {
-                        Rule::TargetTuples => "TargetTuples",
-                        Rule::ArcConsistency => "ArcConsistency",
-                        Rule::Singleton => "Singleton",
-                        Rule::HiddenSingle => "HiddenSingle",
-                        Rule::BlackConsistency => "BlackConsistency",
-                        Rule::Backtracking => "Backtracking",
-                    };
-                    format!(
-                        r#"{{"row":{},"col":{},"before":{},"after":{},"rule":"{}"}}"#,
-                        e.row, e.col, e.before, e.after, rule_str
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            format!(r#"{{"events":[{}]}}"#, events_json)
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-
-    format!(
-        r#"{{"size":{},"row_targets":[{}],"col_targets":[{}],"cells":[{}],"steps":[{}]}}"#,
-        N,
-        rows.join(","),
-        cols.join(","),
-        cells_json,
-        steps_json
-    )
-}
-
-fn error_json(message: &str) -> String {
-    format!(r#"{{"error":"{}"}}"#, message)
 }
 
 fn dfs<const N: usize>(

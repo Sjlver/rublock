@@ -5,7 +5,6 @@
 
   const exampleSize = 5;
   const exampleTargets: PuzzleData = {
-    size: exampleSize,
     row_targets: [6, 2, 5, 1, 0],
     col_targets: [3, 0, 3, 0, 0],
   };

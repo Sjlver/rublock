@@ -8,7 +8,7 @@ import type {
   InputMode,
   PuzzleData,
   SelectedCell,
-  SolveResponse,
+  SolvedPuzzle,
 } from './types';
 
 export function emptyNotes(): CellNotes {
@@ -48,7 +48,7 @@ export function cellKey(row: number, col: number): string {
 }
 
 export function puzzleKey(data: PuzzleData): string {
-  return `${data.size}|${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
+  return `${data.row_targets.length}|${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
 }
 
 function sameOperation(a: CellOperation | undefined, b: CellOperation | undefined): boolean {
@@ -86,8 +86,8 @@ function setPuzzleData(
 
   playState.puzzleData = data;
   if (shouldReset) {
-    playState.cellValues = emptyCellValues(data.size);
-    playState.cellNotes = emptyCellNotes(data.size);
+    playState.cellValues = emptyCellValues(data.row_targets.length);
+    playState.cellNotes = emptyCellNotes(data.row_targets.length);
     playState.selectedCell = null;
     playState.inputMode = 'value';
     playState.history = [];
@@ -120,7 +120,7 @@ const sizeStates = new Map<number, PerSizeState>();
 
 function saveCurrentState(): void {
   if (!playState.puzzleData) return;
-  sizeStates.set(playState.puzzleData.size, {
+  sizeStates.set(playState.puzzleData.row_targets.length, {
     puzzleData: playState.puzzleData,
     cellValues: playState.cellValues.map((row) => [...row]),
     cellNotes: playState.cellNotes.map((row) => row.map((n) => cloneNotes(n))),
@@ -132,7 +132,7 @@ function saveCurrentState(): void {
 
 /** Switch to a new size, preserving in-progress puzzles per size. */
 export function switchToSize(size: number): void {
-  if (playState.puzzleData?.size === size) return;
+  if (playState.puzzleData?.row_targets.length === size) return;
   saveCurrentState();
 
   const saved = sizeStates.get(size);
@@ -272,7 +272,7 @@ export function redoInput(): void {
 
 export function moveSelection(deltaRow: number, deltaCol: number): void {
   if (!playState.puzzleData) return;
-  const max = playState.puzzleData.size - 1;
+  const max = playState.puzzleData.row_targets.length - 1;
   const row = playState.selectedCell ? playState.selectedCell.row + deltaRow : 0;
   const col = playState.selectedCell ? playState.selectedCell.col + deltaCol : 0;
   playState.selectedCell = {
@@ -309,41 +309,49 @@ export function onSolved(callback: () => void): () => void {
 
 function autoCheckCompletion(): void {
   if (!playState.puzzleData) return;
-  for (let r = 0; r < playState.puzzleData.size; r++) {
-    for (let c = 0; c < playState.puzzleData.size; c++) {
+  const size = playState.puzzleData.row_targets.length;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
       if (playState.cellValues[r][c] === null) return;
     }
   }
-  const response = solvePuzzle(playState.puzzleData);
-  if ('error' in response) return;
-  for (let r = 0; r < playState.puzzleData.size; r++) {
-    for (let c = 0; c < playState.puzzleData.size; c++) {
+  let response: SolvedPuzzle;
+  try {
+    response = solvePuzzle(playState.puzzleData);
+  } catch {
+    return;
+  }
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
       if (playState.cellValues[r][c] !== response.cells[r][c]) return;
     }
   }
   playState.feedback = 'Puzzle solved! 🎉';
   playState.feedbackError = false;
-  trackEvent(`rublock/play/complete/${playState.puzzleData.size}`);
+  trackEvent(`rublock/play/complete/${size}`);
   for (const cb of solveCallbacks) cb();
 }
 
 export function checkCurrentPuzzle(): void {
   if (!playState.puzzleData) return;
-  trackEvent(`rublock/play/check/${playState.puzzleData.size}`);
+  const size = playState.puzzleData.row_targets.length;
+  trackEvent(`rublock/play/check/${size}`);
 
-  const response: SolveResponse = solvePuzzle(playState.puzzleData);
+  let response: SolvedPuzzle;
+  try {
+    response = solvePuzzle(playState.puzzleData);
+  } catch (err) {
+    playState.wrongCells.clear();
+    playState.feedbackError = true;
+    playState.feedback = err instanceof Error ? err.message : String(err);
+    return;
+  }
   playState.wrongCells.clear();
   playState.feedbackError = false;
 
-  if ('error' in response) {
-    playState.feedbackError = true;
-    playState.feedback = response.error;
-    return;
-  }
-
   let entered = 0;
-  for (let r = 0; r < playState.puzzleData.size; r++) {
-    for (let c = 0; c < playState.puzzleData.size; c++) {
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
       const value = playState.cellValues[r][c];
       if (value === null) continue;
       entered += 1;
@@ -354,7 +362,7 @@ export function checkCurrentPuzzle(): void {
   }
 
   const wrongCount = playState.wrongCells.size;
-  const totalCells = playState.puzzleData.size * playState.puzzleData.size;
+  const totalCells = size * size;
   if (entered === 0) {
     playState.feedback = 'Enter some cells, then check them.';
   } else if (wrongCount === 0 && entered === totalCells) {

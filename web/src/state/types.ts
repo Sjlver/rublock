@@ -8,7 +8,6 @@ export interface CellNotes {
 }
 
 export interface PuzzleData {
-  size: number;
   row_targets: number[];
   col_targets: number[];
 }
@@ -16,8 +15,6 @@ export interface PuzzleData {
 export interface SolvedPuzzle extends PuzzleData {
   cells: CellValue[][];
 }
-
-export type SolveResponse = SolvedPuzzle | { error: string };
 
 export type ExplainRule =
   | 'TargetTuples'
@@ -42,8 +39,6 @@ export interface ExplainStep {
 export interface ExplainedPuzzle extends SolvedPuzzle {
   steps: ExplainStep[];
 }
-
-export type ExplainResponse = ExplainedPuzzle | { error: string };
 
 export interface CellOperation {
   row: number;

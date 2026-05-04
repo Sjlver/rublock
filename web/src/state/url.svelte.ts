@@ -32,7 +32,6 @@ export function parseTargetsText(text: string): { error: string } | PuzzleData {
   const size = values.length / 2;
   if (size < 5 || size > 8) return { error: 'Puzzle size must be between 5 and 8.' };
   return {
-    size,
     row_targets: values.slice(0, size),
     col_targets: values.slice(size),
   };
@@ -44,7 +43,7 @@ function decodeBase62Targets(p: string): PuzzleData | null {
   if (values.length % 2 !== 0) return null;
   const size = values.length / 2;
   if (size < 5 || size > 8) return null;
-  return { size, row_targets: values.slice(0, size), col_targets: values.slice(size) };
+  return { row_targets: values.slice(0, size), col_targets: values.slice(size) };
 }
 
 export function parsePuzzleFromUrl(): PuzzleData | null {
