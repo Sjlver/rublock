@@ -35,6 +35,34 @@ impl<const N: usize> Puzzle<N> {
             col_targets,
         }
     }
+
+    /// Validating constructor for user-supplied targets.
+    ///
+    /// Returns `Err` if any target exceeds the maximum achievable cage sum
+    /// for an N×N grid (the sum 1 + 2 + … + (N-2) = (N-2)(N-1)/2). Targets
+    /// are used directly as indices into precomputed tuple tables, so an
+    /// out-of-range value would otherwise panic deep inside the solver.
+    pub fn try_new(row_targets: [u8; N], col_targets: [u8; N]) -> Result<Self, String> {
+        let max = max_target::<N>();
+        for &t in row_targets.iter().chain(col_targets.iter()) {
+            if (t as usize) > max {
+                return Err(format!(
+                    "target {t} is out of range (max is {max} for size {N})"
+                ));
+            }
+        }
+        Ok(Self::new(row_targets, col_targets))
+    }
+}
+
+/// Maximum achievable cage sum for an N×N grid.
+///
+/// A cage's value is the sum of the digits between its two black squares;
+/// the digit set is `1..=N-2`, so the largest possible sum is the full set's
+/// total, `(N-2)(N-1)/2`. For `N < 2` (degenerate), there are no digits and
+/// the only valid target is 0.
+const fn max_target<const N: usize>() -> usize {
+    if N < 2 { 0 } else { (N - 2) * (N - 1) / 2 }
 }
 
 // ── SolveOutcome ──────────────────────────────────────────────────────────────
@@ -222,10 +250,10 @@ pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
     /// path), propagating consequences.  See [`take_branch`](Self::take_branch).
     fn reject_branch(&mut self, r: usize, c: usize, bit: CellDomain);
 
-    /// Return the solved grid as `-1` for black and positive digits otherwise.
+    /// Return the solved grid (`Black` or `Number(1..=N-2)` per cell).
     ///
     /// Returns `None` when the state is not fully solved.
-    fn solved_cells(&self) -> Option<[[i8; N]; N]>;
+    fn solved_cells(&self) -> Option<crate::grid::Grid<N>>;
 
     // ── Provided backtracking entry points ────────────────────────────────────
     //
@@ -241,5 +269,33 @@ pub trait Solver<const N: usize>: Sized + Clone + fmt::Display {
     /// See [`backtrack::solve`].
     fn solve(&self) -> SolveOutcome<Self> {
         backtrack::solve(self)
+    }
+}
+
+// ── tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_new_accepts_targets_at_or_below_max() {
+        // For N=6, digits are 1..=4, so max_target = 1+2+3+4 = 10.
+        assert!(Puzzle::<6>::try_new([0, 10, 5, 10, 0, 0], [0, 0, 5, 9, 0, 4]).is_ok());
+        assert!(Puzzle::<5>::try_new([0, 0, 0, 0, 0], [0, 0, 0, 0, 0]).is_ok());
+    }
+
+    #[test]
+    fn try_new_rejects_out_of_range_target() {
+        // For N=6 max is 10, so 11 should fail.
+        let err = Puzzle::<6>::try_new([0, 0, 0, 0, 0, 11], [0, 0, 0, 0, 0, 0]).unwrap_err();
+        assert!(err.contains("11"), "error mentions the bad value: {err}");
+        assert!(err.contains("10"), "error mentions the max: {err}");
+    }
+
+    #[test]
+    fn try_new_rejects_max_value_u8() {
+        let err = Puzzle::<8>::try_new([255; 8], [0; 8]).unwrap_err();
+        assert!(err.contains("255"), "error mentions the bad value: {err}");
     }
 }

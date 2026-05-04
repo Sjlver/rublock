@@ -142,7 +142,7 @@
 
     if (/^[1-9]$/.test(key)) {
       const digit = Number.parseInt(key, 10);
-      if (digit <= playState.puzzleData.size - 2) {
+      if (digit <= playState.puzzleData.row_targets.length - 2) {
         event.preventDefault();
         if (playState.inputMode === 'notes') applyUserNote(digit);
         else applyUserValue(digit);
@@ -159,7 +159,7 @@
   async function shareCurrentPuzzle(): Promise<void> {
     if (!playState.puzzleData) return;
     const url = puzzleShareUrl(playState.puzzleData);
-    trackEvent(`rublock/play/share/${playState.puzzleData.size}`);
+    trackEvent(`rublock/play/share/${playState.puzzleData.row_targets.length}`);
     try {
       if (navigator.share && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
         await navigator.share({ title: 'Doplo puzzle', text: 'Try this Doplo puzzle:', url });
@@ -182,7 +182,7 @@
     if (!playState.puzzleData) return;
     status = 'Generating…';
     queueMicrotask(() => {
-      newPuzzle(playState.puzzleData!.size);
+      newPuzzle(playState.puzzleData!.row_targets.length);
       status = 'Ready';
     });
   }
@@ -206,7 +206,7 @@
   let notesMode = $derived(playState.inputMode === 'notes');
 
   const SIZES = [5, 6, 7, 8];
-  let currentSize = $derived(playState.puzzleData?.size ?? 6);
+  let currentSize = $derived(playState.puzzleData?.row_targets.length ?? 6);
 </script>
 
 <PageHeader
@@ -404,7 +404,7 @@
   <!-- Number pad -->
   {#if playState.puzzleData}
     <InputBar
-      size={playState.puzzleData.size}
+      size={playState.puzzleData.row_targets.length}
       disabled={inputDisabled}
       onPlaceNote={(v) => applyUserNote(v)}
       onPlaceValue={(v) => applyUserValue(v)}

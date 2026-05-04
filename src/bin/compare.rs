@@ -9,7 +9,7 @@ use std::time::Duration;
 use indicatif::{ProgressBar, ProgressStyle};
 use rublock::basic_solver::BasicSolverState;
 use rublock::black_solver::BlackSolverState;
-use rublock::grid::random_grid;
+use rublock::grid::{Cell, Grid, random_grid};
 use rublock::queue_solver::QueueSolverState;
 use rublock::recorder::Recorder;
 use rublock::solver::{Puzzle, SolveOutcome, Solver};
@@ -43,7 +43,7 @@ enum Variant {
 
 struct SolveSummary<const N: usize> {
     variant: Variant,
-    cells: Option<[[i8; N]; N]>,
+    cells: Option<Grid<N>>,
     search_nodes: u64,
 }
 
@@ -77,14 +77,14 @@ fn print_summary<const N: usize>(label: &str, s: &SolveSummary<N>) {
         "  {label}: variant={:?} search_nodes={}",
         s.variant, s.search_nodes
     );
-    if let Some(cells) = &s.cells {
-        for row in cells {
+    if let Some(grid) = &s.cells {
+        for row in &grid.cells {
             print!("    ");
-            for &v in row {
-                if v < 0 {
-                    print!(" #");
-                } else {
-                    print!(" {v}");
+            for cell in row {
+                match cell {
+                    Cell::Black => print!(" #"),
+                    Cell::Number(n) => print!(" {n}"),
+                    Cell::Empty => print!(" ?"),
                 }
             }
             println!();

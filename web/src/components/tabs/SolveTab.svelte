@@ -47,7 +47,7 @@
     }
 
     feedbackText = 'Solved.';
-    trackEvent(`rublock/solve/solve/${parsed.size}`);
+    trackEvent(`rublock/solve/solve/${parsed.row_targets.length}`);
     solved = response;
     setPuzzle(parsed, { preserveProgressIfSame: true });
   }

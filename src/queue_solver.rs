@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use tracing::{instrument, trace};
 
+use crate::grid::{Cell, Grid};
 use crate::recorder::{Recorder, Rule, SearchNodes};
 use crate::solver::{CellDomain, Puzzle, Solver, Tables};
 
@@ -697,27 +698,27 @@ impl<const N: usize, R: Recorder> QueueSolverState<N, R> {
         })
     }
 
-    /// Return the solved grid as `-1` for black and positive digits otherwise.
+    /// Return the solved grid (`Black` or `Number(1..=N-2)` per cell).
     ///
     /// Returns `None` when the state is not fully solved.
-    pub fn solved_cells(&self) -> Option<[[i8; N]; N]> {
+    pub fn solved_cells(&self) -> Option<Grid<N>> {
         if !self.is_solved() {
             return None;
         }
 
-        let mut cells = [[0_i8; N]; N];
+        let mut cells = [[Cell::Empty; N]; N];
         for (r, row) in self.domains.iter().enumerate() {
             for (c, &domain) in row.iter().enumerate() {
                 let digits = domain & Self::ALL_DIGITS;
                 cells[r][c] = if digits == 0 {
-                    -1
+                    Cell::Black
                 } else {
-                    digits.trailing_zeros() as i8
+                    Cell::Number(digits.trailing_zeros() as u8)
                 };
             }
         }
 
-        Some(cells)
+        Some(Grid { cells })
     }
 
     fn pick_branching_bit(&mut self, row: usize, col: usize) -> CellDomain {
@@ -812,7 +813,7 @@ impl<const N: usize, R: Recorder> Solver<N> for QueueSolverState<N, R> {
         self.clear_mask(r, c, bit, Rule::Backtracking);
     }
 
-    fn solved_cells(&self) -> Option<[[i8; N]; N]> {
+    fn solved_cells(&self) -> Option<Grid<N>> {
         Self::solved_cells(self)
     }
 }

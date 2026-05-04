@@ -51,7 +51,7 @@
       {#each puzzle.row_targets as rowTarget, r (r)}
         <tr>
           <th scope="row" class="target">{rowTarget}</th>
-          {#each Array(puzzle.size) as _, c (c)}
+          {#each Array(puzzle.col_targets.length) as _, c (c)}
             {@const v = valueAt(r, c)}
             {@const n = notesAt(r, c)}
             {@const extras = cellExtras?.get(cellKey(r, c))}
