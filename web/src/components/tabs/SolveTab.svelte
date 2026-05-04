@@ -37,10 +37,12 @@
       return;
     }
 
-    const response = solvePuzzle(parsed);
-    if ('error' in response) {
+    let response;
+    try {
+      response = solvePuzzle(parsed);
+    } catch (err) {
       feedbackError = true;
-      feedbackText = response.error;
+      feedbackText = err instanceof Error ? err.message : String(err);
       return;
     }
 
