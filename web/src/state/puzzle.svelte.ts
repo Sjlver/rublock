@@ -48,7 +48,7 @@ export function cellKey(row: number, col: number): string {
 }
 
 export function puzzleKey(data: PuzzleData): string {
-  return `${data.row_targets.length}|${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
+  return `${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
 }
 
 function sameOperation(a: CellOperation | undefined, b: CellOperation | undefined): boolean {
@@ -69,23 +69,25 @@ export const playState = $state({
   cellNotes: [] as CellNotes[][],
   inputMode: 'value' as InputMode,
   selectedCell: null as SelectedCell | null,
+  // TODO: someone mentioned that it's common to use two stacks (an undo stack and a redo stack)
+  // rather than a history array with index. I'd like to understand why. Once that's done,
+  // either remove this comment or switch to stacks.
   history: [] as CellOperation[],
   historyIndex: 0,
   wrongCells: new SvelteSet<string>(),
+  // TODO: we need better handling for feedback, since there is a single global toast div
+  // that is shared among many features. It's probably better to store feedback in
+  // that component's state.
   feedback: '',
   feedbackError: false,
 });
 
-function setPuzzleData(
-  data: PuzzleData,
-  { preserveProgressIfSame = true }: { preserveProgressIfSame?: boolean } = {}
-): void {
+export function setPuzzle(data: PuzzleData): void {
   const samePuzzle =
     playState.puzzleData !== null && puzzleKey(playState.puzzleData) === puzzleKey(data);
-  const shouldReset = !(preserveProgressIfSame && samePuzzle);
 
   playState.puzzleData = data;
-  if (shouldReset) {
+  if (!samePuzzle) {
     playState.cellValues = emptyCellValues(data.row_targets.length);
     playState.cellNotes = emptyCellNotes(data.row_targets.length);
     playState.selectedCell = null;
@@ -98,15 +100,14 @@ function setPuzzleData(
   }
 }
 
-export function setPuzzle(data: PuzzleData, options?: { preserveProgressIfSame?: boolean }): void {
-  setPuzzleData(data, options);
-}
-
 export function loadRandomPuzzle(size: number): void {
-  setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
+  setPuzzle(generatePuzzle(size));
   trackEvent(`rublock/play/generate/${size}`);
 }
 
+// TODO: Once we've moved the feedback out of playState, we might be able to simplify this;
+// maybe it would become typeof playState. I think it would be nice if wrongCells are
+// also preserved when switching sizes.
 interface PerSizeState {
   puzzleData: PuzzleData;
   cellValues: CellValue[][];
@@ -147,7 +148,7 @@ export function switchToSize(size: number): void {
     playState.feedback = '';
     playState.feedbackError = false;
   } else {
-    setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
+    setPuzzle(generatePuzzle(size));
     trackEvent(`rublock/play/generate/${size}`);
   }
 }
@@ -155,7 +156,7 @@ export function switchToSize(size: number): void {
 /** Generate a fresh puzzle for the current size, discarding any saved state. */
 export function newPuzzle(size: number): void {
   sizeStates.delete(size);
-  setPuzzleData(generatePuzzle(size), { preserveProgressIfSame: false });
+  setPuzzle(generatePuzzle(size));
   trackEvent(`rublock/play/generate/${size}`);
 }
 
@@ -369,7 +370,9 @@ export function checkCurrentPuzzle(): void {
     playState.feedback = 'Puzzle solved! 🎉';
   } else if (wrongCount === 0) {
     playState.feedback = 'All entered cells are correct.';
+  } else if (wrongCount === 1) {
+    playState.feedback = 'One wrong cell.';
   } else {
-    playState.feedback = `${wrongCount} wrong cell${wrongCount === 1 ? '' : 's'}.`;
+    playState.feedback = `${wrongCount} wrong cells.`;
   }
 }

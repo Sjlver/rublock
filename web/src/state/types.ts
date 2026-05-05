@@ -3,6 +3,10 @@ export type CellValue = number | 'black' | null;
 export type NoteMarker = 'black' | 'digits-only' | null;
 
 export interface CellNotes {
+  // TODO: we could consider a bitset like in the Rust code.
+  // There is some overhead elsewhere for comparing and cloning notes;
+  // a bitset would simplify this significantly. We can use bit 0 for
+  // black, and bit N for digit-only.
   digits: number[];
   marker: NoteMarker;
 }

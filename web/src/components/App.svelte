@@ -30,7 +30,7 @@
     try {
       await initWasm();
       if (fromUrl) {
-        setPuzzle(fromUrl, { preserveProgressIfSame: false });
+        setPuzzle(fromUrl);
       } else {
         loadRandomPuzzle(6);
       }
@@ -56,6 +56,14 @@
     const instance = mount(PuzzleGrid, { target: wrap, props: { puzzle: data } });
     void instance;
   }
+
+  // TODO: fillPrintOutput is strange. I think it would be nicer to construct the
+  // print output below as HTML, iterating over a print puzzle $state.
+  // The state would be initially empty (and set to one page of 6x6 puzzles in
+  // onMount). When the user requests pages, we'd modify the state, not manipulate
+  // the DOM directly.
+  //
+  // This hopefully means renderPuzzleInto is no longer needed either.
 
   async function fillPrintOutput(size: number, pages: number): Promise<void> {
     const total = pages * PUZZLES_PER_PAGE;

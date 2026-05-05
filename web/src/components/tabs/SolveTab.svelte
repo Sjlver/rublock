@@ -49,7 +49,7 @@
     feedbackText = 'Solved.';
     trackEvent(`rublock/solve/solve/${parsed.row_targets.length}`);
     solved = response;
-    setPuzzle(parsed, { preserveProgressIfSame: true });
+    setPuzzle(parsed);
   }
 
   // Toast-style share (not wired to a URL for Solve tab)

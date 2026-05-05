@@ -64,6 +64,9 @@
   });
 
   // Generating status
+  // TODO: This is probably overwriting too much. I'll have to check when exactly
+  // Svelte effects run and if they have dependencies / can re-run.
+  // We need to carefully audit all uses of toasts.
   $effect(() => {
     const data = playState.puzzleData;
     if (data) status = 'Ready';
@@ -150,7 +153,7 @@
     }
   }
 
-  function onPreviewClick(event: MouseEvent): void {
+  function onBoardClick(event: MouseEvent): void {
     if (!playState.selectedCell) return;
     const target = event.target as Element | null;
     if (!target?.closest('.puzzle')) clearSelection();
@@ -260,7 +263,7 @@
   <!-- Board -->
   <div
     style="display:flex; justify-content:center; padding:6px 0 14px;"
-    onclick={onPreviewClick}
+    onclick={onBoardClick}
     role="presentation"
   >
     {#if playState.puzzleData}
@@ -322,7 +325,6 @@
       </svg>
       Redo
     </button>
-    <!-- Check: secondary style (not primary blue) per design notes -->
     <button
       type="button"
       class="toolbar-btn"
