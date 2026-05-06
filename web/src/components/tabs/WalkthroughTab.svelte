@@ -1,7 +1,7 @@
 <script lang="ts">
   import PageHeader from '../PageHeader.svelte';
   import PuzzleGrid from '../PuzzleGrid.svelte';
-  import { playState, emptyNotes } from '../../state/puzzle.svelte';
+  import { playState } from '../../state/puzzle.svelte';
   import { explainPuzzle } from '../../wasm/api';
   import { trackEvent } from '../../analytics';
   import type {
@@ -24,18 +24,19 @@
 
   function domainToCell(domain: number): { value: CellValue; notes: CellNotes } {
     const black = (domain & 1) !== 0;
-    const digits: number[] = [];
+    let count = black ? 1 : 0;
+    let singleDigit = 0;
     for (let d = 1; d <= 7; d++) {
-      if (domain & (1 << d)) digits.push(d);
+      if (domain & (1 << d)) {
+        count++;
+        singleDigit = d;
+      }
     }
-    const total = digits.length + (black ? 1 : 0);
-    if (total === 1) {
-      return { value: black ? 'black' : digits[0], notes: emptyNotes() };
+    if (count === 1) {
+      return { value: black ? 'black' : singleDigit, notes: 0 };
     }
-    return {
-      value: null,
-      notes: { digits, marker: black ? 'black' : null },
-    };
+    // Domain bits 0..6 map directly to CellNotes bits (bit 0 = black, bits 1..6 = digits)
+    return { value: null, notes: domain };
   }
 
   type WaveView = {

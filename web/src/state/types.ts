@@ -1,14 +1,13 @@
 export type CellValue = number | 'black' | null;
 
-export type NoteMarker = 'black' | 'digits-only' | null;
-
-export interface CellNotes {
-  // TODO: we could consider a bitset like in the Rust code.
-  // There is some overhead elsewhere for comparing and cloning notes;
-  // a bitset would simplify this significantly. We can use bit 0 for
-  // black, and bit N for digit-only.
-  digits: number[];
-  marker: NoteMarker;
+// Bit 0: black marker
+// Bits 1..=6: digits 1..6  (max digit is 6 for N=8)
+// Bit 7: digits-only marker
+export type CellNotes = number;
+export const NOTE_BLACK_BIT = 1 << 0;
+export const NOTE_DIGITS_ONLY_BIT = 1 << 7;
+export function noteDigitBit(d: number): number {
+  return 1 << d;
 }
 
 export interface PuzzleData {

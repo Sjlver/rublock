@@ -630,17 +630,6 @@ body {
   font-size: 0.92rem;
 }
 
-/* ── Feedback / feedback error ── */
-
-.feedback {
-  min-height: 1.2rem;
-  font-size: 0.88rem;
-  color: var(--ink-2);
-}
-.feedback.error {
-  color: var(--danger);
-}
-
 /* ── Emoji rain ── */
 
 #emoji-rain {

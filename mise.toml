@@ -39,6 +39,14 @@ description = "Build the app and run Playwright browser tests"
 depends = ["build-wasm"]
 run = "(cd web && npm run build:test && npm run test)"
 
+[tasks.test-rust]
+description = "Run Rust (cargo) tests"
+run = "cargo test"
+
+[tasks.test]
+description = "Run Rust and Playwright tests"
+depends = ["test-web", "test-rust"]
+
 # Format both halves of the project. Useful as a pre-commit step because the
 # repo crosses the Rust/Node boundary — `cargo fmt` only handles Rust, and
 # `prettier` only handles the web sources.

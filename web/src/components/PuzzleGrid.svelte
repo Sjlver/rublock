@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CellValue, CellNotes, PuzzleData, SelectedCell } from '../state/types';
+  import { noteDigitBit, NOTE_BLACK_BIT, NOTE_DIGITS_ONLY_BIT } from '../state/types';
   import { notesHaveContent } from '../state/puzzle.svelte';
 
   type CellExtras = { wrong?: boolean; exNew?: boolean };
@@ -69,15 +70,17 @@
                 <span class="cell-value">X</span>
               {:else if v !== null}
                 <span class="cell-value">{v}</span>
-              {:else if n && notesHaveContent(n)}
+              {:else if n !== null && notesHaveContent(n)}
                 <div class="cell-notes">
-                  {#each n.digits as d (d)}
-                    {#if d >= 1 && d <= 7}
+                  {#each [1, 2, 3, 4, 5, 6] as d (d)}
+                    {#if n & noteDigitBit(d)}
                       <span class="note note-{d}">{d}</span>
                     {/if}
                   {/each}
-                  {#if n.marker === 'black' || n.marker === 'digits-only'}
-                    <span class="note note-marker">{n.marker === 'black' ? 'x' : 'o'}</span>
+                  {#if n & NOTE_BLACK_BIT}
+                    <span class="note note-marker">x</span>
+                  {:else if n & NOTE_DIGITS_ONLY_BIT}
+                    <span class="note note-marker">o</span>
                   {/if}
                 </div>
               {/if}

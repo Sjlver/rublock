@@ -6,11 +6,12 @@
   import { solvePuzzle } from '../../wasm/api';
   import { trackEvent } from '../../analytics';
   import { playState } from '../../state/puzzle.svelte';
+  import { toastState, showToast } from '../../state/toast.svelte';
   import type { SolvedPuzzle } from '../../state/types';
 
   let inputText = $state(playState.puzzleData ? formatTargetsText(playState.puzzleData) : '');
-  let feedbackText = $state('Enter targets to solve any puzzle.');
-  let feedbackError = $state(false);
+  let statusText = $state('Enter targets to solve any puzzle.');
+  let statusError = $state(false);
   let solved = $state<SolvedPuzzle | null>(null);
 
   // Mirror current puzzle targets into the input unless the user has typed something.
@@ -26,14 +27,14 @@
   });
 
   function solveFromInput(): void {
-    feedbackError = false;
-    feedbackText = '';
+    statusError = false;
+    statusText = '';
     solved = null;
 
     const parsed = parseTargetsText(inputText);
     if ('error' in parsed) {
-      feedbackError = true;
-      feedbackText = parsed.error;
+      statusError = true;
+      statusText = parsed.error;
       return;
     }
 
@@ -41,35 +42,43 @@
     try {
       response = solvePuzzle(parsed);
     } catch (err) {
-      feedbackError = true;
-      feedbackText = err instanceof Error ? err.message : String(err);
+      statusError = true;
+      statusText = err instanceof Error ? err.message : String(err);
       return;
     }
 
-    feedbackText = 'Solved.';
+    statusText = 'Solved.';
     trackEvent(`rublock/solve/solve/${parsed.row_targets.length}`);
     solved = response;
     setPuzzle(parsed);
   }
 
-  // Toast-style share (not wired to a URL for Solve tab)
-  let shareStatus = $state('');
   async function handleShare(): Promise<void> {
     if (!solved) return;
     try {
       await navigator.clipboard.writeText(window.location.href);
-      shareStatus = 'Link copied';
+      showToast('Link copied', 'success', 2000);
     } catch {
-      shareStatus = 'Could not copy';
+      showToast('Could not copy', 'error', 2000);
     }
-    setTimeout(() => (shareStatus = ''), 2000);
   }
+
+  let displayStatus = $derived(toastState.text || statusText);
+  let displayTone = $derived(
+    toastState.text
+      ? toastState.tone
+      : statusError
+        ? 'error'
+        : statusText === 'Solved.'
+          ? 'success'
+          : 'info'
+  );
 </script>
 
 <PageHeader
   title="Solve"
-  status={shareStatus || feedbackText}
-  statusTone={feedbackError ? 'error' : feedbackText === 'Solved.' ? 'success' : 'default'}
+  status={displayStatus}
+  statusTone={displayTone === 'error' ? 'error' : displayTone === 'success' ? 'success' : 'default'}
   onShare={handleShare}
 />
 

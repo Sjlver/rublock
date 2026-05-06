@@ -21,6 +21,7 @@
   } from '../../state/puzzle.svelte';
   import { puzzleShareUrl } from '../../state/url.svelte';
   import { trackEvent } from '../../analytics';
+  import { toastState, showToast } from '../../state/toast.svelte';
 
   let showEmojiRain = $state(false);
   let hintDismissed = $state<boolean>(
@@ -33,47 +34,10 @@
     })()
   );
 
-  // Toast system: transient messages under the page title
-  type ToastTone = 'error' | 'success' | 'info';
-  let toastText = $state('');
-  let toastTone = $state<ToastTone>('info');
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let status = $state('Ready');
 
-  function showToast(text: string, tone: ToastTone = 'info', durationMs = 2400): void {
-    if (toastTimer) clearTimeout(toastTimer);
-    toastText = text;
-    toastTone = tone;
-    toastTimer = setTimeout(() => {
-      toastText = '';
-    }, durationMs);
-  }
-
-  // Mirror puzzle state feedback into toasts
-  let prevFeedback = '';
-  $effect(() => {
-    const text = playState.feedback;
-    if (!text || text === prevFeedback) return;
-    prevFeedback = text;
-    const tone: ToastTone = playState.feedbackError
-      ? 'error'
-      : text.includes('solved')
-        ? 'success'
-        : 'info';
-    showToast(text, tone);
-  });
-
-  // Generating status
-  // TODO: This is probably overwriting too much. I'll have to check when exactly
-  // Svelte effects run and if they have dependencies / can re-run.
-  // We need to carefully audit all uses of toasts.
-  $effect(() => {
-    const data = playState.puzzleData;
-    if (data) status = 'Ready';
-  });
-
-  let displayStatus = $derived(toastText || status);
-  let displayTone = $derived(toastText ? toastTone : 'info');
+  let displayStatus = $derived(toastState.text || status);
+  let displayTone = $derived(toastState.text ? toastState.tone : 'info');
 
   onMount(() => {
     const offSolved = onSolved(() => {
@@ -203,8 +167,8 @@
     return map;
   });
 
-  let undoDisabled = $derived(playState.historyIndex === 0);
-  let redoDisabled = $derived(playState.historyIndex === playState.history.length);
+  let undoDisabled = $derived(playState.undoStack.length === 0);
+  let redoDisabled = $derived(playState.redoStack.length === 0);
   let inputDisabled = $derived(playState.selectedCell === null);
   let notesMode = $derived(playState.inputMode === 'notes');
 

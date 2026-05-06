@@ -1,6 +1,7 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { generatePuzzle, solvePuzzle } from '../wasm/api';
 import { trackEvent } from '../analytics';
+import { showToast } from './toast.svelte';
 import type {
   CellNotes,
   CellOperation,
@@ -10,37 +11,30 @@ import type {
   SelectedCell,
   SolvedPuzzle,
 } from './types';
-
-export function emptyNotes(): CellNotes {
-  return { digits: [], marker: null };
-}
+import { noteDigitBit, NOTE_BLACK_BIT, NOTE_DIGITS_ONLY_BIT } from './types';
 
 export function emptyCellNotes(size: number): CellNotes[][] {
-  return Array.from({ length: size }, () => Array.from({ length: size }, () => emptyNotes()));
+  return Array.from({ length: size }, () => new Array<CellNotes>(size).fill(0));
 }
 
 export function emptyCellValues(size: number): CellValue[][] {
   return Array.from({ length: size }, () => Array<CellValue>(size).fill(null));
 }
 
-function cloneNotes(notes: CellNotes): CellNotes {
-  return { digits: [...notes.digits], marker: notes.marker };
-}
-
-function sortNoteDigitsInPlace(notes: CellNotes): void {
-  notes.digits.sort((a, b) => a - b);
-}
-
-function sameNotes(a: CellNotes, b: CellNotes): boolean {
-  if (a.marker !== b.marker) return false;
-  if (a.digits.length !== b.digits.length) return false;
-  const ad = [...a.digits].sort((x, y) => x - y);
-  const bd = [...b.digits].sort((x, y) => x - y);
-  return ad.every((v, i) => v === bd[i]);
+function sameOperation(a: CellOperation | undefined, b: CellOperation | undefined): boolean {
+  if (!a || !b) return false;
+  return (
+    a.row === b.row &&
+    a.col === b.col &&
+    a.oldValue === b.oldValue &&
+    a.newValue === b.newValue &&
+    a.oldNotes === b.oldNotes &&
+    a.newNotes === b.newNotes
+  );
 }
 
 export function notesHaveContent(notes: CellNotes): boolean {
-  return notes.digits.length > 0 || notes.marker !== null;
+  return notes !== 0;
 }
 
 export function cellKey(row: number, col: number): string {
@@ -51,35 +45,15 @@ export function puzzleKey(data: PuzzleData): string {
   return `${data.row_targets.join(',')}|${data.col_targets.join(',')}`;
 }
 
-function sameOperation(a: CellOperation | undefined, b: CellOperation | undefined): boolean {
-  if (!a || !b) return false;
-  return (
-    a.row === b.row &&
-    a.col === b.col &&
-    a.oldValue === b.oldValue &&
-    a.newValue === b.newValue &&
-    sameNotes(a.oldNotes, b.oldNotes) &&
-    sameNotes(a.newNotes, b.newNotes)
-  );
-}
-
 export const playState = $state({
   puzzleData: null as PuzzleData | null,
   cellValues: [] as CellValue[][],
   cellNotes: [] as CellNotes[][],
   inputMode: 'value' as InputMode,
   selectedCell: null as SelectedCell | null,
-  // TODO: someone mentioned that it's common to use two stacks (an undo stack and a redo stack)
-  // rather than a history array with index. I'd like to understand why. Once that's done,
-  // either remove this comment or switch to stacks.
-  history: [] as CellOperation[],
-  historyIndex: 0,
+  undoStack: [] as CellOperation[],
+  redoStack: [] as CellOperation[],
   wrongCells: new SvelteSet<string>(),
-  // TODO: we need better handling for feedback, since there is a single global toast div
-  // that is shared among many features. It's probably better to store feedback in
-  // that component's state.
-  feedback: '',
-  feedbackError: false,
 });
 
 export function setPuzzle(data: PuzzleData): void {
@@ -92,11 +66,9 @@ export function setPuzzle(data: PuzzleData): void {
     playState.cellNotes = emptyCellNotes(data.row_targets.length);
     playState.selectedCell = null;
     playState.inputMode = 'value';
-    playState.history = [];
-    playState.historyIndex = 0;
+    playState.undoStack = [];
+    playState.redoStack = [];
     playState.wrongCells.clear();
-    playState.feedback = '';
-    playState.feedbackError = false;
   }
 }
 
@@ -105,16 +77,15 @@ export function loadRandomPuzzle(size: number): void {
   trackEvent(`rublock/play/generate/${size}`);
 }
 
-// TODO: Once we've moved the feedback out of playState, we might be able to simplify this;
-// maybe it would become typeof playState. I think it would be nice if wrongCells are
-// also preserved when switching sizes.
 interface PerSizeState {
   puzzleData: PuzzleData;
   cellValues: CellValue[][];
   cellNotes: CellNotes[][];
+  inputMode: InputMode;
   selectedCell: SelectedCell | null;
-  history: CellOperation[];
-  historyIndex: number;
+  undoStack: CellOperation[];
+  redoStack: CellOperation[];
+  wrongCells: SvelteSet<string>;
 }
 
 const sizeStates = new Map<number, PerSizeState>();
@@ -124,10 +95,12 @@ function saveCurrentState(): void {
   sizeStates.set(playState.puzzleData.row_targets.length, {
     puzzleData: playState.puzzleData,
     cellValues: playState.cellValues.map((row) => [...row]),
-    cellNotes: playState.cellNotes.map((row) => row.map((n) => cloneNotes(n))),
+    cellNotes: playState.cellNotes.map((row) => [...row]),
+    inputMode: playState.inputMode,
     selectedCell: playState.selectedCell,
-    history: [...playState.history],
-    historyIndex: playState.historyIndex,
+    undoStack: [...playState.undoStack],
+    redoStack: [...playState.redoStack],
+    wrongCells: new SvelteSet(playState.wrongCells),
   });
 }
 
@@ -141,12 +114,12 @@ export function switchToSize(size: number): void {
     playState.puzzleData = saved.puzzleData;
     playState.cellValues = saved.cellValues;
     playState.cellNotes = saved.cellNotes;
+    playState.inputMode = saved.inputMode;
     playState.selectedCell = saved.selectedCell;
-    playState.history = saved.history;
-    playState.historyIndex = saved.historyIndex;
+    playState.undoStack = saved.undoStack;
+    playState.redoStack = saved.redoStack;
     playState.wrongCells.clear();
-    playState.feedback = '';
-    playState.feedbackError = false;
+    for (const k of saved.wrongCells) playState.wrongCells.add(k);
   } else {
     setPuzzle(generatePuzzle(size));
     trackEvent(`rublock/play/generate/${size}`);
@@ -162,38 +135,25 @@ export function newPuzzle(size: number): void {
 
 function clearWrongCell(row: number, col: number): void {
   playState.wrongCells.delete(cellKey(row, col));
-  playState.feedback = '';
-  playState.feedbackError = false;
 }
 
 function commitCellEdit(row: number, col: number, newValue: CellValue, newNotes: CellNotes): void {
   if (!playState.puzzleData) return;
   const oldValue = playState.cellValues[row][col];
-  const oldNotes = cloneNotes(playState.cellNotes[row][col]);
-  const nextNotes = cloneNotes(newNotes);
-  sortNoteDigitsInPlace(nextNotes);
+  const oldNotes = playState.cellNotes[row][col];
 
-  if (oldValue === newValue && sameNotes(oldNotes, nextNotes)) return;
+  if (oldValue === newValue && oldNotes === newNotes) return;
 
-  const operation: CellOperation = {
-    row,
-    col,
-    oldValue,
-    newValue,
-    oldNotes,
-    newNotes: cloneNotes(nextNotes),
-  };
-  const nextOperation = playState.history[playState.historyIndex];
-  if (sameOperation(operation, nextOperation)) {
-    playState.historyIndex += 1;
+  const operation: CellOperation = { row, col, oldValue, newValue, oldNotes, newNotes };
+  if (sameOperation(operation, playState.redoStack.at(-1))) {
+    playState.undoStack.push(playState.redoStack.pop()!);
   } else {
-    playState.history = playState.history.slice(0, playState.historyIndex);
-    playState.history.push(operation);
-    playState.historyIndex = playState.history.length;
+    playState.redoStack.length = 0;
+    playState.undoStack.push(operation);
   }
 
   playState.cellValues[row][col] = newValue;
-  playState.cellNotes[row][col] = cloneNotes(nextNotes);
+  playState.cellNotes[row][col] = newNotes;
   clearWrongCell(row, col);
   autoCheckCompletion();
 }
@@ -202,20 +162,20 @@ export function applyUserValue(value: CellValue): void {
   if (!playState.selectedCell) return;
   const { row, col } = playState.selectedCell;
   if (value === null) {
-    commitCellEdit(row, col, null, cloneNotes(playState.cellNotes[row][col]));
+    commitCellEdit(row, col, null, playState.cellNotes[row][col]);
     return;
   }
-  commitCellEdit(row, col, value, emptyNotes());
+  commitCellEdit(row, col, value, 0);
 }
 
 export function applyUserNote(value: CellValue | 'digits-only'): void {
   if (!playState.selectedCell) return;
   const { row, col } = playState.selectedCell;
   let nextValue = playState.cellValues[row][col];
-  const notes = cloneNotes(playState.cellNotes[row][col]);
+  let notes = playState.cellNotes[row][col];
 
   if (value === null) {
-    commitCellEdit(row, col, null, emptyNotes());
+    commitCellEdit(row, col, null, 0);
     return;
   }
 
@@ -223,21 +183,27 @@ export function applyUserNote(value: CellValue | 'digits-only'): void {
   if (nextValue !== null) nextValue = null;
 
   if (typeof value === 'number') {
-    const i = notes.digits.indexOf(value);
-    if (i >= 0) notes.digits.splice(i, 1);
-    else notes.digits.push(value);
+    notes ^= noteDigitBit(value);
     commitCellEdit(row, col, nextValue, notes);
     return;
   }
 
   if (value === 'black') {
-    notes.marker = notes.marker === 'black' ? null : 'black';
+    // Exclusive with digits-only: toggling black clears digits-only
+    notes =
+      notes & NOTE_BLACK_BIT
+        ? notes & ~NOTE_BLACK_BIT
+        : (notes & ~NOTE_DIGITS_ONLY_BIT) | NOTE_BLACK_BIT;
     commitCellEdit(row, col, nextValue, notes);
     return;
   }
 
   if (value === 'digits-only') {
-    notes.marker = notes.marker === 'digits-only' ? null : 'digits-only';
+    // Exclusive with black: toggling digits-only clears black
+    notes =
+      notes & NOTE_DIGITS_ONLY_BIT
+        ? notes & ~NOTE_DIGITS_ONLY_BIT
+        : (notes & ~NOTE_BLACK_BIT) | NOTE_DIGITS_ONLY_BIT;
     commitCellEdit(row, col, nextValue, notes);
   }
 }
@@ -254,20 +220,20 @@ export function applyUserInput(value: CellValue | 'digits-only'): void {
 }
 
 export function undoInput(): void {
-  if (playState.historyIndex === 0) return;
-  const op = playState.history[playState.historyIndex - 1];
-  playState.historyIndex -= 1;
+  const op = playState.undoStack.pop();
+  if (!op) return;
+  playState.redoStack.push(op);
   playState.cellValues[op.row][op.col] = op.oldValue;
-  playState.cellNotes[op.row][op.col] = cloneNotes(op.oldNotes);
+  playState.cellNotes[op.row][op.col] = op.oldNotes;
   clearWrongCell(op.row, op.col);
 }
 
 export function redoInput(): void {
-  if (playState.historyIndex === playState.history.length) return;
-  const op = playState.history[playState.historyIndex];
-  playState.historyIndex += 1;
+  const op = playState.redoStack.pop();
+  if (!op) return;
+  playState.undoStack.push(op);
   playState.cellValues[op.row][op.col] = op.newValue;
-  playState.cellNotes[op.row][op.col] = cloneNotes(op.newNotes);
+  playState.cellNotes[op.row][op.col] = op.newNotes;
   clearWrongCell(op.row, op.col);
 }
 
@@ -327,8 +293,7 @@ function autoCheckCompletion(): void {
       if (playState.cellValues[r][c] !== response.cells[r][c]) return;
     }
   }
-  playState.feedback = 'Puzzle solved! 🎉';
-  playState.feedbackError = false;
+  showToast('Puzzle solved! 🎉', 'success');
   trackEvent(`rublock/play/complete/${size}`);
   for (const cb of solveCallbacks) cb();
 }
@@ -343,12 +308,10 @@ export function checkCurrentPuzzle(): void {
     response = solvePuzzle(playState.puzzleData);
   } catch (err) {
     playState.wrongCells.clear();
-    playState.feedbackError = true;
-    playState.feedback = err instanceof Error ? err.message : String(err);
+    showToast(err instanceof Error ? err.message : String(err), 'error');
     return;
   }
   playState.wrongCells.clear();
-  playState.feedbackError = false;
 
   let entered = 0;
   for (let r = 0; r < size; r++) {
@@ -365,14 +328,14 @@ export function checkCurrentPuzzle(): void {
   const wrongCount = playState.wrongCells.size;
   const totalCells = size * size;
   if (entered === 0) {
-    playState.feedback = 'Enter some cells, then check them.';
+    showToast('Enter some cells, then check them.');
   } else if (wrongCount === 0 && entered === totalCells) {
-    playState.feedback = 'Puzzle solved! 🎉';
+    showToast('Puzzle solved! 🎉', 'success');
   } else if (wrongCount === 0) {
-    playState.feedback = 'All entered cells are correct.';
+    showToast('All entered cells are correct.', 'success');
   } else if (wrongCount === 1) {
-    playState.feedback = 'One wrong cell.';
+    showToast('One wrong cell.', 'error');
   } else {
-    playState.feedback = `${wrongCount} wrong cells.`;
+    showToast(`${wrongCount} wrong cells.`, 'error');
   }
 }
