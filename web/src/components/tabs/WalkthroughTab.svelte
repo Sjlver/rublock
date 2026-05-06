@@ -213,7 +213,7 @@
       return;
     }
     const size = puzzle.row_targets.length;
-    const key = `${size}|${puzzle.row_targets.join(',')}|${puzzle.col_targets.join(',')}`;
+    const key = `${puzzle.row_targets.join(',')}|${puzzle.col_targets.join(',')}`;
     if (key === lastKey) return;
     lastKey = key;
     trackEvent(`rublock/walkthrough/show/${size}`);
