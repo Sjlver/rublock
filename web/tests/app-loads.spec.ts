@@ -8,12 +8,13 @@ test('app loads and the puzzle grid is visible on the Play tab', async ({ page }
   await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
 });
 
-test('Play tab shows "Ready" status after load', async ({ page }) => {
+test('Play tab shows the difficulty chip after load', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
 
-  // PageHeader renders a [role="status"] element with the current tab status.
-  await expect(page.locator('[role="status"]')).toHaveText('Ready');
+  // Generated puzzles are always Normal — see classify_puzzle wiring in
+  // PlayTab.svelte. The chip lives in the page header's [role="status"].
+  await expect(page.locator('[role="status"]')).toHaveText('Normal');
 });
 
 test('Play tab is active by default', async ({ page }) => {
