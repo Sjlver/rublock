@@ -23,6 +23,11 @@
   import { trackEvent } from '../../analytics';
   import { toastState } from '../../state/toast.svelte';
   import { shareUrl } from '../../share';
+  import {
+    classifyCached,
+    classificationLabel,
+    classificationTone,
+  } from '../../state/classification';
 
   let showEmojiRain = $state(false);
   let hintDismissed = $state<boolean>(
@@ -35,10 +40,23 @@
     })()
   );
 
-  let status = $state('Ready');
+  let status = $state('');
 
-  let displayStatus = $derived(toastState.text || status);
-  let displayTone = $derived(toastState.text ? toastState.tone : 'info');
+  // Classification of the active puzzle. Driven by `classify_puzzle` and cached
+  // by puzzle targets, so size switches and "Use this puzzle" never re-classify
+  // a puzzle we've already seen. Generated puzzles are always Normal but we
+  // call `classify_puzzle` regardless — the cost is negligible at sizes 5–8.
+  let classification = $derived(playState.puzzleData ? classifyCached(playState.puzzleData) : null);
+  let currentSize = $derived(playState.puzzleData?.row_targets.length ?? 6);
+  let classificationStatus = $derived(classificationLabel(classification, currentSize));
+  let classificationStatusTone = $derived(classificationTone(classification));
+
+  // Toast wins (it's transient feedback). Otherwise show transient
+  // "Generating…/Switching…" if set, otherwise the classification chip.
+  let displayStatus = $derived(toastState.text || status || classificationStatus);
+  let displayTone = $derived(
+    toastState.text ? toastState.tone : status ? 'default' : classificationStatusTone
+  );
 
   onMount(() => {
     const offSolved = onSolved(() => {
@@ -134,7 +152,7 @@
   function handleSizeClick(s: number): void {
     status = 'Switching…';
     switchToSize(s);
-    status = 'Ready';
+    status = '';
   }
 
   function handleNewPuzzle(): void {
@@ -142,7 +160,7 @@
     status = 'Generating…';
     queueMicrotask(() => {
       newPuzzle(playState.puzzleData!.row_targets.length);
-      status = 'Ready';
+      status = '';
     });
   }
 
@@ -165,7 +183,6 @@
   let notesMode = $derived(playState.inputMode === 'notes');
 
   const SIZES = [5, 6, 7, 8];
-  let currentSize = $derived(playState.puzzleData?.row_targets.length ?? 6);
 </script>
 
 <PageHeader

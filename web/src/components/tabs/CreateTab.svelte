@@ -7,7 +7,11 @@
   import { shareUrl } from '../../share';
   import { trackEvent } from '../../analytics';
   import { classifyPuzzle } from '../../wasm/api';
-  import type { ClassifiedPuzzle } from '../../state/types';
+  import {
+    classificationLabel,
+    classificationTone,
+    type ClassificationResult,
+  } from '../../state/classification';
   import {
     SUPPORTED_SIZES,
     activeDraft,
@@ -42,8 +46,10 @@
 
   // ── Live classification ────────────────────────────────────────────────────
   // We re-run `classify_puzzle` whenever the draft's targets change. The wasm
-  // call is cheap for small sizes (5–7) and tolerable on 8.
-  let classification = $state<ClassifiedPuzzle | { error: string } | null>(null);
+  // call is cheap for small sizes (5–7) and tolerable on 8. Drafts are
+  // user-edited targets so we don't reuse the shared cache here — every edit
+  // produces a new key anyway.
+  let classification = $state<ClassificationResult | null>(null);
 
   $effect(() => {
     if (!draft) {
@@ -57,44 +63,6 @@
       classification = { error: err instanceof Error ? err.message : String(err) };
     }
   });
-
-  type Difficulty = 'invalid' | 'normal' | 'hard' | 'very-hard' | 'extremely-hard';
-
-  function difficulty(c: ClassifiedPuzzle, size: number): Difficulty {
-    if (c.variant !== 'unique') return 'invalid';
-    if (c.search_nodes <= 1) return 'normal';
-    if (c.search_nodes <= size) return 'hard';
-    if (c.search_nodes > 100) return 'extremely-hard';
-    return 'very-hard';
-  }
-
-  function statusLabel(c: ClassifiedPuzzle | { error: string } | null, size: number): string {
-    if (!c) return '';
-    if ('error' in c) return c.error;
-    if (c.variant === 'unsolvable') return 'No solution';
-    if (c.variant === 'multiple') return 'Multiple solutions';
-    switch (difficulty(c, size)) {
-      case 'normal':
-        return 'Normal';
-      case 'hard':
-        return 'Hard';
-      case 'very-hard':
-        return 'Very hard';
-      case 'extremely-hard':
-        return 'Extremely hard';
-      default:
-        return '';
-    }
-  }
-
-  function statusTone(
-    c: ClassifiedPuzzle | { error: string } | null
-  ): 'default' | 'error' | 'success' {
-    if (!c) return 'default';
-    if ('error' in c) return 'error';
-    if (c.variant === 'unique') return 'success';
-    return 'error';
-  }
 
   let isUnique = $derived(
     classification !== null && !('error' in classification) && classification.variant === 'unique'
@@ -125,8 +93,12 @@
     await shareUrl(url);
   }
 
-  let displayStatus = $derived(toastState.text || statusLabel(classification, createState.size));
-  let displayTone = $derived(toastState.text ? toastState.tone : statusTone(classification));
+  let displayStatus = $derived(
+    toastState.text || classificationLabel(classification, createState.size)
+  );
+  let displayTone = $derived(
+    toastState.text ? toastState.tone : classificationTone(classification)
+  );
 
   // ── Value strip ────────────────────────────────────────────────────────────
   let max = $derived(maxTargetForSize(createState.size));
