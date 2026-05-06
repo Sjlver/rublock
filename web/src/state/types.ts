@@ -63,7 +63,7 @@ export type TabName = 'play' | 'create' | 'print' | 'howto' | 'steps';
 
 export type ClassifyVariant = 'unsolvable' | 'unique' | 'multiple';
 
-export interface ClassifiedPuzzle extends PuzzleData {
+export interface ClassifiedPuzzle {
   variant: ClassifyVariant;
   search_nodes: number;
   // Present for `unique` and `multiple`, omitted for `unsolvable`.

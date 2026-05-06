@@ -43,8 +43,6 @@ impl From<ClassifyVariant> for ClassifyVariantOut {
 
 #[derive(Serialize)]
 struct ClassifyResp<'a> {
-    row_targets: &'a [u8],
-    col_targets: &'a [u8],
     variant: ClassifyVariantOut,
     search_nodes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -254,8 +252,6 @@ fn classify_puzzle_n<const N: usize>(
     let puzzle = try_puzzle::<N>(row_targets, col_targets)?;
     let result = classify::classify::<N>(puzzle.clone());
     to_js(&ClassifyResp {
-        row_targets: &puzzle.row_targets,
-        col_targets: &puzzle.col_targets,
         variant: result.variant.into(),
         search_nodes: result.search_nodes,
         cells: result.cells.as_ref().map(cells_out),

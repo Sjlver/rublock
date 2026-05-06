@@ -21,7 +21,8 @@
   } from '../../state/puzzle.svelte';
   import { puzzleShareUrl } from '../../state/url.svelte';
   import { trackEvent } from '../../analytics';
-  import { toastState, showToast } from '../../state/toast.svelte';
+  import { toastState } from '../../state/toast.svelte';
+  import { shareUrl } from '../../share';
 
   let showEmojiRain = $state(false);
   let hintDismissed = $state<boolean>(
@@ -127,16 +128,7 @@
     if (!playState.puzzleData) return;
     const url = puzzleShareUrl(playState.puzzleData);
     trackEvent(`rublock/play/share/${playState.puzzleData.row_targets.length}`);
-    try {
-      if (navigator.share && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
-        await navigator.share({ title: 'Doplo puzzle', text: 'Try this Doplo puzzle:', url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      showToast('Link copied to clipboard', 'success');
-    } catch {
-      showToast('Could not share this puzzle', 'error');
-    }
+    await shareUrl(url);
   }
 
   function handleSizeClick(s: number): void {

@@ -4,6 +4,7 @@
   import { setTab, puzzleShareUrl } from '../../state/url.svelte';
   import { replacePlayPuzzle } from '../../state/puzzle.svelte';
   import { showToast, toastState } from '../../state/toast.svelte';
+  import { shareUrl } from '../../share';
   import { trackEvent } from '../../analytics';
   import { classifyPuzzle } from '../../wasm/api';
   import type { ClassifiedPuzzle } from '../../state/types';
@@ -63,7 +64,7 @@
     if (c.variant !== 'unique') return 'invalid';
     if (c.search_nodes <= 1) return 'normal';
     if (c.search_nodes <= size) return 'hard';
-    if ((size === 7 || size === 8) && c.search_nodes > 100) return 'extremely-hard';
+    if (c.search_nodes > 100) return 'extremely-hard';
     return 'very-hard';
   }
 
@@ -121,12 +122,7 @@
     const data = draftAsPuzzle(draft);
     const url = puzzleShareUrl(data);
     trackEvent(`rublock/create/share/${data.row_targets.length}`);
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast('Link copied', 'success', 2000);
-    } catch {
-      showToast('Could not copy', 'error', 2000);
-    }
+    await shareUrl(url);
   }
 
   let displayStatus = $derived(toastState.text || statusLabel(classification, createState.size));
