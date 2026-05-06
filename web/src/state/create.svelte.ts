@@ -20,13 +20,15 @@ export interface CreateDraft {
 export const SUPPORTED_SIZES = [5, 6, 7, 8] as const;
 export type SupportedSize = (typeof SUPPORTED_SIZES)[number];
 
+// Drafts live entirely inside `createState` so Svelte 5's $state proxy
+// tracks them correctly. Mutating `createState.drafts[size].rowTargets[i]`
+// goes through the proxy's setters and stays consistent across size
+// switches; storing draft objects in a separate plain Map would risk
+// drifting between the proxy's view and the cached reference.
 export const createState = $state({
   size: 6 as SupportedSize,
-  // Lazily built — see `ensureDraft`.
-  draft: null as CreateDraft | null,
+  drafts: {} as Partial<Record<SupportedSize, CreateDraft>>,
 });
-
-const drafts = new Map<number, CreateDraft>();
 
 function makeDraftFromPuzzle(data: PuzzleData): CreateDraft {
   return {
@@ -38,7 +40,7 @@ function makeDraftFromPuzzle(data: PuzzleData): CreateDraft {
 }
 
 /**
- * Materialize the draft for the current size.
+ * Materialize the draft for `size`.
  *
  * If we have a saved draft, use it. Otherwise seed the draft from the Play
  * tab's puzzle for that size — generating one if Play has not visited that
@@ -46,38 +48,34 @@ function makeDraftFromPuzzle(data: PuzzleData): CreateDraft {
  * so the two tabs stay consistent.
  */
 export function ensureDraft(size: SupportedSize): CreateDraft {
-  const cached = drafts.get(size);
-  if (cached) {
-    createState.draft = cached;
-    createState.size = size;
-    return cached;
+  if (!createState.drafts[size]) {
+    const fromPlay = ensurePlayPuzzleForSize(size);
+    createState.drafts[size] = makeDraftFromPuzzle(fromPlay);
   }
-  const fromPlay = ensurePlayPuzzleForSize(size);
-  const fresh = makeDraftFromPuzzle(fromPlay);
-  drafts.set(size, fresh);
-  createState.draft = fresh;
   createState.size = size;
-  return fresh;
+  return createState.drafts[size]!;
 }
 
-export function switchCreateSize(size: SupportedSize): void {
-  if (createState.size === size && createState.draft) return;
-  ensureDraft(size);
+/** Currently active draft, or `null` if not yet materialized. */
+export function activeDraft(): CreateDraft | null {
+  return createState.drafts[createState.size] ?? null;
 }
 
 export function selectTarget(axis: TargetAxis, index: number): void {
-  if (!createState.draft) return;
-  createState.draft.selected = { axis, index };
+  const d = activeDraft();
+  if (!d) return;
+  d.selected = { axis, index };
 }
 
 export function clearSelection(): void {
-  if (!createState.draft) return;
-  createState.draft.selected = null;
+  const d = activeDraft();
+  if (!d) return;
+  d.selected = null;
 }
 
 /** Write `value` into the selected target cell. */
 export function setSelectedTargetValue(value: number): void {
-  const d = createState.draft;
+  const d = activeDraft();
   if (!d || !d.selected) return;
   const { axis, index } = d.selected;
   if (axis === 'row') {

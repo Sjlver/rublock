@@ -9,6 +9,7 @@
   import type { ClassifiedPuzzle } from '../../state/types';
   import {
     SUPPORTED_SIZES,
+    activeDraft,
     createState,
     draftAsPuzzle,
     ensureDraft,
@@ -20,6 +21,10 @@
 
   // Materialize the draft for the current size on mount.
   ensureDraft(createState.size);
+
+  // The active draft is whatever is stored at `drafts[size]` — read via a
+  // $derived so Svelte tracks both the active size and its draft contents.
+  let draft = $derived(activeDraft());
 
   function handleSizeClick(s: SupportedSize): void {
     if (s === createState.size) return;
@@ -40,12 +45,11 @@
   let classification = $state<ClassifiedPuzzle | { error: string } | null>(null);
 
   $effect(() => {
-    const d = createState.draft;
-    if (!d) {
+    if (!draft) {
       classification = null;
       return;
     }
-    const puzzle = draftAsPuzzle(d);
+    const puzzle = draftAsPuzzle(draft);
     try {
       classification = classifyPuzzle(puzzle);
     } catch (err) {
@@ -98,8 +102,8 @@
   // ── Use this puzzle ────────────────────────────────────────────────────────
 
   function handleUsePuzzle(): void {
-    if (!createState.draft || !isUnique) return;
-    const data = draftAsPuzzle(createState.draft);
+    if (!draft || !isUnique) return;
+    const data = draftAsPuzzle(draft);
     replacePlayPuzzle(data);
     trackEvent(`rublock/create/use/${data.row_targets.length}`);
     setTab('play');
@@ -108,13 +112,13 @@
   // ── Share ──────────────────────────────────────────────────────────────────
 
   async function handleShare(): Promise<void> {
-    if (!createState.draft) return;
+    if (!draft) return;
     const c = classification;
     if (!c || 'error' in c || c.variant !== 'unique') {
       showToast("Can't share an invalid puzzle", 'error', 2000);
       return;
     }
-    const data = draftAsPuzzle(createState.draft);
+    const data = draftAsPuzzle(draft);
     const url = puzzleShareUrl(data);
     trackEvent(`rublock/create/share/${data.row_targets.length}`);
     try {
@@ -131,7 +135,7 @@
   // ── Value strip ────────────────────────────────────────────────────────────
   let max = $derived(maxTargetForSize(createState.size));
   let values = $derived(Array.from({ length: max + 1 }, (_, i) => i));
-  let valueStripDisabled = $derived(createState.draft?.selected == null);
+  let valueStripDisabled = $derived(draft?.selected == null);
 </script>
 
 <PageHeader
@@ -159,15 +163,15 @@
   </div>
 
   <!-- Authoring grid: targets are tappable; cells are not filled. -->
-  {#if createState.draft}
+  {#if draft}
     <div style="display:flex; justify-content:center; padding:6px 0 14px;">
       <PuzzleGrid
         puzzle={{
-          row_targets: createState.draft.rowTargets,
-          col_targets: createState.draft.colTargets,
+          row_targets: draft.rowTargets,
+          col_targets: draft.colTargets,
         }}
         onTargetClick={handleTargetClick}
-        selectedTarget={createState.draft.selected}
+        selectedTarget={draft.selected}
       />
     </div>
   {/if}
