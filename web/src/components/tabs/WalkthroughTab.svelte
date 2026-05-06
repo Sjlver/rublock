@@ -11,7 +11,7 @@
     ExplainRule,
     ExplainStep,
     ExplainedPuzzle,
-    PuzzleData,
+    SolvedPuzzle,
   } from '../../state/types';
 
   // Bit layout used by the wasm `explain_puzzle` (BlackSolverState):
@@ -48,7 +48,21 @@
     total: number;
   };
 
-  type WalkthroughView = { initial: WaveView; waves: WaveView[] };
+  // Big puzzles can produce tens of thousands of search nodes, and rendering
+  // a grid for every one freezes the browser. Once the trace enters the
+  // backtracking phase, we collapse all subsequent steps into one summary
+  // entry and finish with a single fully-solved grid. See issue #33.
+  type SummaryItem = { kind: 'summary'; searchNodes: number };
+  type WaveItem = { kind: 'wave' } & WaveView;
+  type FinalItem = { kind: 'final'; values: CellValue[][]; notes: CellNotes[][] };
+  type WalkthroughItem = WaveItem | SummaryItem | FinalItem;
+
+  type WalkthroughView = {
+    initial: WaveView;
+    items: WalkthroughItem[];
+    deductiveWaves: number;
+    totalRemoved: number;
+  };
 
   function snapshotDomain(
     size: number,
@@ -78,8 +92,8 @@
       .map(([rule, count]) => ({ rule, count }));
   }
 
-  function buildWalkthrough(puzzle: PuzzleData, steps: ExplainStep[]): WalkthroughView {
-    const size = puzzle.row_targets.length;
+  function buildWalkthrough(solved: SolvedPuzzle, steps: ExplainStep[]): WalkthroughView {
+    const size = solved.row_targets.length;
     const domain: number[][] = Array.from({ length: size }, () =>
       Array.from({ length: size }, () => fullDomain(size))
     );
@@ -94,27 +108,56 @@
       total: 0,
     };
 
-    const waves: WaveView[] = [];
-    steps.forEach((step, idx) => {
-      const touched = new Set<string>();
-      for (const ev of step.events) {
-        domain[ev.row][ev.col] = ev.after;
-        touched.add(`${ev.row},${ev.col}`);
-      }
-      const snap = snapshotDomain(size, domain);
-      const extras = new Map<string, { exNew: true }>();
-      for (const k of touched) extras.set(k, { exNew: true });
-      waves.push({
-        index: idx + 1,
-        values: snap.values,
-        notes: snap.notes,
-        extras,
-        counts: summarizeRules(step.events),
-        total: step.events.length,
-      });
-    });
+    const items: WalkthroughItem[] = [];
+    let deductiveWaves = 0;
+    let totalRemoved = 0;
+    let backtrackingStarted = false;
+    let searchNodes = 0;
 
-    return { initial, waves };
+    for (let idx = 0; idx < steps.length; idx++) {
+      const step = steps[idx];
+      const containsBacktracking = step.events.some((e) => e.rule === 'Backtracking');
+      if (!backtrackingStarted && containsBacktracking) backtrackingStarted = true;
+
+      if (!backtrackingStarted) {
+        const touched = new Set<string>();
+        for (const ev of step.events) {
+          domain[ev.row][ev.col] = ev.after;
+          touched.add(`${ev.row},${ev.col}`);
+        }
+        const snap = snapshotDomain(size, domain);
+        const extras = new Map<string, { exNew: true }>();
+        for (const k of touched) extras.set(k, { exNew: true });
+        deductiveWaves++;
+        totalRemoved += step.events.length;
+        items.push({
+          kind: 'wave',
+          index: idx + 1,
+          values: snap.values,
+          notes: snap.notes,
+          extras,
+          counts: summarizeRules(step.events),
+          total: step.events.length,
+        });
+      } else if (containsBacktracking) {
+        // One search-tree node per Backtracking-bearing step (take or reject).
+        searchNodes++;
+      }
+    }
+
+    if (backtrackingStarted) {
+      items.push({ kind: 'summary', searchNodes });
+      // The recorder collects events from every branch (including rejected
+      // ones), so we can't trust the rolling `domain` to reach the solved
+      // state. Use the solver's own solved grid for the final view.
+      const finalValues: CellValue[][] = solved.cells.map((row) => row.slice());
+      const finalNotes: CellNotes[][] = Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => 0)
+      );
+      items.push({ kind: 'final', values: finalValues, notes: finalNotes });
+    }
+
+    return { initial, items, deductiveWaves, totalRemoved };
   }
 
   // Friendly labels for the propagation rules. Wording avoids solver-internal
@@ -183,23 +226,15 @@
 
   let view = $derived.by<WalkthroughView | null>(() => {
     if (!result || !result.ok) return null;
-    return buildWalkthrough(
-      {
-        row_targets: result.data.row_targets,
-        col_targets: result.data.col_targets,
-      },
-      result.data.steps
-    );
+    return buildWalkthrough(result.data, result.data.steps);
   });
-
-  let totalRemoved = $derived(view ? view.waves.reduce((n, w) => n + w.total, 0) : 0);
 
   let statusText = $derived.by(() => {
     if (!playState.puzzleData) return 'No puzzle loaded.';
     if (result?.ok === false) return result.error;
     if (!view) return '';
-    const wavesLabel = `${view.waves.length} wave${view.waves.length === 1 ? '' : 's'}`;
-    const removalsLabel = `${totalRemoved} note${totalRemoved === 1 ? '' : 's'} removed`;
+    const wavesLabel = `${view.deductiveWaves} wave${view.deductiveWaves === 1 ? '' : 's'}`;
+    const removalsLabel = `${view.totalRemoved} note${view.totalRemoved === 1 ? '' : 's'} removed`;
     return `${wavesLabel} · ${removalsLabel}`;
   });
 </script>
@@ -246,25 +281,49 @@
       </div>
     </section>
 
-    {#each view.waves as wave (wave.index)}
-      <section class="walkthrough-wave" data-testid="walkthrough-wave">
-        <h2 class="walkthrough-wave-title">
-          Wave {wave.index}
-          <span class="walkthrough-wave-count"
-            >· {wave.total} note{wave.total === 1 ? '' : 's'} removed</span
-          >
-        </h2>
-        <p class="walkthrough-wave-rules">{rulesHeading(wave.counts)}</p>
-        <p class="walkthrough-wave-sub">{rulesExplanation(wave.counts)}</p>
-        <div class="walkthrough-grid">
-          <PuzzleGrid
-            puzzle={playState.puzzleData}
-            values={wave.values}
-            notes={wave.notes}
-            cellExtras={wave.extras}
-          />
-        </div>
-      </section>
+    {#each view.items as item, i (i)}
+      {#if item.kind === 'wave'}
+        <section class="walkthrough-wave" data-testid="walkthrough-wave">
+          <h2 class="walkthrough-wave-title">
+            Wave {item.index}
+            <span class="walkthrough-wave-count"
+              >· {item.total} note{item.total === 1 ? '' : 's'} removed</span
+            >
+          </h2>
+          <p class="walkthrough-wave-rules">{rulesHeading(item.counts)}</p>
+          <p class="walkthrough-wave-sub">{rulesExplanation(item.counts)}</p>
+          <div class="walkthrough-grid">
+            <PuzzleGrid
+              puzzle={playState.puzzleData}
+              values={item.values}
+              notes={item.notes}
+              cellExtras={item.extras}
+            />
+          </div>
+        </section>
+      {:else if item.kind === 'summary'}
+        <section class="walkthrough-wave" data-testid="walkthrough-summary">
+          <h2 class="walkthrough-wave-title">
+            Search
+            <span class="walkthrough-wave-count"
+              >· {item.searchNodes} guess{item.searchNodes === 1 ? '' : 'es'}</span
+            >
+          </h2>
+          <p class="walkthrough-wave-sub">
+            Pure deduction can't crack this one — from here the solver tries hypotheses and
+            backtracks. The remaining work is too dense to draw out grid by grid, so we skip ahead
+            to the answer.
+          </p>
+        </section>
+      {:else}
+        <section class="walkthrough-wave" data-testid="walkthrough-wave-final">
+          <h2 class="walkthrough-wave-title">Solved</h2>
+          <p class="walkthrough-wave-sub">The final puzzle.</p>
+          <div class="walkthrough-grid">
+            <PuzzleGrid puzzle={playState.puzzleData} values={item.values} notes={item.notes} />
+          </div>
+        </section>
+      {/if}
     {/each}
   {/if}
 </div>

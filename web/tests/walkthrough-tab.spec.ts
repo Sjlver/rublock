@@ -7,6 +7,15 @@ import { test, expect } from '@playwright/test';
 // Encoded with the BASE62 URL scheme used by url.svelte.ts.
 const NEWSPAPER_URL = '/?p=823890005904';
 
+// A 6×6 puzzle that needs backtracking to solve. Generated with
+//   cargo run --release --bin gen_puzzle -- --size=6 --min-nodes=10 --max-nodes=200
+//   row_targets = [4, 0, 0, 0, 1, 4]
+//   col_targets = [3, 0, 2, 6, 3, 4]
+// search nodes: 10 — well above zero, so the trace is guaranteed to contain
+// at least one Backtracking step and the walkthrough collapses the search
+// phase into a single summary card.
+const BACKTRACKING_URL = '/?p=400014302634';
+
 const walkthroughTabButton = (page: import('@playwright/test').Page) =>
   page.locator('nav.bottom-nav').getByRole('button', { name: 'Walkthrough' });
 
@@ -89,4 +98,56 @@ test('the final wave shows a fully solved grid', async ({ page }) => {
   await expect(lastWave.locator('.cell:not(.black) .cell-value')).toHaveCount(24);
   // No more notes anywhere on the final wave.
   await expect(lastWave.locator('.cell .cell-notes')).toHaveCount(0);
+});
+
+test('a puzzle without backtracking does not get a search summary', async ({ page }) => {
+  // The newspaper puzzle solves by propagation alone — no Backtracking events
+  // in the trace, so the walkthrough should never emit the "Search" card or
+  // the dedicated "Solved" final grid.
+  await page.goto(NEWSPAPER_URL);
+  await waitForReady(page);
+  await walkthroughTabButton(page).click();
+
+  await expect(page.locator('[data-testid="walkthrough-summary"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="walkthrough-wave-final"]')).toHaveCount(0);
+});
+
+test('backtracking-heavy puzzle collapses the search phase into a summary plus final grid', async ({
+  page,
+}) => {
+  // The interesting bit: don't render a wave for every search node. Instead
+  // emit one "Search · X guesses" card and one final solved grid.
+  await page.goto(BACKTRACKING_URL);
+  await waitForReady(page);
+  await walkthroughTabButton(page).click();
+  await expect(page.locator('.page-title')).toHaveText('Walkthrough');
+
+  // Exactly one summary card; mentions a positive guess count.
+  const summary = page.locator('[data-testid="walkthrough-summary"]');
+  await expect(summary).toHaveCount(1);
+  await expect(summary).toContainText(/\d+ guess(es)?/);
+  await expect(summary).toContainText(/Search/);
+
+  // Exactly one final-grid card, and it ships a fully-solved 6×6 grid.
+  const finalGrid = page.locator('[data-testid="walkthrough-wave-final"]');
+  await expect(finalGrid).toHaveCount(1);
+  await expect(finalGrid.locator('.cell.black')).toHaveCount(12);
+  await expect(finalGrid.locator('.cell:not(.black) .cell-value')).toHaveCount(24);
+  await expect(finalGrid.locator('.cell .cell-notes')).toHaveCount(0);
+
+  // The summary appears after every regular wave and immediately before the
+  // final solved grid — no further wave-by-wave rendering of the search.
+  const order = await page.evaluate(() => {
+    const nodes = Array.from(
+      document.querySelectorAll(
+        '[data-testid="walkthrough-wave"], [data-testid="walkthrough-summary"], [data-testid="walkthrough-wave-final"]'
+      )
+    );
+    return nodes.map((n) => (n as HTMLElement).dataset.testid);
+  });
+  const summaryIdx = order.indexOf('walkthrough-summary');
+  const finalIdx = order.indexOf('walkthrough-wave-final');
+  expect(summaryIdx).toBeGreaterThanOrEqual(0);
+  expect(finalIdx).toBe(summaryIdx + 1);
+  expect(order.lastIndexOf('walkthrough-wave')).toBeLessThan(summaryIdx);
 });
