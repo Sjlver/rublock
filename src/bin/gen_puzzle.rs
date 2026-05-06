@@ -394,6 +394,7 @@ fn report<const N: usize, S: Solver<N>>(
     nums.extend(row_targets.iter().map(|n| n.to_string()));
     nums.extend(col_targets.iter().map(|n| n.to_string()));
     println!("{}", nums.join(" "));
+    println!("https://dev.purpureus.net/rublock?p={}", nums.join(","));
     println!();
     print!("{solved}");
     println!();
