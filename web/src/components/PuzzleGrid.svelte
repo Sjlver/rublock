@@ -4,6 +4,7 @@
   import { notesHaveContent } from '../state/puzzle.svelte';
 
   type CellExtras = { wrong?: boolean; exNew?: boolean };
+  type TargetAxis = 'row' | 'col';
 
   interface Props {
     puzzle: PuzzleData;
@@ -13,6 +14,9 @@
     inputMode?: 'value' | 'notes';
     cellExtras?: Map<string, CellExtras> | null;
     onCellClick?: (row: number, col: number) => void;
+    /** When provided, target cells become tappable (Create tab). */
+    onTargetClick?: (axis: TargetAxis, index: number) => void;
+    selectedTarget?: { axis: TargetAxis; index: number } | null;
   }
 
   let {
@@ -23,6 +27,8 @@
     inputMode = 'value',
     cellExtras = null,
     onCellClick,
+    onTargetClick,
+    selectedTarget = null,
   }: Props = $props();
 
   function cellKey(r: number, c: number): string {
@@ -43,15 +49,43 @@
     <thead>
       <tr>
         <th></th>
-        {#each puzzle.col_targets as t}
-          <th scope="col" class="target">{t}</th>
+        {#each puzzle.col_targets as t, c (c)}
+          <th
+            scope="col"
+            class="target"
+            class:target-clickable={!!onTargetClick}
+            class:target-selected={selectedTarget?.axis === 'col' && selectedTarget?.index === c}
+            onclick={onTargetClick ? () => onTargetClick('col', c) : undefined}
+            tabindex={onTargetClick ? 0 : undefined}
+            role={onTargetClick ? 'button' : undefined}
+            aria-label={onTargetClick ? `Column ${c + 1} target` : undefined}
+            aria-pressed={onTargetClick
+              ? selectedTarget?.axis === 'col' && selectedTarget?.index === c
+              : undefined}
+          >
+            {t}
+          </th>
         {/each}
       </tr>
     </thead>
     <tbody>
       {#each puzzle.row_targets as rowTarget, r (r)}
         <tr>
-          <th scope="row" class="target">{rowTarget}</th>
+          <th
+            scope="row"
+            class="target"
+            class:target-clickable={!!onTargetClick}
+            class:target-selected={selectedTarget?.axis === 'row' && selectedTarget?.index === r}
+            onclick={onTargetClick ? () => onTargetClick('row', r) : undefined}
+            tabindex={onTargetClick ? 0 : undefined}
+            role={onTargetClick ? 'button' : undefined}
+            aria-label={onTargetClick ? `Row ${r + 1} target` : undefined}
+            aria-pressed={onTargetClick
+              ? selectedTarget?.axis === 'row' && selectedTarget?.index === r
+              : undefined}
+          >
+            {rowTarget}
+          </th>
           {#each Array(puzzle.col_targets.length) as _, c (c)}
             {@const v = valueAt(r, c)}
             {@const n = notesAt(r, c)}

@@ -9,8 +9,8 @@
 
   const TABS: Tab[] = [
     { id: 'play', label: 'Play' },
-    { id: 'solve', label: 'Solve' },
     { id: 'steps', label: 'Walkthrough' },
+    { id: 'create', label: 'Create' },
     { id: 'print', label: 'Print' },
     { id: 'howto', label: 'How to play' },
   ];
@@ -60,8 +60,8 @@
                 fill={isActive ? 'currentColor' : 'none'}
               />
             </svg>
-          {:else if tab.id === 'solve'}
-            <!-- Wand / sparkle -->
+          {:else if tab.id === 'create'}
+            <!-- Pencil -->
             <svg
               width="20"
               height="20"
@@ -72,11 +72,8 @@
               stroke-linecap="round"
               stroke-linejoin="round"
             >
-              <path d="M5 19L15 9" />
-              <path d="M14 8l2 2" />
-              <path d="M18 4v3M16.5 5.5h3" />
-              <path d="M6 5v2M5 6h2" />
-              <path d="M19 14v2M18 15h2" />
+              <path d="M14.5 5.5l4 4" />
+              <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z" />
             </svg>
           {:else if tab.id === 'steps'}
             <!-- Step bars -->

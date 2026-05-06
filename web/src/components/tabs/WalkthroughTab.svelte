@@ -213,7 +213,7 @@
 <div class="tab-content">
   {#if !playState.puzzleData}
     <div class="walkthrough-placeholder">
-      Pick a puzzle on the <strong>Play</strong> or <strong>Solve</strong> tab. The step-by-step solution
+      Pick a puzzle on the <strong>Play</strong> or <strong>Create</strong> tab. The step-by-step solution
       will appear here.
     </div>
   {:else if result?.ok === false}

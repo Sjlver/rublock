@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import BottomNav from './BottomNav.svelte';
   import PlayTab from './tabs/PlayTab.svelte';
-  import SolveTab from './tabs/SolveTab.svelte';
+  import CreateTab from './tabs/CreateTab.svelte';
   import PrintTab from './tabs/PrintTab.svelte';
   import HowToTab from './tabs/HowToTab.svelte';
   import WalkthroughTab from './tabs/WalkthroughTab.svelte';
@@ -81,8 +81,8 @@
   <div class="screen-content">
     {#if tabState.active === 'play'}
       <PlayTab />
-    {:else if tabState.active === 'solve'}
-      <SolveTab />
+    {:else if tabState.active === 'create'}
+      <CreateTab />
     {:else if tabState.active === 'print'}
       <PrintTab onPrint={generateAndPrint} busy={printBusy || !ready} />
     {:else if tabState.active === 'howto'}

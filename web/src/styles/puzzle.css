@@ -29,6 +29,22 @@
   letter-spacing: -0.02em;
 }
 
+.puzzle .target.target-clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.puzzle .target.target-clickable:hover {
+  background: var(--accent-soft);
+}
+
+.puzzle .target.target-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-soft);
+  border-radius: 4px;
+}
+
 .puzzle thead th:first-child {
   background: transparent;
 }

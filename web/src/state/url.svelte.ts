@@ -1,7 +1,7 @@
 import type { PuzzleData, TabName } from './types';
 import { trackEvent } from '../analytics';
 
-const VALID_TABS = new Set<TabName>(['play', 'solve', 'print', 'howto', 'steps']);
+const VALID_TABS = new Set<TabName>(['play', 'create', 'print', 'howto', 'steps']);
 
 const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 

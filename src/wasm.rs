@@ -3,6 +3,7 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use crate::black_solver::BlackSolverState;
+use crate::classify::{self, ClassifyVariant};
 use crate::grid::{Cell, Grid};
 use crate::recorder::{Explain, Rule, Step};
 use crate::solver::{Puzzle, SolveOutcome, Solver};
@@ -20,6 +21,34 @@ struct SolvedResp<'a> {
     row_targets: &'a [u8],
     col_targets: &'a [u8],
     cells: Vec<&'a [Cell]>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+enum ClassifyVariantOut {
+    Unsolvable,
+    Unique,
+    Multiple,
+}
+
+impl From<ClassifyVariant> for ClassifyVariantOut {
+    fn from(v: ClassifyVariant) -> Self {
+        match v {
+            ClassifyVariant::Unsolvable => ClassifyVariantOut::Unsolvable,
+            ClassifyVariant::Unique => ClassifyVariantOut::Unique,
+            ClassifyVariant::Multiple => ClassifyVariantOut::Multiple,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ClassifyResp<'a> {
+    row_targets: &'a [u8],
+    col_targets: &'a [u8],
+    variant: ClassifyVariantOut,
+    search_nodes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cells: Option<Vec<&'a [Cell]>>,
 }
 
 #[derive(Serialize)]
@@ -160,6 +189,22 @@ pub fn solve_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsValu
     }
 }
 
+#[wasm_bindgen]
+pub fn classify_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsValue, JsValue> {
+    if row_targets.len() != col_targets.len() {
+        return Err(js_err(
+            "row_targets and col_targets must have the same length",
+        ));
+    }
+    match row_targets.len() {
+        5 => classify_puzzle_n::<5>(row_targets, col_targets),
+        6 => classify_puzzle_n::<6>(row_targets, col_targets),
+        7 => classify_puzzle_n::<7>(row_targets, col_targets),
+        8 => classify_puzzle_n::<8>(row_targets, col_targets),
+        _ => Err(js_err("size must be 5–8")),
+    }
+}
+
 fn generate_puzzle_n<const N: usize>() -> Result<JsValue, JsValue> {
     let mut rng = rand::rng();
     loop {
@@ -200,6 +245,21 @@ fn solve_puzzle_n<const N: usize>(
             })
         }
     }
+}
+
+fn classify_puzzle_n<const N: usize>(
+    row_targets: Vec<u8>,
+    col_targets: Vec<u8>,
+) -> Result<JsValue, JsValue> {
+    let puzzle = try_puzzle::<N>(row_targets, col_targets)?;
+    let result = classify::classify::<N>(puzzle.clone());
+    to_js(&ClassifyResp {
+        row_targets: &puzzle.row_targets,
+        col_targets: &puzzle.col_targets,
+        variant: result.variant.into(),
+        search_nodes: result.search_nodes,
+        cells: result.cells.as_ref().map(cells_out),
+    })
 }
 
 fn explain_puzzle_n<const N: usize>(

@@ -1,10 +1,15 @@
-import init, { generate_puzzle, solve_puzzle, explain_puzzle } from './pkg/rublock.js';
+import init, {
+  generate_puzzle,
+  solve_puzzle,
+  explain_puzzle,
+  classify_puzzle,
+} from './pkg/rublock.js';
 // `?url` returns the bundled URL of the .wasm asset. We pass it explicitly to
 // `init()` instead of relying on `import.meta.url`, so Vite hashes and ships
 // the file like any other asset.
 import wasmUrl from './pkg/rublock_bg.wasm?url';
 
-import type { ExplainedPuzzle, PuzzleData, SolvedPuzzle } from '../state/types';
+import type { ClassifiedPuzzle, ExplainedPuzzle, PuzzleData, SolvedPuzzle } from '../state/types';
 
 let initPromise: Promise<unknown> | null = null;
 
@@ -34,4 +39,11 @@ export function explainPuzzle(data: PuzzleData): ExplainedPuzzle {
     Uint8Array.from(data.row_targets),
     Uint8Array.from(data.col_targets)
   ) as ExplainedPuzzle;
+}
+
+export function classifyPuzzle(data: PuzzleData): ClassifiedPuzzle {
+  return classify_puzzle(
+    Uint8Array.from(data.row_targets),
+    Uint8Array.from(data.col_targets)
+  ) as ClassifiedPuzzle;
 }

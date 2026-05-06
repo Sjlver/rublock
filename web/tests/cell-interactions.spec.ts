@@ -141,42 +141,27 @@ test('entering a correct complete solution shows "Puzzle solved!" feedback', asy
   await page.goto('/?p=7047430a4100');
   await waitForReady(page);
 
-  // Navigate to Solve tab to reveal the solution.
-  await page.locator('nav.bottom-nav').getByRole('button', { name: 'Solve' }).click();
+  // Hand-checked unique solution (`target/release/rublock 7 0 4 7 4 3 0 10 4 1 0 0`).
+  // Each entry is 'black' for a black square or '1'..'4' for a digit.
+  const solution: string[][] = [
+    ['3', 'black', '1', '2', '4', 'black'],
+    ['4', '1', '2', '3', 'black', 'black'],
+    ['1', '2', 'black', '4', 'black', '3'],
+    ['black', '3', '4', 'black', '2', '1'],
+    ['black', '4', 'black', '1', '3', '2'],
+    ['2', 'black', '3', 'black', '1', '4'],
+  ];
 
-  // The solve input is auto-populated with the current puzzle's targets.
-  await page.locator('.card').getByRole('button', { name: 'Solve' }).click();
-  await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
-
-  // Read every cell from the solved grid (only one table.puzzle is visible on Solve).
-  const solveCells = page.locator('.app-shell table.puzzle tbody td.cell');
-  const count = await solveCells.count();
-  const solution: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const cell = solveCells.nth(i);
-    const cls = (await cell.getAttribute('class')) ?? '';
-    if (cls.includes('black')) {
-      solution.push('black');
-    } else {
-      const valEl = cell.locator('.cell-value');
-      solution.push((await valEl.count()) > 0 ? ((await valEl.textContent()) ?? '') : '');
-    }
-  }
-
-  // Go back to Play tab (same puzzle is set, progress should be empty).
-  await page.locator('nav.bottom-nav').getByRole('button', { name: 'Play', exact: true }).click();
-
-  // Enter each value cell by cell using the keyboard (places values directly).
   const size = 6;
   const rows = page.locator('.app-shell table.puzzle tbody tr');
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       const cell = rows.nth(r).locator('td').nth(c);
       await cell.click();
-      const val = solution[r * size + c];
+      const val = solution[r][c];
       if (val === 'black') {
         await page.keyboard.press('b');
-      } else if (val) {
+      } else {
         await page.keyboard.press(val);
       }
     }

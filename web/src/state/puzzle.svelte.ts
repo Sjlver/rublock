@@ -104,6 +104,18 @@ function saveCurrentState(): void {
   });
 }
 
+function loadSavedState(saved: PerSizeState): void {
+  playState.puzzleData = saved.puzzleData;
+  playState.cellValues = saved.cellValues;
+  playState.cellNotes = saved.cellNotes;
+  playState.inputMode = saved.inputMode;
+  playState.selectedCell = saved.selectedCell;
+  playState.undoStack = saved.undoStack;
+  playState.redoStack = saved.redoStack;
+  playState.wrongCells.clear();
+  for (const k of saved.wrongCells) playState.wrongCells.add(k);
+}
+
 /** Switch to a new size, preserving in-progress puzzles per size. */
 export function switchToSize(size: number): void {
   if (playState.puzzleData?.row_targets.length === size) return;
@@ -111,19 +123,52 @@ export function switchToSize(size: number): void {
 
   const saved = sizeStates.get(size);
   if (saved) {
-    playState.puzzleData = saved.puzzleData;
-    playState.cellValues = saved.cellValues;
-    playState.cellNotes = saved.cellNotes;
-    playState.inputMode = saved.inputMode;
-    playState.selectedCell = saved.selectedCell;
-    playState.undoStack = saved.undoStack;
-    playState.redoStack = saved.redoStack;
-    playState.wrongCells.clear();
-    for (const k of saved.wrongCells) playState.wrongCells.add(k);
+    loadSavedState(saved);
   } else {
     setPuzzle(generatePuzzle(size));
     trackEvent(`rublock/play/generate/${size}`);
   }
+}
+
+/**
+ * Return the puzzle the Play tab uses for this size. If none exists yet
+ * (because the user has not visited that size), generate one and cache it
+ * in `sizeStates` so a later visit shows the same puzzle. The active Play
+ * size is unchanged.
+ */
+export function ensurePlayPuzzleForSize(size: number): PuzzleData {
+  if (playState.puzzleData?.row_targets.length === size) {
+    return playState.puzzleData;
+  }
+  const saved = sizeStates.get(size);
+  if (saved) return saved.puzzleData;
+  const data = generatePuzzle(size);
+  trackEvent(`rublock/play/generate/${size}`);
+  const blank: PerSizeState = {
+    puzzleData: data,
+    cellValues: emptyCellValues(size),
+    cellNotes: emptyCellNotes(size),
+    inputMode: 'value',
+    selectedCell: null,
+    undoStack: [],
+    redoStack: [],
+    wrongCells: new SvelteSet(),
+  };
+  sizeStates.set(size, blank);
+  return data;
+}
+
+/**
+ * Replace the Play tab's puzzle for `data`'s size with `data`, then make
+ * that size the active Play size. Per-size state for *other* sizes in
+ * `sizeStates` is left intact so the user's partial progress on those
+ * sizes survives the switch.
+ */
+export function replacePlayPuzzle(data: PuzzleData): void {
+  const size = data.row_targets.length;
+  saveCurrentState();
+  sizeStates.delete(size);
+  setPuzzle(data);
 }
 
 /** Generate a fresh puzzle for the current size, discarding any saved state. */

@@ -9,7 +9,7 @@
 
   const TABS: { id: TabName; label: string }[] = [
     { id: 'play', label: 'Play' },
-    { id: 'solve', label: 'Solve' },
+    { id: 'create', label: 'Create' },
     { id: 'print', label: 'Print' },
     { id: 'howto', label: 'How to Play' },
   ];

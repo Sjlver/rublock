@@ -11,4 +11,5 @@ declare module './pkg/rublock.js' {
   export function generate_puzzle(size: number): unknown;
   export function solve_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): unknown;
   export function explain_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): unknown;
+  export function classify_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): unknown;
 }

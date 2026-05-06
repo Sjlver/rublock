@@ -59,4 +59,13 @@ export interface SelectedCell {
 
 export type InputMode = 'value' | 'notes';
 
-export type TabName = 'play' | 'solve' | 'print' | 'howto' | 'steps';
+export type TabName = 'play' | 'create' | 'print' | 'howto' | 'steps';
+
+export type ClassifyVariant = 'unsolvable' | 'unique' | 'multiple';
+
+export interface ClassifiedPuzzle extends PuzzleData {
+  variant: ClassifyVariant;
+  search_nodes: number;
+  // Present for `unique` and `multiple`, omitted for `unsolvable`.
+  cells?: CellValue[][];
+}
