@@ -98,6 +98,17 @@ impl From<Rule> for RuleOut {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/// Install a panic hook that turns Rust panics into JavaScript exceptions
+/// with a useful message. Without it, a panic surfaces as an opaque
+/// `RuntimeError: unreachable executed` and the wasm instance is poisoned.
+/// The hook is a defense-in-depth measure — every external input is already
+/// validated at the boundary, but if a solver bug triggers a panic we'd
+/// rather show the user a real error than a frozen UI.
+#[wasm_bindgen(start)]
+pub fn _wasm_start() {
+    console_error_panic_hook::set_once();
+}
+
 fn js_err(msg: &str) -> JsValue {
     JsValue::from_str(msg)
 }
