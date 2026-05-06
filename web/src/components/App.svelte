@@ -8,6 +8,7 @@
   import WalkthroughTab from './tabs/WalkthroughTab.svelte';
   import PuzzleGrid from './PuzzleGrid.svelte';
   import { initWasm, generatePuzzle } from '../wasm/api';
+  import { reportFatal } from '../error-overlay';
   import { loadRandomPuzzle, setPuzzle } from '../state/puzzle.svelte';
   import {
     parsePuzzleFromUrl,
@@ -48,7 +49,7 @@
       ready = true;
     } catch (err) {
       console.error('Initialization failed:', err);
-      throw err;
+      reportFatal(err);
     }
   });
 
