@@ -67,12 +67,6 @@ export function selectTarget(axis: TargetAxis, index: number): void {
   d.selected = { axis, index };
 }
 
-export function clearSelection(): void {
-  const d = activeDraft();
-  if (!d) return;
-  d.selected = null;
-}
-
 /** Write `value` into the selected target cell. */
 export function setSelectedTargetValue(value: number): void {
   const d = activeDraft();

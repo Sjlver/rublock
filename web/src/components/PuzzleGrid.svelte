@@ -42,6 +42,16 @@
   function notesAt(r: number, c: number): CellNotes | null {
     return notes ? notes[r][c] : null;
   }
+
+  function targetKeyHandler(axis: TargetAxis, index: number) {
+    return (e: KeyboardEvent) => {
+      if (!onTargetClick) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onTargetClick(axis, index);
+      }
+    };
+  }
 </script>
 
 <div class="puzzle-wrap">
@@ -56,6 +66,7 @@
             class:target-clickable={!!onTargetClick}
             class:target-selected={selectedTarget?.axis === 'col' && selectedTarget?.index === c}
             onclick={onTargetClick ? () => onTargetClick('col', c) : undefined}
+            onkeydown={onTargetClick ? targetKeyHandler('col', c) : undefined}
             tabindex={onTargetClick ? 0 : undefined}
             role={onTargetClick ? 'button' : undefined}
             aria-label={onTargetClick ? `Column ${c + 1} target` : undefined}
@@ -77,6 +88,7 @@
             class:target-clickable={!!onTargetClick}
             class:target-selected={selectedTarget?.axis === 'row' && selectedTarget?.index === r}
             onclick={onTargetClick ? () => onTargetClick('row', r) : undefined}
+            onkeydown={onTargetClick ? targetKeyHandler('row', r) : undefined}
             tabindex={onTargetClick ? 0 : undefined}
             role={onTargetClick ? 'button' : undefined}
             aria-label={onTargetClick ? `Row ${r + 1} target` : undefined}
