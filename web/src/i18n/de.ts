@@ -54,7 +54,7 @@ export const de: Messages = {
   print_status: 'Druckbares Heft erstellen',
   print_size: 'Größe',
   print_pages: 'Seiten',
-  print_two_per_page: 'Zwei Puzzles pro Seite',
+  print_six_per_page: 'Sechs Puzzles pro Seite',
   print_fewer_aria: 'Weniger Seiten',
   print_more_aria: 'Mehr Seiten',
   print_busy: 'Erstellen…',
@@ -204,4 +204,5 @@ export const de: Messages = {
   // Locale switcher — autonyms (language's own name); same in every catalog.
   loc_en: 'English',
   loc_de: 'Deutsch',
+  loc_pt: 'Português',
 };
