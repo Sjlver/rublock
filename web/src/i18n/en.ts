@@ -222,6 +222,7 @@ export const en = {
   loc_en: 'English',
   loc_de: 'Deutsch',
   loc_pt: 'Português',
+  loc_fr: 'Français',
 };
 
 export type MessageKey = keyof typeof en;

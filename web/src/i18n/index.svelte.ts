@@ -1,10 +1,11 @@
 import { en, type MessageKey, type Messages } from './en';
 import { de } from './de';
 import { pt } from './pt';
+import { fr } from './fr';
 
 const STORAGE_KEY = 'rublock-locale';
 
-const catalogs: Record<string, Messages> = { en, de, pt };
+const catalogs: Record<string, Messages> = { en, de, pt, fr };
 const AVAILABLE = Object.keys(catalogs);
 
 let locale = $state<string>('en');
