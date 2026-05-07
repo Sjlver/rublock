@@ -239,6 +239,8 @@
 /* ── How-to example puzzles (smaller cells) ── */
 
 .howto-step {
+  display: flex;
+  justify-content: center;
   margin: 10px 0;
 }
 

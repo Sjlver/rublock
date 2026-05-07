@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { CellValue, CellNotes, PuzzleData, SelectedCell } from '../state/types';
   import { noteDigitBit, NOTE_BLACK_BIT, NOTE_DIGITS_ONLY_BIT } from '../state/types';
-  import { notesHaveContent } from '../state/puzzle.svelte';
+  import { cellKey, notesHaveContent } from '../state/puzzle.svelte';
 
   type CellExtras = { wrong?: boolean; exNew?: boolean };
   type TargetAxis = 'row' | 'col';
@@ -30,10 +30,6 @@
     onTargetClick,
     selectedTarget = null,
   }: Props = $props();
-
-  function cellKey(r: number, c: number): string {
-    return `${r},${c}`;
-  }
 
   function valueAt(r: number, c: number): CellValue {
     return values ? values[r][c] : null;
