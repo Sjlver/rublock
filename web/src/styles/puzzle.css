@@ -266,6 +266,10 @@
     color: #000;
     background: #fff;
   }
+  .puzzle .cell {
+    border-right-color: #000;
+    border-bottom-color: #000;
+  }
   .puzzle-wrap {
     border-radius: 0;
     box-shadow: none;
