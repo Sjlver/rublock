@@ -146,7 +146,6 @@ export const pt: Messages = {
   wt_status_removed_one: '{n} nota removida',
   wt_status_removed_other: '{n} notas removidas',
   wt_status_join: ' · ',
-  wt_extra_rules: 'A onda inclui também deduções de {others}.',
 
   // Walkthrough rule labels
   wt_rule_target_tuples: 'Somas-alvo',
@@ -156,7 +155,7 @@ export const pt: Messages = {
   wt_rule_black: 'Regra dos dois pretos',
   wt_rule_backtrack: 'Hipótese',
 
-  // Walkthrough rule notes
+  // Walkthrough rule notes — solo: mostrado quando a onda usa apenas esta regra.
   wt_rule_target_tuples_note:
     'Algumas posições de dígito ou preto não podem fazer parte de qualquer arranjo que some o alvo da linha ou coluna — essas são removidas.',
   wt_rule_arc_note:
@@ -169,6 +168,20 @@ export const pt: Messages = {
     'Cada linha e cada coluna tem exatamente dois pretos. Estas opções criariam um terceiro — por isso desaparecem.',
   wt_rule_backtrack_note:
     'O solucionador testou uma hipótese para sair de um impasse. Raro em puzzles resolvíveis à mão.',
+
+  // Walkthrough rule notes — dominante: mostrado quando esta regra lidera uma onda mista.
+  wt_rule_target_tuples_dominant:
+    'A maioria das eliminações desta onda vem das somas-alvo — algumas posições de dígito ou preto não podem fazer parte de qualquer arranjo que some o alvo da linha ou coluna.',
+  wt_rule_arc_dominant:
+    'A maioria das eliminações desta onda vem da verificação de possibilidades — nenhum arranjo restante da linha ou coluna suporta ainda estas opções.',
+  wt_rule_singleton_dominant:
+    'A maioria das eliminações desta onda vem de células forçadas — uma célula próxima está agora totalmente determinada, e o seu valor não se pode repetir no resto da linha ou coluna.',
+  wt_rule_hidden_dominant:
+    'A maioria das eliminações desta onda vem da regra do único lugar — apenas uma célula de uma linha ou coluna ainda pode conter um dado dígito ou preto, por isso as outras perdem-no como candidato.',
+  wt_rule_black_dominant:
+    'A maioria das eliminações desta onda vem da regra dos dois pretos — cada linha e cada coluna tem exatamente dois pretos, por isso opções que criariam um terceiro são removidas.',
+  wt_rule_backtrack_dominant:
+    'A maioria das eliminações desta onda vem de hipóteses — o solucionador testou tentativas para sair de um impasse. Raro em puzzles resolvíveis à mão.',
 
   // Classification chip
   cls_no_solution: 'Sem solução',

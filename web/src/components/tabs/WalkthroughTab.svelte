@@ -4,7 +4,7 @@
   import { playState } from '../../state/puzzle.svelte';
   import { explainPuzzle } from '../../wasm/api';
   import { trackEvent } from '../../analytics';
-  import { t, tf, plural, format, md } from '../../i18n/index.svelte';
+  import { t, tf, plural, md } from '../../i18n/index.svelte';
   import type { MessageKey } from '../../i18n/en';
   import type {
     CellNotes,
@@ -173,6 +173,10 @@
     Backtracking: 'wt_rule_backtrack',
   };
 
+  // Two variants per rule: the solo note (used when a wave only fires that
+  // rule) and the dominant note (used when the rule leads a mixed wave). Each
+  // string is a complete sentence, so we never assemble fragments at runtime —
+  // translators get whole sentences and don't have to fight English grammar.
   const RULE_NOTE_KEYS: Record<ExplainRule, MessageKey> = {
     TargetTuples: 'wt_rule_target_tuples_note',
     ArcConsistency: 'wt_rule_arc_note',
@@ -182,6 +186,15 @@
     Backtracking: 'wt_rule_backtrack_note',
   };
 
+  const RULE_DOMINANT_KEYS: Record<ExplainRule, MessageKey> = {
+    TargetTuples: 'wt_rule_target_tuples_dominant',
+    ArcConsistency: 'wt_rule_arc_dominant',
+    Singleton: 'wt_rule_singleton_dominant',
+    HiddenSingle: 'wt_rule_hidden_dominant',
+    BlackConsistency: 'wt_rule_black_dominant',
+    Backtracking: 'wt_rule_backtrack_dominant',
+  };
+
   function rulesHeading(counts: { rule: ExplainRule; count: number }[]): string {
     if (counts.length === 0) return '';
     return counts.map(({ rule, count }) => `${count} · ${t(RULE_LABEL_KEYS[rule])}`).join('   ');
@@ -189,12 +202,9 @@
 
   function rulesExplanation(counts: { rule: ExplainRule; count: number }[]): string {
     if (counts.length === 0) return '';
-    if (counts.length === 1) return t(RULE_NOTE_KEYS[counts[0].rule]);
-    // Several rules contributed in this wave — give the dominant rule's
-    // explanation, mentioning that others helped.
-    const [first, ...rest] = counts;
-    const others = rest.map(({ rule }) => t(RULE_LABEL_KEYS[rule]).toLowerCase()).join(', ');
-    return `${t(RULE_NOTE_KEYS[first.rule])} ${format(t('wt_extra_rules'), { others })}`;
+    const dominant = counts[0].rule;
+    const key = counts.length === 1 ? RULE_NOTE_KEYS[dominant] : RULE_DOMINANT_KEYS[dominant];
+    return t(key);
   }
 
   type Result = { ok: true; data: ExplainedPuzzle } | { ok: false; error: string } | null;

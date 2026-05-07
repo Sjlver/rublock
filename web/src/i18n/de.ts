@@ -145,7 +145,6 @@ export const de: Messages = {
   wt_status_removed_one: '{n} Notiz entfernt',
   wt_status_removed_other: '{n} Notizen entfernt',
   wt_status_join: ' · ',
-  wt_extra_rules: 'Die Welle enthält außerdem Schlüsse aus {others}.',
 
   // Walkthrough rule labels
   wt_rule_target_tuples: 'Zielsummen',
@@ -155,7 +154,7 @@ export const de: Messages = {
   wt_rule_black: 'Zwei-Schwarze-Regel',
   wt_rule_backtrack: 'Hypothese',
 
-  // Walkthrough rule notes
+  // Walkthrough rule notes — solo: gezeigt, wenn die Welle nur diese Regel nutzt.
   wt_rule_target_tuples_note:
     'Manche Ziffern oder schwarzen Felder können in keiner Anordnung vorkommen, die den Zielwert der Zeile oder Spalte ergibt — diese werden ausgeschlossen.',
   wt_rule_arc_note:
@@ -168,6 +167,20 @@ export const de: Messages = {
     'Jede Zeile und jede Spalte hat genau zwei schwarze Felder. Diese Möglichkeiten würden ein drittes erzeugen — also fallen sie weg.',
   wt_rule_backtrack_note:
     'Der Löser hat einen Versuch gestartet, um eine Sackgasse aufzubrechen. Bei von Hand lösbaren Puzzles selten.',
+
+  // Walkthrough rule notes — dominant: gezeigt, wenn diese Regel die Welle anführt.
+  wt_rule_target_tuples_dominant:
+    'Die meisten Streichungen dieser Welle folgen aus den Zielsummen — manche Ziffern oder schwarzen Felder können in keiner Anordnung vorkommen, die den Zielwert der Zeile oder Spalte ergibt.',
+  wt_rule_arc_dominant:
+    'Die meisten Streichungen dieser Welle folgen aus dem Möglichkeitsabgleich — keine verbleibende Anordnung der Zeile oder Spalte unterstützt diese Möglichkeiten noch.',
+  wt_rule_singleton_dominant:
+    'Die meisten Streichungen dieser Welle folgen aus erzwungenen Feldern — ein nahes Feld ist jetzt eindeutig bestimmt, und sein Wert kann im Rest der Zeile oder Spalte nicht erneut auftauchen.',
+  wt_rule_hidden_dominant:
+    'Die meisten Streichungen dieser Welle folgen aus „einziger Platz" — nur ein Feld in einer Zeile oder Spalte kann eine bestimmte Ziffer oder das Schwarz noch aufnehmen, die anderen verlieren die Möglichkeit.',
+  wt_rule_black_dominant:
+    'Die meisten Streichungen dieser Welle folgen aus der Zwei-Schwarze-Regel — jede Zeile und jede Spalte hat genau zwei schwarze Felder, also fallen Möglichkeiten weg, die ein drittes erzeugen würden.',
+  wt_rule_backtrack_dominant:
+    'Die meisten Streichungen dieser Welle folgen aus Hypothesen — der Löser hat einen Versuch gestartet, um eine Sackgasse aufzubrechen. Bei von Hand lösbaren Puzzles selten.',
 
   // Classification chip
   cls_no_solution: 'Keine Lösung',

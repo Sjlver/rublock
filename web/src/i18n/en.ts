@@ -163,7 +163,6 @@ export const en = {
   wt_status_removed_one: '{n} note removed',
   wt_status_removed_other: '{n} notes removed',
   wt_status_join: ' · ',
-  wt_extra_rules: 'The wave also includes deductions from {others}.',
 
   // Walkthrough rule labels
   wt_rule_target_tuples: 'Target sums',
@@ -173,7 +172,7 @@ export const en = {
   wt_rule_black: 'Two-blacks rule',
   wt_rule_backtrack: 'Hypothesis',
 
-  // Walkthrough rule notes
+  // Walkthrough rule notes — solo: shown when only this rule fires in a wave.
   wt_rule_target_tuples_note:
     'Some digit or black placements simply cannot be part of any arrangement that adds up to the row or column target — those are removed.',
   wt_rule_arc_note:
@@ -186,6 +185,20 @@ export const en = {
     'Each row and each column has exactly two blacks. These options would create a third one — so they go.',
   wt_rule_backtrack_note:
     'The solver tried a guess to break a deadlock. Rare for hand-solvable puzzles.',
+
+  // Walkthrough rule notes — dominant: shown when this rule leads a mixed wave.
+  wt_rule_target_tuples_dominant:
+    'Most eliminations in this wave come from target sums — some digit or black placements simply cannot be part of any arrangement that adds up to the row or column target.',
+  wt_rule_arc_dominant:
+    'Most eliminations in this wave come from possibility checks — no remaining arrangement of the row or column still supports these options.',
+  wt_rule_singleton_dominant:
+    'Most eliminations in this wave come from forced cells — a nearby cell is now fully determined, and its value cannot repeat in the rest of its row or column.',
+  wt_rule_hidden_dominant:
+    'Most eliminations in this wave come from only-place reasoning — only one cell in a row or column can still hold a given digit or black, so the others lose it as a candidate.',
+  wt_rule_black_dominant:
+    'Most eliminations in this wave come from the two-blacks rule — each row and each column has exactly two blacks, so options that would create a third one are removed.',
+  wt_rule_backtrack_dominant:
+    'Most eliminations in this wave come from hypotheses — the solver tried guesses to break a deadlock. Rare for hand-solvable puzzles.',
 
   // Classification chip
   cls_no_solution: 'No solution',
