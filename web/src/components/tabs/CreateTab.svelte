@@ -24,6 +24,7 @@
     setSelectedTargetValue,
     type SupportedSize,
   } from '../../state/create.svelte';
+  import { t, tf } from '../../i18n/index.svelte';
 
   // Materialize the draft for the current size on mount.
   ensureDraft(createState.size);
@@ -87,7 +88,7 @@
     if (!draft) return;
     const c = classification;
     if (!c || 'error' in c || c.variant !== 'unique') {
-      showToast("Can't share an invalid puzzle", 'error', 2000);
+      showToast(t('create_share_invalid'), 'error', 2000);
       return;
     }
     const data = draftAsPuzzle(draft);
@@ -160,7 +161,7 @@
 </script>
 
 <PageHeader
-  title="Create"
+  title={t('create_title')}
   status={displayStatus}
   statusTone={displayTone === 'error' ? 'error' : displayTone === 'success' ? 'success' : 'default'}
   onShare={handleShare}
@@ -198,7 +199,7 @@
   {/if}
 
   <!-- Value strip: tap to write into the selected target -->
-  <div class="create-values" role="group" aria-label="Target value buttons">
+  <div class="create-values" role="group" aria-label={t('create_values_aria')}>
     {#each values as v (v)}
       <button
         type="button"
@@ -206,7 +207,7 @@
         class:valid={validValues[v] === true}
         disabled={valueStripDisabled}
         onclick={() => handleValueClick(v)}
-        aria-label={`Set target to ${v}`}
+        aria-label={tf('create_set_target_aria', { n: v })}
         data-classified={validValues[v] !== undefined}
         data-valid={validValues[v] === true}
       >
@@ -222,10 +223,8 @@
       class="toolbar-btn"
       disabled={!isUnique}
       onclick={handleUsePuzzle}
-      aria-label="Use this puzzle"
-      title={isUnique
-        ? 'Send this puzzle to the Play tab'
-        : 'Only puzzles with a unique solution can be used'}
+      aria-label={t('create_use_aria')}
+      title={isUnique ? t('create_use_title_valid') : t('create_use_title_invalid')}
     >
       <svg
         width="16"
@@ -239,7 +238,7 @@
       >
         <path d="M5 12l5 5L19 7" />
       </svg>
-      Use this puzzle
+      {t('create_use')}
     </button>
   </div>
 </div>

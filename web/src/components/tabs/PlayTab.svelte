@@ -28,6 +28,7 @@
     classificationLabel,
     classificationTone,
   } from '../../state/classification';
+  import { t } from '../../i18n/index.svelte';
 
   let showEmojiRain = $state(false);
   let hintDismissed = $state<boolean>(
@@ -150,14 +151,14 @@
   }
 
   function handleSizeClick(s: number): void {
-    status = 'Switching…';
+    status = t('play_status_switching');
     switchToSize(s);
     status = '';
   }
 
   function handleNewPuzzle(): void {
     if (!playState.puzzleData) return;
-    status = 'Generating…';
+    status = t('play_status_generating');
     queueMicrotask(() => {
       newPuzzle(playState.puzzleData!.row_targets.length);
       status = '';
@@ -186,7 +187,7 @@
 </script>
 
 <PageHeader
-  title="Play"
+  title={t('play_title')}
   status={displayStatus}
   statusTone={displayTone === 'error' ? 'error' : displayTone === 'success' ? 'success' : 'default'}
   onShare={shareCurrentPuzzle}
@@ -229,7 +230,7 @@
         <path d="M20 8a8 8 0 10-1 9.5" />
         <path d="M20 4v4h-4" />
       </svg>
-      New puzzle
+      {t('play_new_puzzle')}
     </button>
   </div>
 
@@ -259,7 +260,7 @@
       class="toolbar-btn"
       disabled={undoDisabled}
       onclick={undoInput}
-      aria-label="Undo"
+      aria-label={t('play_undo_aria')}
     >
       <svg
         width="16"
@@ -274,14 +275,14 @@
         <path d="M9 7L4.5 11.5 9 16" />
         <path d="M4.5 11.5h10a5 5 0 010 10H12" />
       </svg>
-      Undo
+      {t('play_undo')}
     </button>
     <button
       type="button"
       class="toolbar-btn"
       disabled={redoDisabled}
       onclick={redoInput}
-      aria-label="Redo"
+      aria-label={t('play_redo_aria')}
     >
       <svg
         width="16"
@@ -296,13 +297,13 @@
         <path d="M15 7l4.5 4.5L15 16" />
         <path d="M19.5 11.5h-10a5 5 0 100 10H12" />
       </svg>
-      Redo
+      {t('play_redo')}
     </button>
     <button
       type="button"
       class="toolbar-btn"
       onclick={checkCurrentPuzzle}
-      aria-label="Check answers"
+      aria-label={t('play_check_aria')}
     >
       <svg
         width="16"
@@ -317,7 +318,7 @@
         <circle cx="12" cy="12" r="8.5" />
         <path d="M8 12.2l2.7 2.7L16 9.6" />
       </svg>
-      Check
+      {t('play_check')}
     </button>
   </div>
 
@@ -337,9 +338,9 @@
           <path d="M14.5 5.5l4 4" />
           <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z" />
         </svg>
-        Notes mode
+        {t('play_notes_mode')}
       </span>
-      <span style="font-size:11px; color:var(--muted);">Space to switch</span>
+      <span style="font-size:11px; color:var(--muted);">{t('play_space_to_switch')}</span>
     </div>
   {/if}
 
@@ -359,8 +360,13 @@
         <path d="M14.5 5.5l4 4" />
         <path d="M3.5 20.5l3.5-1 11-11-3.5-3.5-11 11-1 3.5z" />
       </svg>
-      <span class="hint-chip-text">Tap for a note · hold for the answer</span>
-      <button type="button" class="hint-dismiss" onclick={dismissHint} aria-label="Dismiss hint">
+      <span class="hint-chip-text">{t('play_hint_chip')}</span>
+      <button
+        type="button"
+        class="hint-dismiss"
+        onclick={dismissHint}
+        aria-label={t('play_hint_dismiss_aria')}
+      >
         <svg
           width="13"
           height="13"

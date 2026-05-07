@@ -1,14 +1,15 @@
 import { showToast } from './state/toast.svelte';
+import { t } from './i18n/index.svelte';
 
 export async function shareUrl(url: string): Promise<void> {
   try {
     if (navigator.share && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      await navigator.share({ title: 'Doplo puzzle', text: 'Try this Doplo puzzle:', url });
+      await navigator.share({ title: t('share_title'), text: t('share_text'), url });
       return;
     }
     await navigator.clipboard.writeText(url);
-    showToast('Link copied to clipboard', 'success');
+    showToast(t('toast_link_copied'), 'success');
   } catch {
-    showToast('Could not share this puzzle', 'error');
+    showToast(t('toast_share_failed'), 'error');
   }
 }

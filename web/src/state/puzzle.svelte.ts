@@ -2,6 +2,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import { generatePuzzle, solvePuzzle } from '../wasm/api';
 import { trackEvent } from '../analytics';
 import { showToast } from './toast.svelte';
+import { t, tf } from '../i18n/index.svelte';
 import type {
   CellNotes,
   CellOperation,
@@ -338,7 +339,7 @@ function autoCheckCompletion(): void {
       if (playState.cellValues[r][c] !== response.cells[r][c]) return;
     }
   }
-  showToast('Puzzle solved! 🎉', 'success');
+  showToast(t('toast_solved'), 'success');
   trackEvent(`rublock/play/complete/${size}`);
   for (const cb of solveCallbacks) cb();
 }
@@ -373,14 +374,14 @@ export function checkCurrentPuzzle(): void {
   const wrongCount = playState.wrongCells.size;
   const totalCells = size * size;
   if (entered === 0) {
-    showToast('Enter some cells, then check them.');
+    showToast(t('toast_check_empty'));
   } else if (wrongCount === 0 && entered === totalCells) {
-    showToast('Puzzle solved! 🎉', 'success');
+    showToast(t('toast_solved'), 'success');
   } else if (wrongCount === 0) {
-    showToast('All entered cells are correct.', 'success');
+    showToast(t('toast_check_all_correct'), 'success');
   } else if (wrongCount === 1) {
-    showToast('One wrong cell.', 'error');
+    showToast(t('toast_one_wrong'), 'error');
   } else {
-    showToast(`${wrongCount} wrong cells.`, 'error');
+    showToast(tf('toast_n_wrong', { n: wrongCount }), 'error');
   }
 }

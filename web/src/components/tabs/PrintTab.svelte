@@ -1,5 +1,6 @@
 <script lang="ts">
   import PageHeader from '../PageHeader.svelte';
+  import { t, plural } from '../../i18n/index.svelte';
 
   // Per DESIGN_NOTES.md: Print tab has its own size setting, independent from Play.
   interface Props {
@@ -18,13 +19,13 @@
   }
 </script>
 
-<PageHeader title="Print" status="Generate a printable booklet" />
+<PageHeader title={t('print_title')} status={t('print_status')} />
 
 <div class="tab-content">
   <div class="card">
     <div class="field-row">
       <div>
-        <div class="field-label">Size</div>
+        <div class="field-label">{t('print_size')}</div>
       </div>
       <div class="size-selector" style="background:var(--paper);">
         {#each [5, 6, 7, 8] as s (s)}
@@ -44,22 +45,22 @@
 
     <div class="field-row">
       <div>
-        <div class="field-label">Pages</div>
-        <div class="field-hint">Two puzzles per page</div>
+        <div class="field-label">{t('print_pages')}</div>
+        <div class="field-hint">{t('print_two_per_page')}</div>
       </div>
       <div class="stepper">
         <button
           type="button"
           class="stepper-btn"
           onclick={() => (pages = Math.max(1, pages - 1))}
-          aria-label="Fewer pages">−</button
+          aria-label={t('print_fewer_aria')}>−</button
         >
         <div class="stepper-value">{pages}</div>
         <button
           type="button"
           class="stepper-btn"
           onclick={() => (pages = Math.min(20, pages + 1))}
-          aria-label="More pages">+</button
+          aria-label={t('print_more_aria')}>+</button
         >
       </div>
     </div>
@@ -84,14 +85,14 @@
         />
         <rect x="6" y="14" width="12" height="6.5" rx="1" />
       </svg>
-      {busy ? 'Generating…' : `Generate ${pages} ${pages === 1 ? 'page' : 'pages'}`}
+      {busy ? t('print_busy') : plural(pages, 'print_btn_one', 'print_btn_other')}
     </button>
 
     <p
       style="margin-top:10px; font-size:12px; color:var(--muted); line-height:1.5;
               padding:10px; background:var(--paper); border-radius:10px;"
     >
-      Larger sizes and longer booklets take a moment to generate.
+      {t('print_footnote')}
     </p>
   </div>
 </div>

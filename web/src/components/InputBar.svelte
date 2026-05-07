@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CellValue } from '../state/types';
+  import { t, tf } from '../i18n/index.svelte';
 
   interface Props {
     size: number;
@@ -92,13 +93,13 @@
   let digits = $derived(Array.from({ length: max }, (_, i) => i + 1));
 </script>
 
-<div class="input-bar" role="group" aria-label="Input buttons">
+<div class="input-bar" role="group" aria-label={t('inputbar_aria')}>
   <!-- BLACK: tap = 'black' note marker, hold = place black value -->
   <button
     type="button"
     class="pad-btn"
     class:pressed={pressed('black')}
-    aria-label="Black cell (hold) / note (tap)"
+    aria-label={t('inputbar_black_aria')}
     {disabled}
     onmousedown={(e) => startPress('black', () => onPlaceValue('black'), e)}
     onmouseup={() => endPress('black', true, () => onPlaceNote('black'))}
@@ -128,7 +129,7 @@
       type="button"
       class="pad-btn"
       class:pressed={pressed(String(d))}
-      aria-label="Digit {d} (hold to place, tap for note)"
+      aria-label={tf('inputbar_digit_aria', { n: d })}
       {disabled}
       onmousedown={(e) => startPress(String(d), () => onPlaceValue(d), e)}
       onmouseup={() => endPress(String(d), true, () => onPlaceNote(d))}
@@ -154,7 +155,7 @@
     type="button"
     class="pad-btn"
     class:pressed={pressed('o')}
-    aria-label="Must be a digit (note)"
+    aria-label={t('inputbar_o_aria')}
     {disabled}
     onmousedown={(e) => startPress('o', null, e)}
     onmouseup={() => endPress('o', true, () => onPlaceNote('digits-only'))}
@@ -191,7 +192,7 @@
     type="button"
     class="pad-btn"
     class:pressed={pressed('erase')}
-    aria-label="Erase cell"
+    aria-label={t('inputbar_erase_aria')}
     {disabled}
     onmousedown={(e) => startPress('erase', onErase, e)}
     onmouseup={() => endPress('erase', true, onErase)}
