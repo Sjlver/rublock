@@ -113,6 +113,47 @@ test('share copies a URL for valid puzzles', async ({ page, context }) => {
   expect(clipboardText).toMatch(/\?p=[0-9a-zA-Z]+/);
 });
 
+test('selecting a target highlights values that lead to valid puzzles', async ({ page }) => {
+  // Hard-coded size-6 puzzle: row=[7,0,4,7,4,3], col=[0,10,4,1,0,0].
+  // It has a unique solution, so keeping row 0 at 7 stays valid.
+  await page.goto('/?p=7047430a4100');
+  await waitForReady(page);
+  await page.locator('nav.bottom-nav').getByRole('button', { name: 'Create' }).click();
+  await expect(page.locator('.page-title')).toHaveText('Create');
+
+  // Select the first row target.
+  await page.locator('.app-shell table.puzzle th[scope="row"].target').first().click();
+
+  const valueButtons = page.locator('.create-values .create-value-btn');
+  // Size 6 → max target is (6-2)*(6-1)/2 = 10, so 11 buttons (0..10).
+  await expect(valueButtons).toHaveCount(11);
+
+  // Classification runs sequentially 0..max, so once the last button is
+  // marked classified every other one is too.
+  await expect(valueButtons.last()).toHaveAttribute('data-classified', 'true');
+
+  // Buttons stay tappable regardless of validity.
+  for (let i = 0; i < 11; i++) {
+    await expect(valueButtons.nth(i)).toBeEnabled();
+  }
+
+  // The current target value (7) is part of a uniquely-solvable puzzle, so
+  // it must be marked valid.
+  await expect(page.getByRole('button', { name: 'Set target to 7' })).toHaveAttribute(
+    'data-valid',
+    'true'
+  );
+
+  // At least one other value must be invalid for this target — otherwise the
+  // highlight would be useless. We don't hard-code which one to keep the
+  // test robust against solver tweaks.
+  const validCount = await valueButtons.evaluateAll(
+    (els) => els.filter((el) => el.getAttribute('data-valid') === 'true').length
+  );
+  expect(validCount).toBeGreaterThan(0);
+  expect(validCount).toBeLessThan(11);
+});
+
 test('share toasts an error when the draft has multiple solutions', async ({ page }) => {
   await openCreateTab(page);
 
