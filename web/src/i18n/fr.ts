@@ -170,7 +170,7 @@ export const fr: Messages = {
     "Le solveur a tenté une hypothèse pour sortir d'une impasse. Rare pour les puzzles solubles à la main.",
 
   // Classification chip
-  cls_no_solution: 'Sans solution',
+  cls_no_solution: 'Aucune solution',
   cls_multiple: 'Plusieurs solutions',
   cls_normal: 'Normal',
   cls_hard: 'Difficile',

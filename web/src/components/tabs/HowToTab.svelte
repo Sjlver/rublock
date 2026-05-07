@@ -1,8 +1,9 @@
 <script lang="ts">
   import PageHeader from '../PageHeader.svelte';
   import PuzzleGrid from '../PuzzleGrid.svelte';
+  import { emptyCellValues } from '../../state/puzzle.svelte';
   import { t, md } from '../../i18n/index.svelte';
-  import type { CellValue, PuzzleData } from '../../state/types';
+  import type { PuzzleData } from '../../state/types';
   import type { MessageKey } from '../../i18n/en';
 
   const exampleSize = 5;
@@ -11,13 +12,9 @@
     col_targets: [3, 0, 3, 0, 0],
   };
 
-  function emptyValues(): CellValue[][] {
-    return Array.from({ length: exampleSize }, () => Array<CellValue>(exampleSize).fill(null));
-  }
+  const step0Values = emptyCellValues(exampleSize);
 
-  const step0Values = emptyValues();
-
-  const step1Values = emptyValues();
+  const step1Values = emptyCellValues(exampleSize);
   step1Values[0][0] = 'black';
   step1Values[0][4] = 'black';
   const step1Extras = new Map([
@@ -25,13 +22,13 @@
     ['0,4', { exNew: true }],
   ]);
 
-  const step2Values = emptyValues();
+  const step2Values = emptyCellValues(exampleSize);
   step2Values[0][0] = 'black';
   step2Values[0][4] = 'black';
   step2Values[1][4] = 'black';
   const step2Extras = new Map([['1,4', { exNew: true }]]);
 
-  const step3Values = emptyValues();
+  const step3Values = emptyCellValues(exampleSize);
   step3Values[0][0] = 'black';
   step3Values[0][4] = 'black';
   step3Values[1][4] = 'black';

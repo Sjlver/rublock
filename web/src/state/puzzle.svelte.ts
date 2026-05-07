@@ -254,17 +254,6 @@ export function applyUserNote(value: CellValue | 'digits-only'): void {
   }
 }
 
-export function applyUserInput(value: CellValue | 'digits-only'): void {
-  if (!playState.selectedCell) return;
-  if (playState.inputMode === 'notes') {
-    applyUserNote(value);
-  } else if (value !== 'digits-only') {
-    // The O button is disabled in value mode, so this branch never fires for
-    // 'digits-only' in practice — guard explicitly so the types line up.
-    applyUserValue(value);
-  }
-}
-
 export function undoInput(): void {
   const op = playState.undoStack.pop();
   if (!op) return;

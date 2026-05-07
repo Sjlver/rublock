@@ -12,9 +12,10 @@
 
   // Map locale code → label key. Catalogs only need entries for locales they
   // know about; unknown locales fall back to upper-cased code.
-  const labelKeys: Record<string, 'loc_en' | 'loc_de' | 'loc_pt'> = {
-    en: 'loc_en',
+  const labelKeys: Record<string, 'loc_en' | 'loc_de' | 'loc_pt' | 'loc_fr'> = {
     de: 'loc_de',
+    en: 'loc_en',
+    fr: 'loc_fr',
     pt: 'loc_pt',
   };
 
@@ -88,7 +89,6 @@
       class:error={statusTone === 'error'}
       class:success={statusTone === 'success'}
       role="status"
-      aria-live="polite"
     >
       {status}
     </div>

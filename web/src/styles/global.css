@@ -476,16 +476,19 @@ body {
 }
 
 /* Highlight values that lead to a uniquely-solvable puzzle for the
-   currently selected target. Other values are not disabled — the user
-   can still pick them and see the resulting status in the header. */
+   currently selected target. Uses the same accent palette as the target
+   cell's selected state in the grid, so the visual link between "the
+   target you tapped" and "the values that fit there" is obvious. Other
+   values are not disabled — the user can still pick them and see the
+   resulting status in the header. */
 .create-value-btn.valid {
-  border-color: var(--success);
-  background: color-mix(in oklab, var(--success) 14%, var(--card));
-  color: color-mix(in oklab, var(--success) 60%, var(--ink));
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-soft-ink);
 }
 
 .create-value-btn.valid:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--success) 22%, var(--card));
+  background: color-mix(in oklab, var(--accent) 22%, var(--card));
 }
 
 /* ── How-to tab ── */
@@ -667,11 +670,11 @@ body {
 }
 .promo {
   display: none;
-  font-size: 0.75rem;
-  color: #666;
+  font-size: 0.95rem;
+  color: #000;
   text-align: center;
   padding-top: 0.5rem;
-  border-top: 1px solid #ccc;
+  border-top: 1px solid #000;
   margin-top: 0.5rem;
 }
 
@@ -687,11 +690,14 @@ body {
   #print-output {
     display: block;
   }
+  /* Each page-group fills a printed page so the absolute-positioned promo
+     hugs the bottom of the page rather than the bottom of the grid. */
   .page-group {
     gap: 8mm 10mm;
     break-after: page;
     page-break-after: always;
-    padding-bottom: 12mm;
+    min-height: 95vh;
+    padding-bottom: 18mm;
   }
   .page-group:last-child {
     break-after: auto;

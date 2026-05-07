@@ -32,6 +32,14 @@
     document.documentElement.lang = currentLocale();
   });
 
+  // Scroll the tab content back to the top whenever the active tab changes
+  // — long tabs (Walkthrough, How-to) otherwise keep their scroll position
+  // when the user comes back via the bottom nav.
+  $effect(() => {
+    void tabState.active;
+    document.querySelector('.screen-content')?.scrollTo({ top: 0 });
+  });
+
   let ready = $state(false);
   let printBusy = $state(false);
 

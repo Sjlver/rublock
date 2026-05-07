@@ -58,7 +58,7 @@ export function parsePuzzleFromUrl(): PuzzleData | null {
 
 export function tabFromUrl(): TabName {
   const raw = new URLSearchParams(window.location.search).get('t') as TabName | null;
-  if (!raw || !VALID_TABS.has(raw) || raw === 'play') return 'play';
+  if (!raw || !VALID_TABS.has(raw)) return 'play';
   return raw;
 }
 
