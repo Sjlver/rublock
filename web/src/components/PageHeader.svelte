@@ -53,18 +53,31 @@
           {t('header_share')}
         </button>
       {/if}
-      <div class="size-selector locale-switcher" role="group" aria-label={t('header_locale_aria')}>
-        {#each availableLocales() as code (code)}
-          <button
-            type="button"
-            class="size-btn"
-            class:active={code === currentLocale()}
-            aria-pressed={code === currentLocale()}
-            onclick={() => setLocale(code)}
-          >
-            {localeLabel(code)}
-          </button>
-        {/each}
+      <div class="locale-switcher">
+        <select
+          class="locale-select"
+          aria-label={t('header_locale_aria')}
+          value={currentLocale()}
+          onchange={(e) => setLocale((e.currentTarget as HTMLSelectElement).value)}
+        >
+          {#each availableLocales() as code (code)}
+            <option value={code}>{localeLabel(code)}</option>
+          {/each}
+        </select>
+        <svg
+          class="locale-chevron"
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
       </div>
     </div>
   </div>
@@ -88,9 +101,44 @@
     gap: 8px;
   }
 
-  .locale-switcher .size-btn {
-    padding: 4px 8px;
-    font-size: 11.5px;
-    letter-spacing: 0.02em;
+  /* Locale switcher: native <select> styled to match the share button.
+     Native selects give us keyboard nav, screen-reader support, mobile
+     pickers, and "open on click" for free, and scale to any number of
+     options. */
+  .locale-switcher {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .locale-select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 34px;
+    padding: 0 26px 0 12px;
+    border: 1px solid var(--line-2);
+    background: var(--card);
+    border-radius: 999px;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    box-shadow: 0 1px 0 rgba(20, 20, 40, 0.03);
+  }
+  .locale-select:hover {
+    background: var(--tint);
+  }
+  .locale-select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .locale-chevron {
+    position: absolute;
+    right: 10px;
+    color: var(--muted);
+    pointer-events: none;
   }
 </style>

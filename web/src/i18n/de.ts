@@ -18,7 +18,7 @@ export const de: Messages = {
 
   // Play tab
   play_title: 'Spielen',
-  play_new_puzzle: 'Neues Rätsel',
+  play_new_puzzle: 'Neues Puzzle',
   play_undo: 'Zurück',
   play_redo: 'Vor',
   play_check: 'Prüfen',
@@ -43,32 +43,32 @@ export const de: Messages = {
   create_title: 'Erstellen',
   create_set_target_aria: 'Zielwert auf {n} setzen',
   create_values_aria: 'Zielwerte',
-  create_use: 'Dieses Rätsel verwenden',
-  create_use_aria: 'Dieses Rätsel verwenden',
-  create_use_title_valid: 'Dieses Rätsel im Spiel-Tab öffnen',
-  create_use_title_invalid: 'Nur Rätsel mit eindeutiger Lösung können verwendet werden',
-  create_share_invalid: 'Ungültiges Rätsel kann nicht geteilt werden',
+  create_use: 'Dieses Puzzle verwenden',
+  create_use_aria: 'Dieses Puzzle verwenden',
+  create_use_title_valid: 'Dieses Puzzle im Spiel-Tab öffnen',
+  create_use_title_invalid: 'Nur Puzzles mit eindeutiger Lösung können verwendet werden',
+  create_share_invalid: 'Ungültiges Puzzle kann nicht geteilt werden',
 
   // Print tab
   print_title: 'Drucken',
   print_status: 'Druckbares Heft erstellen',
   print_size: 'Größe',
   print_pages: 'Seiten',
-  print_two_per_page: 'Zwei Rätsel pro Seite',
+  print_two_per_page: 'Zwei Puzzles pro Seite',
   print_fewer_aria: 'Weniger Seiten',
   print_more_aria: 'Mehr Seiten',
   print_busy: 'Erstellen…',
   print_btn_one: '{n} Seite erstellen',
   print_btn_other: '{n} Seiten erstellen',
-  print_footnote: 'Größere Rätsel und längere Hefte brauchen einen Moment.',
+  print_footnote: 'Größere Puzzles und längere Hefte brauchen einen Moment.',
 
   // Print output
-  print_promo: 'Doplo-Rätsel erstellt mit {url}',
+  print_promo: 'Doplo-Puzzles erstellt mit {url}',
 
   // How-to tab
   howto_title: 'Anleitung',
   howto_intro:
-    'Jede Zeile und Spalte hat einen {*Zielwert*} am Anfang. Setze die Ziffern und zwei schwarze Felder so, dass das Rätsel aufgeht:',
+    'Jede Zeile und Spalte hat einen {*Zielwert*} am Anfang. Setze die Ziffern und zwei schwarze Felder so, dass das Puzzle aufgeht:',
   howto_rule1_title: 'Zwei schwarze Felder',
   howto_rule1_body: 'Jede Zeile und jede Spalte enthält genau {*zwei schwarze Felder*}.',
   howto_rule2_title: 'Eine Permutation dazwischen',
@@ -79,7 +79,7 @@ export const de: Messages = {
     'Die Zahlen {*zwischen*} den beiden schwarzen Feldern müssen den Zielwert ergeben. Ein Zielwert von {*0*} bedeutet, dass die schwarzen Felder direkt nebeneinander liegen.',
   howto_example_heading: 'Beispiel Schritt für Schritt',
   howto_example_intro:
-    'Hier ist ein frisches 5 × 5 Rätsel. Verwendet werden die Ziffern 1, 2 und 3. Wo fängst du an?',
+    'Hier ist ein frisches 5 × 5 Puzzle. Verwendet werden die Ziffern 1, 2 und 3. Wo fängst du an?',
   howto_step1_heading: 'Schritt 1 — Zeilen-Zielwert 6 ist die größtmögliche Summe',
   howto_step1_body:
     'Ziffern 1 + 2 + 3 = {*6*}. Zielwert 6 heißt: jede Ziffer liegt zwischen den beiden schwarzen Feldern, also gehören diese ganz an den Rand: Spalte 1 und Spalte 5.',
@@ -90,7 +90,7 @@ export const de: Messages = {
   howto_step3_body:
     'Zeile 2 hat schon ein schwarzes Feld in Spalte 5. Zielwert 2 heißt: genau die Ziffer {*2*} liegt zwischen den schwarzen Feldern. Setze die 2 in Spalte 4, das zweite schwarze Feld in Spalte 3.',
   howto_outro:
-    'Jeder Schluss schaltet den nächsten frei. Mach so weiter, bis das Rätsel gelöst ist — es gibt immer genau eine Lösung.',
+    'Jeder Schluss schaltet den nächsten frei. Mach so weiter, bis das Puzzle gelöst ist — es gibt immer genau eine Lösung.',
   howto_controls_heading: 'Steuerung',
   howto_controls_action: 'Aktion',
   howto_controls_touch: 'Touch / Maus',
@@ -120,12 +120,12 @@ export const de: Messages = {
 
   // Walkthrough tab
   wt_title: 'Lösungsweg',
-  wt_status_no_puzzle: 'Kein Rätsel geladen.',
+  wt_status_no_puzzle: 'Kein Puzzle geladen.',
   wt_placeholder:
-    'Wähle ein Rätsel im {*Spielen*}- oder {*Erstellen*}-Tab. Der Lösungsweg erscheint dann hier.',
+    'Wähle ein Puzzle im {*Spielen*}- oder {*Erstellen*}-Tab. Der Lösungsweg erscheint dann hier.',
   wt_error: 'Lösungsweg konnte nicht erstellt werden: {err}',
   wt_intro1:
-    'Sieh zu, wie der Löser das aktuelle Rätsel Stück für Stück knackt. Jedes Gitter unten ist eine {*Welle*} — jede Änderung in einer Welle folgt aus dem, was vorher schon bekannt war.',
+    'Sieh zu, wie der Löser das aktuelle Puzzle Stück für Stück knackt. Jedes Gitter unten ist eine {*Welle*} — jede Änderung in einer Welle folgt aus dem, was vorher schon bekannt war.',
   wt_intro2:
     'Die Felder starten mit allen Ziffern (kleine Zahlen) plus einem {*x*} für „könnte schwarz sein". Sobald Möglichkeiten ausgeschlossen werden, schrumpfen die Notizen. Bleibt nur eine übrig, wird das Feld gefüllt. Felder, die sich in einer Welle ändern, sind gelb hervorgehoben.',
   wt_start: 'Start',
@@ -139,7 +139,7 @@ export const de: Messages = {
   wt_search_sub:
     'Reine Logik kommt hier nicht weiter — der Löser probiert ab jetzt Hypothesen und macht Rückschritte. Der Rest ist zu dicht, um Gitter für Gitter zu zeigen, also springen wir direkt zur Lösung.',
   wt_solved: 'Gelöst',
-  wt_solved_sub: 'Das fertige Rätsel.',
+  wt_solved_sub: 'Das fertige Puzzle.',
   wt_status_waves_one: '{n} Welle',
   wt_status_waves_other: '{n} Wellen',
   wt_status_removed_one: '{n} Notiz entfernt',
@@ -167,7 +167,7 @@ export const de: Messages = {
   wt_rule_black_note:
     'Jede Zeile und jede Spalte hat genau zwei schwarze Felder. Diese Möglichkeiten würden ein drittes erzeugen — also fallen sie weg.',
   wt_rule_backtrack_note:
-    'Der Löser hat einen Versuch gestartet, um eine Sackgasse aufzubrechen. Bei von Hand lösbaren Rätseln selten.',
+    'Der Löser hat einen Versuch gestartet, um eine Sackgasse aufzubrechen. Bei von Hand lösbaren Puzzles selten.',
 
   // Classification chip
   cls_no_solution: 'Keine Lösung',
@@ -178,30 +178,30 @@ export const de: Messages = {
   cls_extremely_hard: 'Extrem schwer',
 
   // Toasts
-  toast_solved: 'Rätsel gelöst! 🎉',
+  toast_solved: 'Puzzle gelöst! 🎉',
   toast_check_empty: 'Trage zuerst Felder ein und prüfe dann.',
   toast_check_all_correct: 'Alle eingetragenen Felder sind richtig.',
   toast_one_wrong: 'Ein falsches Feld.',
   toast_n_wrong: '{n} falsche Felder.',
   toast_link_copied: 'Link in die Zwischenablage kopiert',
-  toast_share_failed: 'Rätsel konnte nicht geteilt werden',
+  toast_share_failed: 'Puzzle konnte nicht geteilt werden',
 
   // Web Share API
-  share_title: 'Doplo-Rätsel',
-  share_text: 'Probier dieses Doplo-Rätsel:',
+  share_title: 'Doplo-Puzzle',
+  share_text: 'Probier dieses Doplo-Puzzle:',
 
   // Wasm errors
-  err_row_targets_length: 'Anzahl Zeilen-Zielwerte passt nicht zur Rätselgröße.',
-  err_col_targets_length: 'Anzahl Spalten-Zielwerte passt nicht zur Rätselgröße.',
+  err_row_targets_length: 'Anzahl Zeilen-Zielwerte passt nicht zur Puzzle-Größe.',
+  err_col_targets_length: 'Anzahl Spalten-Zielwerte passt nicht zur Puzzle-Größe.',
   err_targets_length_mismatch: 'Zeilen- und Spalten-Zielwerte müssen gleich viele sein.',
   err_size_range: 'Größe muss zwischen 5 und 8 liegen.',
-  err_unsolvable: 'Rätsel ist nicht lösbar.',
-  err_multiple_solutions: 'Rätsel hat mehrere Lösungen.',
+  err_unsolvable: 'Puzzle ist nicht lösbar.',
+  err_multiple_solutions: 'Puzzle hat mehrere Lösungen.',
   err_incomplete_state: 'Löser lieferte einen unvollständigen Zustand.',
   err_target_out_of_range:
     'Zielwert {t} liegt außerhalb des Bereichs (Maximum {max} für Größe {size}).',
 
-  // Locale switcher
-  loc_en: 'EN',
-  loc_de: 'DE',
+  // Locale switcher — autonyms (language's own name); same in every catalog.
+  loc_en: 'English',
+  loc_de: 'Deutsch',
 };
