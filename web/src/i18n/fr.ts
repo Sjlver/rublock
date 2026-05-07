@@ -60,7 +60,8 @@ export const fr: Messages = {
   print_busy: 'Génération…',
   print_btn_one: 'Générer {n} page',
   print_btn_other: 'Générer {n} pages',
-  print_footnote: 'Les tailles plus grandes et les livrets plus longs prennent un moment à générer.',
+  print_footnote:
+    'Les tailles plus grandes et les livrets plus longs prennent un moment à générer.',
 
   // Print output
   print_promo: 'Puzzles Doplo générés sur {url}',
@@ -83,7 +84,8 @@ export const fr: Messages = {
   howto_step1_heading: 'Étape 1 — La cible 6 de la ligne est la somme maximale possible',
   howto_step1_body:
     'Chiffres 1 + 2 + 3 = {*6*}. Cible 6 signifie que tous les chiffres se trouvent entre les deux cases noires, donc les cases noires vont aux extrémités : colonne 1 et colonne 5.',
-  howto_step2_heading: 'Étape 2 — La cible 0 de la colonne 5 signifie que les cases noires sont voisines',
+  howto_step2_heading:
+    'Étape 2 — La cible 0 de la colonne 5 signifie que les cases noires sont voisines',
   howto_step2_body:
     'Cible 0 signifie rien entre les cases noires — elles doivent être adjacentes. La colonne 5 a déjà une case noire en ligne 1, donc la deuxième case noire se place juste en dessous, en ligne 2.',
   howto_step3_heading: 'Étape 3 — La cible 2 de la ligne 2 fixe la deuxième case noire',
@@ -145,7 +147,6 @@ export const fr: Messages = {
   wt_status_removed_one: '{n} note supprimée',
   wt_status_removed_other: '{n} notes supprimées',
   wt_status_join: ' · ',
-  wt_extra_rules: 'La vague inclut aussi des déductions de {others}.',
 
   // Walkthrough rule labels
   wt_rule_target_tuples: 'Sommes cibles',
@@ -155,7 +156,7 @@ export const fr: Messages = {
   wt_rule_black: 'Règle des deux cases noires',
   wt_rule_backtrack: 'Hypothèse',
 
-  // Walkthrough rule notes
+  // Walkthrough rule notes — solo : affiché quand la vague n'utilise que cette règle.
   wt_rule_target_tuples_note:
     "Certains placements de chiffre ou de case noire ne peuvent faire partie d'aucun arrangement dont la somme atteint la cible de la ligne ou colonne — ceux-là sont supprimés.",
   wt_rule_arc_note:
@@ -168,6 +169,20 @@ export const fr: Messages = {
     'Chaque ligne et chaque colonne a exactement deux cases noires. Ces options créeraient une troisième — elles sont donc supprimées.',
   wt_rule_backtrack_note:
     "Le solveur a tenté une hypothèse pour sortir d'une impasse. Rare pour les puzzles solubles à la main.",
+
+  // Walkthrough rule notes — dominante : affiché quand cette règle mène une vague mixte.
+  wt_rule_target_tuples_dominant:
+    "La plupart des éliminations de cette vague viennent des sommes cibles — certains placements de chiffre ou de case noire ne peuvent faire partie d'aucun arrangement dont la somme atteint la cible de la ligne ou colonne.",
+  wt_rule_arc_dominant:
+    'La plupart des éliminations de cette vague viennent de la vérification des possibilités — aucun arrangement restant de la ligne ou colonne ne supporte encore ces options.',
+  wt_rule_singleton_dominant:
+    'La plupart des éliminations de cette vague viennent des cases forcées — une case voisine est maintenant entièrement déterminée, et sa valeur ne peut pas se répéter dans le reste de sa ligne ou colonne.',
+  wt_rule_hidden_dominant:
+    'La plupart des éliminations de cette vague viennent de la règle du seul endroit possible — une seule case d’une ligne ou colonne peut encore contenir un chiffre ou une case noire donné, donc les autres le perdent comme candidat.',
+  wt_rule_black_dominant:
+    'La plupart des éliminations de cette vague viennent de la règle des deux cases noires — chaque ligne et chaque colonne a exactement deux cases noires, donc les options qui en créeraient une troisième sont supprimées.',
+  wt_rule_backtrack_dominant:
+    "La plupart des éliminations de cette vague viennent d'hypothèses — le solveur a tenté des suppositions pour sortir d'une impasse. Rare pour les puzzles solubles à la main.",
 
   // Classification chip
   cls_no_solution: 'Aucune solution',
@@ -192,16 +207,13 @@ export const fr: Messages = {
 
   // Wasm errors
   err_row_targets_length: 'Le nombre de cibles de ligne ne correspond pas à la taille du puzzle.',
-  err_col_targets_length:
-    'Le nombre de cibles de colonne ne correspond pas à la taille du puzzle.',
-  err_targets_length_mismatch:
-    'Les cibles de ligne et de colonne doivent avoir le même nombre.',
+  err_col_targets_length: 'Le nombre de cibles de colonne ne correspond pas à la taille du puzzle.',
+  err_targets_length_mismatch: 'Les cibles de ligne et de colonne doivent avoir le même nombre.',
   err_size_range: 'La taille doit être comprise entre 5 et 8.',
   err_unsolvable: "Le puzzle n'a pas de solution.",
   err_multiple_solutions: 'Le puzzle a plusieurs solutions.',
   err_incomplete_state: 'Le solveur a renvoyé un état incomplet.',
-  err_target_out_of_range:
-    'La cible {t} est hors de portée (maximum {max} pour la taille {size}).',
+  err_target_out_of_range: 'La cible {t} est hors de portée (maximum {max} pour la taille {size}).',
 
   // Locale switcher — autonyms (language's own name); same in every catalog.
   loc_en: 'English',
