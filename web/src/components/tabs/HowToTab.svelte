@@ -1,7 +1,9 @@
 <script lang="ts">
   import PageHeader from '../PageHeader.svelte';
   import PuzzleGrid from '../PuzzleGrid.svelte';
+  import { t, md } from '../../i18n/index.svelte';
   import type { CellValue, PuzzleData } from '../../state/types';
+  import type { MessageKey } from '../../i18n/en';
 
   const exampleSize = 5;
   const exampleTargets: PuzzleData = {
@@ -40,32 +42,66 @@
     ['1,3', { exNew: true }],
   ]);
 
-  const controls = [
-    { action: 'Place a note', touch: 'Tap button', kb: 'Space, then digit' },
-    { action: 'Place an answer', touch: 'Hold button', kb: 'Digit (default)' },
-    { action: 'Toggle note/value mode', touch: '—', kb: 'Space' },
-    { action: 'Mark cell black', touch: 'Hold ■', kb: '0, B, or X' },
-    { action: 'Mark digits-only', touch: 'Tap ○', kb: '9 or O' },
-    { action: 'Erase cell', touch: 'Tap eraser', kb: 'Backspace / Delete' },
-    { action: 'Move selection', touch: 'Tap cell', kb: 'Arrow keys / WASD' },
+  const controls: { id: string; action: MessageKey; touch: MessageKey; kb: MessageKey }[] = [
+    {
+      id: 'place_note',
+      action: 'howto_ctrl_place_note',
+      touch: 'howto_ctrl_place_note_touch',
+      kb: 'howto_ctrl_place_note_kb',
+    },
+    {
+      id: 'place_value',
+      action: 'howto_ctrl_place_value',
+      touch: 'howto_ctrl_place_value_touch',
+      kb: 'howto_ctrl_place_value_kb',
+    },
+    {
+      id: 'toggle_mode',
+      action: 'howto_ctrl_toggle_mode',
+      touch: 'howto_ctrl_toggle_mode_touch',
+      kb: 'howto_ctrl_toggle_mode_kb',
+    },
+    {
+      id: 'mark_black',
+      action: 'howto_ctrl_mark_black',
+      touch: 'howto_ctrl_mark_black_touch',
+      kb: 'howto_ctrl_mark_black_kb',
+    },
+    {
+      id: 'mark_digits',
+      action: 'howto_ctrl_mark_digits',
+      touch: 'howto_ctrl_mark_digits_touch',
+      kb: 'howto_ctrl_mark_digits_kb',
+    },
+    {
+      id: 'erase',
+      action: 'howto_ctrl_erase',
+      touch: 'howto_ctrl_erase_touch',
+      kb: 'howto_ctrl_erase_kb',
+    },
+    {
+      id: 'move',
+      action: 'howto_ctrl_move',
+      touch: 'howto_ctrl_move_touch',
+      kb: 'howto_ctrl_move_kb',
+    },
   ];
 </script>
 
-<PageHeader title="How to play" />
+<PageHeader title={t('howto_title')} />
 
 <div class="tab-content">
   <div class="card">
     <p class="howto-prose">
-      Each row and column has a <strong style="color:var(--ink)">target</strong> at its head. Place the
-      digits and two black squares so the puzzle makes sense:
+      {@html md(t('howto_intro'))}
     </p>
 
     <div class="rule-row">
       <div class="rule-number">1</div>
       <div>
-        <div class="rule-title">Two blacks</div>
+        <div class="rule-title">{t('howto_rule1_title')}</div>
         <div class="rule-body">
-          Each row and each column contains exactly <strong>two black squares</strong>.
+          {@html md(t('howto_rule1_body'))}
         </div>
       </div>
     </div>
@@ -73,10 +109,9 @@
     <div class="rule-row">
       <div class="rule-number">2</div>
       <div>
-        <div class="rule-title">A permutation in between</div>
+        <div class="rule-title">{t('howto_rule2_title')}</div>
         <div class="rule-body">
-          The other cells in each row and column hold the digits <strong>1 to N − 2</strong> — each appearing
-          once.
+          {@html md(t('howto_rule2_body'))}
         </div>
       </div>
     </div>
@@ -84,19 +119,20 @@
     <div class="rule-row">
       <div class="rule-number">3</div>
       <div>
-        <div class="rule-title">Sum to the target</div>
+        <div class="rule-title">{t('howto_rule3_title')}</div>
         <div class="rule-body">
-          The numbers <strong>between</strong> the two blacks must add up to the target shown. A
-          target of <strong>0</strong> means the two blacks are adjacent.
+          {@html md(t('howto_rule3_body'))}
         </div>
       </div>
     </div>
 
     <div class="divider"></div>
 
-    <h2 style="font-size:13.5px; font-weight:700; margin-bottom:8px;">Step-by-step example</h2>
+    <h2 style="font-size:13.5px; font-weight:700; margin-bottom:8px;">
+      {t('howto_example_heading')}
+    </h2>
     <p class="howto-prose" style="font-size:13px;">
-      Here is a fresh 5 × 5 puzzle. The digits used are 1, 2, and 3. Where do you start?
+      {t('howto_example_intro')}
     </p>
 
     <!-- NOTE TO IMPLEMENTER: the worked examples below are from the original app.
@@ -107,11 +143,10 @@
     </div>
 
     <h3 style="font-size:13px; font-weight:700; color:var(--accent-soft-ink); margin:12px 0 4px;">
-      Step 1 — Row target 6 is the maximum possible sum
+      {t('howto_step1_heading')}
     </h3>
     <p class="howto-prose" style="font-size:13px;">
-      Digits 1 + 2 + 3 = <strong>6</strong>. Target 6 means every digit lies between the two blacks,
-      so blacks go at the very ends: column 1 and column 5.
+      {@html md(t('howto_step1_body'))}
     </p>
 
     <div class="howto-step">
@@ -119,11 +154,10 @@
     </div>
 
     <h3 style="font-size:13px; font-weight:700; color:var(--accent-soft-ink); margin:12px 0 4px;">
-      Step 2 — Column 5 target 0 means the blacks are neighbours
+      {t('howto_step2_heading')}
     </h3>
     <p class="howto-prose" style="font-size:13px;">
-      Target 0 means nothing between the blacks — they must be adjacent. Column 5 already has a
-      black in row 1, so the second black sits immediately below in row 2.
+      {t('howto_step2_body')}
     </p>
 
     <div class="howto-step">
@@ -131,11 +165,10 @@
     </div>
 
     <h3 style="font-size:13px; font-weight:700; color:var(--accent-soft-ink); margin:12px 0 4px;">
-      Step 3 — Row 2 target 2 pins the second black
+      {t('howto_step3_heading')}
     </h3>
     <p class="howto-prose" style="font-size:13px;">
-      Row 2 already has a black at column 5. Target 2 means exactly digit <strong>2</strong>
-      sits between the blacks. Place 2 at column 4, and the second black at column 3.
+      {@html md(t('howto_step3_body'))}
     </p>
 
     <div class="howto-step">
@@ -143,34 +176,35 @@
     </div>
 
     <p class="howto-prose" style="font-size:13px; margin-top:10px;">
-      Each deduction unlocks the next. Keep going until the puzzle is complete — there is always
-      exactly one solution.
+      {t('howto_outro')}
     </p>
 
     <div class="divider"></div>
 
-    <h2 style="font-size:13.5px; font-weight:700; margin-bottom:8px;">Controls</h2>
+    <h2 style="font-size:13.5px; font-weight:700; margin-bottom:8px;">
+      {t('howto_controls_heading')}
+    </h2>
     <div class="controls-table">
       <div
         class="controls-row-item"
         style="padding-bottom:6px; font-size:11px; font-weight:700;
            color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;"
       >
-        <div>Action</div>
-        <div>Touch / mouse</div>
-        <div>Keyboard</div>
+        <div>{t('howto_controls_action')}</div>
+        <div>{t('howto_controls_touch')}</div>
+        <div>{t('howto_controls_kb')}</div>
       </div>
-      {#each controls as row (row.action)}
+      {#each controls as row (row.id)}
         <div class="controls-row-item">
-          <div class="controls-action">{row.action}</div>
-          <div class="controls-touch">{row.touch}</div>
-          <div class="controls-kb">{row.kb}</div>
+          <div class="controls-action">{t(row.action)}</div>
+          <div class="controls-touch">{t(row.touch)}</div>
+          <div class="controls-kb">{t(row.kb)}</div>
         </div>
       {/each}
     </div>
 
     <p style="margin-top:12px; font-size:12px; color:var(--muted); line-height:1.5;">
-      Source code:
+      {t('howto_source')}
       <a
         href="https://github.com/Sjlver/rublock"
         target="_blank"

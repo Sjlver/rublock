@@ -1,6 +1,7 @@
 import type { ClassifiedPuzzle, PuzzleData } from './types';
 import { classifyPuzzle } from '../wasm/api';
 import { puzzleKey } from './puzzle.svelte';
+import { t } from '../i18n/index.svelte';
 
 export type ClassificationResult = ClassifiedPuzzle | { error: string };
 
@@ -17,17 +18,17 @@ export function difficulty(c: ClassifiedPuzzle, size: number): Difficulty {
 export function classificationLabel(c: ClassificationResult | null, size: number): string {
   if (!c) return '';
   if ('error' in c) return c.error;
-  if (c.variant === 'unsolvable') return 'No solution';
-  if (c.variant === 'multiple') return 'Multiple solutions';
+  if (c.variant === 'unsolvable') return t('cls_no_solution');
+  if (c.variant === 'multiple') return t('cls_multiple');
   switch (difficulty(c, size)) {
     case 'normal':
-      return 'Normal';
+      return t('cls_normal');
     case 'hard':
-      return 'Hard';
+      return t('cls_hard');
     case 'very-hard':
-      return 'Very hard';
+      return t('cls_very_hard');
     case 'extremely-hard':
-      return 'Extremely hard';
+      return t('cls_extremely_hard');
     default:
       return '';
   }

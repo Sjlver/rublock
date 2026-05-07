@@ -1,22 +1,24 @@
 <script lang="ts">
   import type { TabName } from '../state/types';
   import { tabState, setTab } from '../state/url.svelte';
+  import { t } from '../i18n/index.svelte';
+  import type { MessageKey } from '../i18n/en';
 
   interface Tab {
     id: TabName;
-    label: string;
+    labelKey: MessageKey;
   }
 
   const TABS: Tab[] = [
-    { id: 'play', label: 'Play' },
-    { id: 'steps', label: 'Walkthrough' },
-    { id: 'create', label: 'Create' },
-    { id: 'print', label: 'Print' },
-    { id: 'howto', label: 'How to play' },
+    { id: 'play', labelKey: 'nav_play' },
+    { id: 'steps', labelKey: 'nav_steps' },
+    { id: 'create', labelKey: 'nav_create' },
+    { id: 'print', labelKey: 'nav_print' },
+    { id: 'howto', labelKey: 'nav_howto' },
   ];
 </script>
 
-<nav class="bottom-nav" aria-label="Main sections">
+<nav class="bottom-nav" aria-label={t('nav_aria')}>
   <div class="bottom-nav-inner">
     {#each TABS as tab (tab.id)}
       {@const isActive = tabState.active === tab.id}
@@ -130,7 +132,7 @@
             </svg>
           {/if}
         </div>
-        <span class="nav-btn-label">{tab.label}</span>
+        <span class="nav-btn-label">{t(tab.labelKey)}</span>
       </button>
     {/each}
   </div>

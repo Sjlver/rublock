@@ -4,6 +4,8 @@
   import { playState } from '../../state/puzzle.svelte';
   import { explainPuzzle } from '../../wasm/api';
   import { trackEvent } from '../../analytics';
+  import { t, tf, plural, format, md } from '../../i18n/index.svelte';
+  import type { MessageKey } from '../../i18n/en';
   import type {
     CellNotes,
     CellValue,
@@ -162,42 +164,37 @@
 
   // Friendly labels for the propagation rules. Wording avoids solver-internal
   // jargon — the user does not need to know what "arc consistency" is.
-  const RULE_LABELS: Record<ExplainRule, string> = {
-    TargetTuples: 'Target sums',
-    ArcConsistency: 'Possibility check',
-    Singleton: 'Forced cells',
-    HiddenSingle: 'Only place',
-    BlackConsistency: 'Two-blacks rule',
-    Backtracking: 'Hypothesis',
+  const RULE_LABEL_KEYS: Record<ExplainRule, MessageKey> = {
+    TargetTuples: 'wt_rule_target_tuples',
+    ArcConsistency: 'wt_rule_arc',
+    Singleton: 'wt_rule_singleton',
+    HiddenSingle: 'wt_rule_hidden',
+    BlackConsistency: 'wt_rule_black',
+    Backtracking: 'wt_rule_backtrack',
   };
 
-  const RULE_NOTES: Record<ExplainRule, string> = {
-    TargetTuples:
-      'Some digit or black placements simply cannot be part of any arrangement that adds up to the row or column target — those are removed.',
-    ArcConsistency:
-      'No remaining arrangement of this row or column still supports these options, so they are eliminated.',
-    Singleton:
-      'A nearby cell is now fully determined, and its value cannot repeat in the rest of its row or column.',
-    HiddenSingle:
-      'Only one cell in this row or column can still hold this digit or black, so the others lose it as a candidate.',
-    BlackConsistency:
-      'Each row and each column has exactly two blacks. These options would create a third one — so they go.',
-    Backtracking: 'The solver tried a guess to break a deadlock. Rare for hand-solvable puzzles.',
+  const RULE_NOTE_KEYS: Record<ExplainRule, MessageKey> = {
+    TargetTuples: 'wt_rule_target_tuples_note',
+    ArcConsistency: 'wt_rule_arc_note',
+    Singleton: 'wt_rule_singleton_note',
+    HiddenSingle: 'wt_rule_hidden_note',
+    BlackConsistency: 'wt_rule_black_note',
+    Backtracking: 'wt_rule_backtrack_note',
   };
 
   function rulesHeading(counts: { rule: ExplainRule; count: number }[]): string {
     if (counts.length === 0) return '';
-    return counts.map(({ rule, count }) => `${count} · ${RULE_LABELS[rule]}`).join('   ');
+    return counts.map(({ rule, count }) => `${count} · ${t(RULE_LABEL_KEYS[rule])}`).join('   ');
   }
 
   function rulesExplanation(counts: { rule: ExplainRule; count: number }[]): string {
     if (counts.length === 0) return '';
-    if (counts.length === 1) return RULE_NOTES[counts[0].rule];
+    if (counts.length === 1) return t(RULE_NOTE_KEYS[counts[0].rule]);
     // Several rules contributed in this wave — give the dominant rule's
     // explanation, mentioning that others helped.
     const [first, ...rest] = counts;
-    const others = rest.map(({ rule }) => RULE_LABELS[rule].toLowerCase()).join(', ');
-    return `${RULE_NOTES[first.rule]} The wave also includes deductions from ${others}.`;
+    const others = rest.map(({ rule }) => t(RULE_LABEL_KEYS[rule]).toLowerCase()).join(', ');
+    return `${t(RULE_NOTE_KEYS[first.rule])} ${format(t('wt_extra_rules'), { others })}`;
   }
 
   type Result = { ok: true; data: ExplainedPuzzle } | { ok: false; error: string } | null;
@@ -230,17 +227,21 @@
   });
 
   let statusText = $derived.by(() => {
-    if (!playState.puzzleData) return 'No puzzle loaded.';
+    if (!playState.puzzleData) return t('wt_status_no_puzzle');
     if (result?.ok === false) return result.error;
     if (!view) return '';
-    const wavesLabel = `${view.deductiveWaves} wave${view.deductiveWaves === 1 ? '' : 's'}`;
-    const removalsLabel = `${view.totalRemoved} note${view.totalRemoved === 1 ? '' : 's'} removed`;
-    return `${wavesLabel} · ${removalsLabel}`;
+    const wavesLabel = plural(view.deductiveWaves, 'wt_status_waves_one', 'wt_status_waves_other');
+    const removalsLabel = plural(
+      view.totalRemoved,
+      'wt_status_removed_one',
+      'wt_status_removed_other'
+    );
+    return `${wavesLabel}${t('wt_status_join')}${removalsLabel}`;
   });
 </script>
 
 <PageHeader
-  title="Walkthrough"
+  title={t('wt_title')}
   status={statusText}
   statusTone={result?.ok === false ? 'error' : 'default'}
 />
@@ -248,30 +249,25 @@
 <div class="tab-content">
   {#if !playState.puzzleData}
     <div class="walkthrough-placeholder">
-      Pick a puzzle on the <strong>Play</strong> or <strong>Create</strong> tab. The step-by-step solution
-      will appear here.
+      {@html md(t('wt_placeholder'))}
     </div>
   {:else if result?.ok === false}
     <div class="walkthrough-placeholder" data-testid="walkthrough-error">
-      Could not generate a walkthrough: {result.error}
+      {tf('wt_error', { err: result.error })}
     </div>
   {:else if view}
     <div class="card walkthrough-intro">
       <p class="howto-prose" style="margin: 0;">
-        Watch the solver chip away at the current puzzle. Each grid below is one <strong
-          >wave</strong
-        > — every change in a wave can be made from what was known before it.
+        {@html md(t('wt_intro1'))}
       </p>
       <p class="howto-prose" style="margin: 8px 0 0;">
-        Cells start with every digit (small numbers) plus an
-        <strong>x</strong> for "could be black". As options get ruled out, the notes shrink. When only
-        one option is left, the cell is filled in. Cells that changed in a wave are highlighted in yellow.
+        {@html md(t('wt_intro2'))}
       </p>
     </div>
 
     <section class="walkthrough-wave" data-testid="walkthrough-wave-initial">
-      <h2 class="walkthrough-wave-title">Start</h2>
-      <p class="walkthrough-wave-sub">Every cell could still hold any digit or be black.</p>
+      <h2 class="walkthrough-wave-title">{t('wt_start')}</h2>
+      <p class="walkthrough-wave-sub">{t('wt_start_sub')}</p>
       <div class="walkthrough-grid">
         <PuzzleGrid
           puzzle={playState.puzzleData}
@@ -285,9 +281,9 @@
       {#if item.kind === 'wave'}
         <section class="walkthrough-wave" data-testid="walkthrough-wave">
           <h2 class="walkthrough-wave-title">
-            Wave {item.index}
+            {tf('wt_wave', { n: item.index })}
             <span class="walkthrough-wave-count"
-              >· {item.total} note{item.total === 1 ? '' : 's'} removed</span
+              >{plural(item.total, 'wt_wave_one', 'wt_wave_other')}</span
             >
           </h2>
           <p class="walkthrough-wave-rules">{rulesHeading(item.counts)}</p>
@@ -304,21 +300,19 @@
       {:else if item.kind === 'summary'}
         <section class="walkthrough-wave" data-testid="walkthrough-summary">
           <h2 class="walkthrough-wave-title">
-            Search
+            {t('wt_search')}
             <span class="walkthrough-wave-count"
-              >· {item.searchNodes} guess{item.searchNodes === 1 ? '' : 'es'}</span
+              >{plural(item.searchNodes, 'wt_guess_one', 'wt_guess_other')}</span
             >
           </h2>
           <p class="walkthrough-wave-sub">
-            Pure deduction can't crack this one — from here the solver tries hypotheses and
-            backtracks. The remaining work is too dense to draw out grid by grid, so we skip ahead
-            to the answer.
+            {t('wt_search_sub')}
           </p>
         </section>
       {:else}
         <section class="walkthrough-wave" data-testid="walkthrough-wave-final">
-          <h2 class="walkthrough-wave-title">Solved</h2>
-          <p class="walkthrough-wave-sub">The final puzzle.</p>
+          <h2 class="walkthrough-wave-title">{t('wt_solved')}</h2>
+          <p class="walkthrough-wave-sub">{t('wt_solved_sub')}</p>
           <div class="walkthrough-grid">
             <PuzzleGrid puzzle={playState.puzzleData} values={item.values} notes={item.notes} />
           </div>
