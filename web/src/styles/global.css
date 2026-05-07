@@ -690,14 +690,11 @@ body {
   #print-output {
     display: block;
   }
-  /* Each page-group fills a printed page so the absolute-positioned promo
-     hugs the bottom of the page rather than the bottom of the grid. */
   .page-group {
     gap: 8mm 10mm;
     break-after: page;
     page-break-after: always;
-    min-height: 95vh;
-    padding-bottom: 18mm;
+    padding-bottom: 12mm;
   }
   .page-group:last-child {
     break-after: auto;
