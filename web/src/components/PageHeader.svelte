@@ -12,9 +12,10 @@
 
   // Map locale code → label key. Catalogs only need entries for locales they
   // know about; unknown locales fall back to upper-cased code.
-  const labelKeys: Record<string, 'loc_en' | 'loc_de'> = {
+  const labelKeys: Record<string, 'loc_en' | 'loc_de' | 'loc_pt'> = {
     en: 'loc_en',
     de: 'loc_de',
+    pt: 'loc_pt',
   };
 
   function localeLabel(code: string): string {

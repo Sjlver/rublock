@@ -72,7 +72,7 @@ export const en = {
   print_status: 'Generate a printable booklet',
   print_size: 'Size',
   print_pages: 'Pages',
-  print_two_per_page: 'Two puzzles per page',
+  print_six_per_page: 'Six puzzles per page',
   print_fewer_aria: 'Fewer pages',
   print_more_aria: 'More pages',
   print_busy: 'Generating…',
@@ -221,6 +221,7 @@ export const en = {
   // Locale switcher — autonyms (language's own name); same in every catalog.
   loc_en: 'English',
   loc_de: 'Deutsch',
+  loc_pt: 'Português',
 };
 
 export type MessageKey = keyof typeof en;

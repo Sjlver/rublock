@@ -46,7 +46,7 @@
     <div class="field-row">
       <div>
         <div class="field-label">{t('print_pages')}</div>
-        <div class="field-hint">{t('print_two_per_page')}</div>
+        <div class="field-hint">{t('print_six_per_page')}</div>
       </div>
       <div class="stepper">
         <button
