@@ -12,6 +12,7 @@
     classificationTone,
     type ClassificationResult,
   } from '../../state/classification';
+  import type { PuzzleData } from '../../state/types';
   import {
     SUPPORTED_SIZES,
     activeDraft,
@@ -34,10 +35,12 @@
   function handleSizeClick(s: SupportedSize): void {
     if (s === createState.size) return;
     ensureDraft(s);
+    refreshValidValues();
   }
 
   function handleTargetClick(axis: 'row' | 'col', index: number): void {
     selectTarget(axis, index);
+    refreshValidValues();
   }
 
   function handleValueClick(value: number): void {
@@ -104,6 +107,56 @@
   let max = $derived(maxTargetForSize(createState.size));
   let values = $derived(Array.from({ length: max + 1 }, (_, i) => i));
   let valueStripDisabled = $derived(draft?.selected == null);
+
+  // ── Per-value validity ─────────────────────────────────────────────────────
+  // For the currently selected target, classify the puzzle that would result
+  // from each candidate value 0..=max. Buttons backed by `unique`-solution
+  // values get a "valid" highlight; unclassified buttons stay neutral so the
+  // user can still tap them (they're not disabled).
+  //
+  // We classify one value at a time and yield to the event loop between calls
+  // so the UI stays responsive on size 8. A monotonically increasing token
+  // cancels the in-flight loop whenever the relevant inputs change.
+  let validValues = $state<(boolean | undefined)[]>([]);
+  let classifyToken = 0;
+
+  function refreshValidValues(): void {
+    const d = activeDraft();
+    classifyToken++;
+    if (!d || !d.selected) {
+      validValues = [];
+      return;
+    }
+    const sel = { axis: d.selected.axis, index: d.selected.index };
+    const m = maxTargetForSize(d.size);
+    const rowSnap = [...d.rowTargets];
+    const colSnap = [...d.colTargets];
+    const myToken = classifyToken;
+    validValues = new Array<boolean | undefined>(m + 1).fill(undefined);
+
+    void (async () => {
+      for (let v = 0; v <= m; v++) {
+        if (myToken !== classifyToken) return;
+        const puzzle: PuzzleData = {
+          row_targets: [...rowSnap],
+          col_targets: [...colSnap],
+        };
+        if (sel.axis === 'row') puzzle.row_targets[sel.index] = v;
+        else puzzle.col_targets[sel.index] = v;
+        let isValid = false;
+        try {
+          isValid = classifyPuzzle(puzzle).variant === 'unique';
+        } catch {
+          isValid = false;
+        }
+        if (myToken !== classifyToken) return;
+        validValues[v] = isValid;
+        // Yield so the browser can paint the freshly classified button and
+        // process input before we tackle the next value.
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
+    })();
+  }
 </script>
 
 <PageHeader
@@ -150,9 +203,12 @@
       <button
         type="button"
         class="create-value-btn"
+        class:valid={validValues[v] === true}
         disabled={valueStripDisabled}
         onclick={() => handleValueClick(v)}
         aria-label={`Set target to ${v}`}
+        data-classified={validValues[v] !== undefined}
+        data-valid={validValues[v] === true}
       >
         {v}
       </button>

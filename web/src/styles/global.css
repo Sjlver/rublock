@@ -475,6 +475,19 @@ body {
   background: var(--tint);
 }
 
+/* Highlight values that lead to a uniquely-solvable puzzle for the
+   currently selected target. Other values are not disabled — the user
+   can still pick them and see the resulting status in the header. */
+.create-value-btn.valid {
+  border-color: var(--success);
+  background: color-mix(in oklab, var(--success) 14%, var(--card));
+  color: color-mix(in oklab, var(--success) 60%, var(--ink));
+}
+
+.create-value-btn.valid:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--success) 22%, var(--card));
+}
+
 /* ── How-to tab ── */
 
 .howto-prose {
