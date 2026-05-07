@@ -218,9 +218,9 @@ export const en = {
   err_incomplete_state: 'Solver returned an incomplete state.',
   err_target_out_of_range: 'Target {t} is out of range (max is {max} for size {size}).',
 
-  // Locale switcher
-  loc_en: 'EN',
-  loc_de: 'DE',
+  // Locale switcher — autonyms (language's own name); same in every catalog.
+  loc_en: 'English',
+  loc_de: 'Deutsch',
 };
 
 export type MessageKey = keyof typeof en;
