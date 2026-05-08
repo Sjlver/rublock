@@ -25,6 +25,15 @@ export type SupportedSize = (typeof SUPPORTED_SIZES)[number];
 // goes through the proxy's setters and stays consistent across size
 // switches; storing draft objects in a separate plain Map would risk
 // drifting between the proxy's view and the cached reference.
+//
+// Note: Create-tab drafts are intentionally NOT persisted to localStorage.
+// Issue #9 scopes persistence to the Play tab's in-progress puzzle, where
+// losing partial progress is genuinely painful. A draft on this tab is just
+// a handful of target numbers — cheap to retype — and adding a second
+// storage slot or merged schema would complicate the UI without a
+// proportional benefit (the user would either need a "load from Play"
+// button or some other resolution flow for stored vs. seeded drafts).
+// Revisit if real users report losing long target sequences here.
 export const createState = $state({
   size: 6 as SupportedSize,
   drafts: {} as Partial<Record<SupportedSize, CreateDraft>>,

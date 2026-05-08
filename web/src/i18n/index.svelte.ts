@@ -2,8 +2,7 @@ import { en, type MessageKey, type Messages } from './en';
 import { de } from './de';
 import { pt } from './pt';
 import { fr } from './fr';
-
-const STORAGE_KEY = 'rublock-locale';
+import { readStoredLocale, writeStoredLocale } from '../state/storage';
 
 const catalogs: Record<string, Messages> = { de, en, fr, pt };
 const AVAILABLE = Object.keys(catalogs).sort();
@@ -51,25 +50,9 @@ export function md(s: string): string {
   return esc.replace(/\{\*([^*]+)\*\}/g, '<strong>$1</strong>');
 }
 
-function readStored(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(value: string): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, value);
-  } catch {
-    // Ignore — preference just won't persist.
-  }
-}
-
 /** Resolve locale at boot: explicit choice > browser language > 'en'. */
 export function detectLocale(): string {
-  const stored = readStored();
+  const stored = readStoredLocale();
   if (stored && stored in catalogs) return stored;
 
   // navigator.languages can be undefined in old environments / tests.
@@ -86,7 +69,7 @@ export function detectLocale(): string {
 export function setLocale(l: string): void {
   if (!(l in catalogs)) return;
   locale = l;
-  writeStored(l);
+  writeStoredLocale(l);
   if (typeof document !== 'undefined') {
     document.documentElement.lang = l;
   }

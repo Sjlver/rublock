@@ -78,7 +78,7 @@ export function loadRandomPuzzle(size: number): void {
   trackEvent(`rublock/play/generate/${size}`);
 }
 
-interface PerSizeState {
+export interface PerSizeState {
   puzzleData: PuzzleData;
   cellValues: CellValue[][];
   cellNotes: CellNotes[][];
@@ -89,11 +89,14 @@ interface PerSizeState {
   wrongCells: SvelteSet<string>;
 }
 
-const sizeStates = new Map<number, PerSizeState>();
+// Reactive so the persistence effect in `storage.svelte.ts` re-fires when
+// any size's state changes — including via `ensurePlayPuzzleForSize`, which
+// can populate a slot without touching `playState`.
+export const sizeStates = $state<Partial<Record<number, PerSizeState>>>({});
 
 function saveCurrentState(): void {
   if (!playState.puzzleData) return;
-  sizeStates.set(playState.puzzleData.row_targets.length, {
+  sizeStates[playState.puzzleData.row_targets.length] = {
     puzzleData: playState.puzzleData,
     cellValues: playState.cellValues.map((row) => [...row]),
     cellNotes: playState.cellNotes.map((row) => [...row]),
@@ -102,10 +105,10 @@ function saveCurrentState(): void {
     undoStack: [...playState.undoStack],
     redoStack: [...playState.redoStack],
     wrongCells: new SvelteSet(playState.wrongCells),
-  });
+  };
 }
 
-function loadSavedState(saved: PerSizeState): void {
+function applyPerSizeState(saved: PerSizeState): void {
   playState.puzzleData = saved.puzzleData;
   playState.cellValues = saved.cellValues;
   playState.cellNotes = saved.cellNotes;
@@ -122,9 +125,9 @@ export function switchToSize(size: number): void {
   if (playState.puzzleData?.row_targets.length === size) return;
   saveCurrentState();
 
-  const saved = sizeStates.get(size);
+  const saved = sizeStates[size];
   if (saved) {
-    loadSavedState(saved);
+    applyPerSizeState(saved);
   } else {
     setPuzzle(generatePuzzle(size));
     trackEvent(`rublock/play/generate/${size}`);
@@ -141,11 +144,11 @@ export function ensurePlayPuzzleForSize(size: number): PuzzleData {
   if (playState.puzzleData?.row_targets.length === size) {
     return playState.puzzleData;
   }
-  const saved = sizeStates.get(size);
+  const saved = sizeStates[size];
   if (saved) return saved.puzzleData;
   const data = generatePuzzle(size);
   trackEvent(`rublock/play/generate/${size}`);
-  const blank: PerSizeState = {
+  sizeStates[size] = {
     puzzleData: data,
     cellValues: emptyCellValues(size),
     cellNotes: emptyCellNotes(size),
@@ -155,7 +158,6 @@ export function ensurePlayPuzzleForSize(size: number): PuzzleData {
     redoStack: [],
     wrongCells: new SvelteSet(),
   };
-  sizeStates.set(size, blank);
   return data;
 }
 
@@ -168,13 +170,13 @@ export function ensurePlayPuzzleForSize(size: number): PuzzleData {
 export function replacePlayPuzzle(data: PuzzleData): void {
   const size = data.row_targets.length;
   saveCurrentState();
-  sizeStates.delete(size);
+  delete sizeStates[size];
   setPuzzle(data);
 }
 
 /** Generate a fresh puzzle for the current size, discarding any saved state. */
 export function newPuzzle(size: number): void {
-  sizeStates.delete(size);
+  delete sizeStates[size];
   setPuzzle(generatePuzzle(size));
   trackEvent(`rublock/play/generate/${size}`);
 }
