@@ -1,13 +1,7 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { playState, sizeStates, type PerSizeState } from './puzzle.svelte';
 import { KEY_PLAY_STATE, safeRead, safeRemove, safeWrite } from './storage';
-import type {
-  CellNotes,
-  CellOperation,
-  CellValue,
-  InputMode,
-  PuzzleData,
-} from './types';
+import type { CellNotes, CellOperation, CellValue, InputMode, PuzzleData } from './types';
 
 const STORAGE_VERSION = 1;
 const DEBOUNCE_MS = 250;
@@ -52,11 +46,7 @@ function isInputMode(v: unknown): v is InputMode {
   return v === 'value' || v === 'notes';
 }
 
-function validateGrid<T>(
-  raw: unknown,
-  size: number,
-  check: (v: unknown) => v is T
-): T[][] | null {
+function validateGrid<T>(raw: unknown, size: number, check: (v: unknown) => v is T): T[][] | null {
   if (!Array.isArray(raw) || raw.length !== size) return null;
   const rows: T[][] = [];
   for (const row of raw) {
@@ -167,7 +157,15 @@ function validateSize(raw: unknown): SavedSizeState | null {
     wrongCells.push(k);
   }
 
-  return { puzzle, cellValues, cellNotes, inputMode: s.inputMode, undoStack, redoStack, wrongCells };
+  return {
+    puzzle,
+    cellValues,
+    cellNotes,
+    inputMode: s.inputMode,
+    undoStack,
+    redoStack,
+    wrongCells,
+  };
 }
 
 function validate(raw: unknown): SavedPlayState | null {
