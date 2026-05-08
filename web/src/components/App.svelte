@@ -9,7 +9,12 @@
   import PuzzleGrid from './PuzzleGrid.svelte';
   import { initWasm, generatePuzzle } from '../wasm/api';
   import { reportFatal } from '../error-overlay';
-  import { loadRandomPuzzle, setPuzzle } from '../state/puzzle.svelte';
+  import { loadRandomPuzzle, replacePlayPuzzle } from '../state/puzzle.svelte';
+  import {
+    applySavedStateToMemory,
+    installPersistEffect,
+    loadSavedState,
+  } from '../state/storage.svelte';
   import {
     parsePuzzleFromUrl,
     clearUrlParams,
@@ -41,25 +46,45 @@
   });
 
   let ready = $state(false);
+  let persistReady = $state(false);
   let printBusy = $state(false);
 
   type PrintGroup = { puzzles: PuzzleData[] };
   const printGroups = $state<PrintGroup[]>([]);
 
+  // Install the persistence effect during component init. It subscribes to
+  // playState/sizeStates immediately but only writes once `persistReady`
+  // flips after the boot logic in onMount has populated state.
+  installPersistEffect(() => persistReady);
+
   onMount(async () => {
+    // Boot priority for the Play tab puzzle:
+    //   1. URL `?p=` overrides only its own size; other saved sizes survive.
+    //   2. Otherwise restore from localStorage (all sizes).
+    //   3. Otherwise generate a fresh 6×6.
+    const saved = loadSavedState();
     const fromUrl = parsePuzzleFromUrl();
     try {
       await initWasm();
+
+      if (saved) applySavedStateToMemory(saved);
+
       if (fromUrl) {
-        setPuzzle(fromUrl);
-      } else {
+        // `replacePlayPuzzle` saves the previous active size into sizeStates,
+        // drops any saved progress for the URL puzzle's size, and makes the
+        // URL puzzle active.
+        replacePlayPuzzle(fromUrl);
+      } else if (!saved) {
         loadRandomPuzzle(6);
       }
+
       const t = tabFromUrl();
       if (t !== 'play') setTab(t);
 
       // Per DESIGN_NOTES.md: clear the URL param after loading — keep URL clean.
       clearUrlParams();
+
+      persistReady = true;
 
       // Pre-generate one page so Ctrl+P works immediately.
       await fillPrintOutput(6, 1);

@@ -29,17 +29,10 @@
     classificationTone,
   } from '../../state/classification';
   import { t } from '../../i18n/index.svelte';
+  import { readHintDismissed, writeHintDismissed } from '../../state/storage';
 
   let showEmojiRain = $state(false);
-  let hintDismissed = $state<boolean>(
-    (() => {
-      try {
-        return localStorage.getItem('rublock-hint-dismissed') === '1';
-      } catch {
-        return false;
-      }
-    })()
-  );
+  let hintDismissed = $state<boolean>(readHintDismissed());
 
   let status = $state('');
 
@@ -167,9 +160,7 @@
 
   function dismissHint(): void {
     hintDismissed = true;
-    try {
-      localStorage.setItem('rublock-hint-dismissed', '1');
-    } catch {}
+    writeHintDismissed(true);
   }
 
   let cellExtras = $derived.by(() => {
