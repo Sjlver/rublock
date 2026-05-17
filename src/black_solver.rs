@@ -785,6 +785,39 @@ mod tests {
     }
 
     #[test]
+    fn search_nodes_recorder_matches_explain_wave_count() {
+        use crate::recorder::Explain;
+
+        // Newspaper puzzle: solvable by propagation alone, so we can check
+        // that the cheap `SearchNodes` recorder reports the same number of
+        // productive waves as the full `Explain` recorder (whose steps the
+        // walkthrough UI shows). This is what justifies using the
+        // `SearchNodes`-only path in `classify::classify` to drive the
+        // Easy/Medium/Challenging buckets in the web UI. See issue #46.
+        let puzzle = Puzzle::<6>::new([8, 2, 3, 8, 9, 0], [0, 0, 5, 9, 0, 4]);
+
+        let cheap = BlackSolverState::<6>::new(puzzle.clone());
+        let _ = cheap.solve();
+        let cheap_waves = cheap.recorder().propagation_waves();
+
+        let full = BlackSolverState::<6, Explain>::with_recorder(puzzle);
+        let _ = full.solve();
+        let full_waves = full
+            .recorder()
+            .steps()
+            .iter()
+            .filter(|s| {
+                s.events
+                    .iter()
+                    .any(|e| e.rule != crate::recorder::Rule::Backtracking)
+            })
+            .count() as u64;
+
+        assert_eq!(cheap_waves, full_waves);
+        assert!(cheap_waves >= 1);
+    }
+
+    #[test]
     fn explain_records_steps_for_solvable_puzzle() {
         use crate::recorder::Explain;
         // Newspaper puzzle with a unique solution.

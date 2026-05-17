@@ -60,13 +60,15 @@ struct Args {
     size: usize,
     min_nodes: u64,
     max_nodes: u64,
+    min_waves: u64,
+    max_waves: u64,
     threads: usize,
     solver: SolverChoice,
 }
 
 fn usage() -> ! {
     eprintln!(
-        "Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--threads=T] [--solver=basic|queue|black]"
+        "Usage: gen_puzzle [--size=N] [--min-nodes=K] [--max-nodes=K] [--min-waves=W] [--max-waves=W] [--threads=T] [--solver=basic|queue|black]"
     );
     eprintln!("  --size       grid side length, 3–11 (default: 6)");
     eprintln!(
@@ -74,6 +76,10 @@ fn usage() -> ! {
     );
     eprintln!(
         "  --max-nodes  maximum search-tree nodes the solver must visit (inclusive, default: unbounded)"
+    );
+    eprintln!("  --min-waves  minimum productive propagation waves (inclusive, default: 0)");
+    eprintln!(
+        "  --max-waves  maximum productive propagation waves (inclusive, default: unbounded)"
     );
     eprintln!("  --threads    worker threads (default: available parallelism)");
     eprintln!("  --solver     solver implementation to use (default: black)");
@@ -85,6 +91,8 @@ fn parse_args() -> Args {
         size: 6,
         min_nodes: 0,
         max_nodes: u64::MAX,
+        min_waves: 0,
+        max_waves: u64::MAX,
         threads: thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1),
@@ -98,6 +106,10 @@ fn parse_args() -> Args {
             args.min_nodes = val.parse().unwrap_or_else(|_| usage());
         } else if let Some(val) = arg.strip_prefix("--max-nodes=") {
             args.max_nodes = val.parse().unwrap_or_else(|_| usage());
+        } else if let Some(val) = arg.strip_prefix("--min-waves=") {
+            args.min_waves = val.parse().unwrap_or_else(|_| usage());
+        } else if let Some(val) = arg.strip_prefix("--max-waves=") {
+            args.max_waves = val.parse().unwrap_or_else(|_| usage());
         } else if let Some(val) = arg.strip_prefix("--threads=") {
             args.threads = val.parse().unwrap_or_else(|_| usage());
         } else if let Some(val) = arg.strip_prefix("--solver=") {
@@ -124,6 +136,13 @@ fn parse_args() -> Args {
         eprintln!(
             "--max-nodes ({}) must be >= --min-nodes ({})",
             args.max_nodes, args.min_nodes
+        );
+        std::process::exit(1);
+    }
+    if args.max_waves < args.min_waves {
+        eprintln!(
+            "--max-waves ({}) must be >= --min-waves ({})",
+            args.max_waves, args.min_waves
         );
         std::process::exit(1);
     }
@@ -343,6 +362,10 @@ fn worker<const N: usize, S: Solver<N>>(
             let mut st = S::new(puzzle);
             st.propagate();
             if st.is_solved() {
+                let waves = st.recorder().propagation_waves();
+                if !(args.min_waves..=args.max_waves).contains(&waves) {
+                    continue;
+                }
                 shared.done.store(true, Ordering::Relaxed);
                 let _ = tx.send((row_targets, col_targets, 1));
                 return;
@@ -350,19 +373,24 @@ fn worker<const N: usize, S: Solver<N>>(
             continue;
         }
 
-        let unique_nodes = match S::new(puzzle).solve() {
-            SolveOutcome::Unique(solved) => Some(solved.recorder().search_nodes()),
+        let unique = match S::new(puzzle).solve() {
+            SolveOutcome::Unique(solved) => Some((
+                solved.recorder().search_nodes(),
+                solved.recorder().propagation_waves(),
+            )),
             _ => None,
         };
 
-        if let Some(nodes) = unique_nodes {
+        if let Some((nodes, waves)) = unique {
             shared.valid_puzzles.fetch_add(1, Ordering::Relaxed);
             // Track the full observed range of node counts, regardless of
             // whether this puzzle qualifies — the spinner uses these to
             // show how far we are from the requested window.
             shared.min_nodes_seen.fetch_min(nodes, Ordering::Relaxed);
             shared.max_nodes_seen.fetch_max(nodes, Ordering::Relaxed);
-            if (args.min_nodes..=args.max_nodes).contains(&nodes) {
+            if (args.min_nodes..=args.max_nodes).contains(&nodes)
+                && (args.min_waves..=args.max_waves).contains(&waves)
+            {
                 // Set the stop flag *before* sending so other workers see it
                 // as soon as possible; the receiver also sets it on receipt.
                 shared.done.store(true, Ordering::Relaxed);

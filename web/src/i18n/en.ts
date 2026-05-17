@@ -203,7 +203,9 @@ export const en = {
   // Classification chip
   cls_no_solution: 'No solution',
   cls_multiple: 'Multiple solutions',
-  cls_normal: 'Normal',
+  cls_easy: 'Easy',
+  cls_medium: 'Medium',
+  cls_challenging: 'Challenging',
   cls_hard: 'Hard',
   cls_very_hard: 'Very hard',
   cls_extremely_hard: 'Extremely hard',

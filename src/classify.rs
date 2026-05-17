@@ -24,21 +24,30 @@ pub enum ClassifyVariant {
     Multiple,
 }
 
-/// Result of classifying a puzzle: variant + search-node count, plus a
-/// witness grid when one exists.  For `Unsolvable`, `cells` is `None`.
+/// Result of classifying a puzzle: variant, search-node count, propagation
+/// wave count, plus a witness grid when one exists.  For `Unsolvable`, `cells`
+/// is `None`.
+///
+/// `propagation_waves` is the finer-grained difficulty signal within the
+/// propagation-only regime (`search_nodes == 1`): a puzzle whose first wave
+/// already collapses several domains feels easier than one that drips out
+/// deductions over a dozen waves of arc consistency.  See issue #46.
 pub struct Classification<const N: usize> {
     pub variant: ClassifyVariant,
     pub search_nodes: u64,
+    pub propagation_waves: u64,
     pub cells: Option<Grid<N>>,
 }
 
-/// Solve `puzzle` and return its variant, search-node count, and a witness grid.
+/// Solve `puzzle` and return its variant, search-node count, propagation-wave
+/// count, and a witness grid.
 ///
 /// Mirrors the `summarize` helper in `src/bin/compare.rs`.
 pub fn classify<const N: usize>(puzzle: Puzzle<N>) -> Classification<N> {
     let state = BlackSolverState::<N>::new(puzzle);
     let outcome = state.solve();
     let search_nodes = state.recorder().search_nodes();
+    let propagation_waves = state.recorder().propagation_waves();
     let (variant, cells) = match outcome {
         SolveOutcome::Unsolvable => (ClassifyVariant::Unsolvable, None),
         SolveOutcome::Unique(s) => (ClassifyVariant::Unique, s.solved_cells()),
@@ -47,6 +56,7 @@ pub fn classify<const N: usize>(puzzle: Puzzle<N>) -> Classification<N> {
     Classification {
         variant,
         search_nodes,
+        propagation_waves,
         cells,
     }
 }
@@ -91,6 +101,12 @@ mod tests {
             c.search_nodes, 1,
             "propagation-only puzzle should have search_nodes == 1, got {}",
             c.search_nodes
+        );
+        assert!(
+            c.propagation_waves >= 1,
+            "propagation-only puzzle should report at least one productive wave, \
+             got propagation_waves = {}",
+            c.propagation_waves
         );
     }
 

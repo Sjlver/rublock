@@ -186,7 +186,9 @@ export const pt: Messages = {
   // Classification chip
   cls_no_solution: 'Sem solução',
   cls_multiple: 'Várias soluções',
-  cls_normal: 'Normal',
+  cls_easy: 'Fácil',
+  cls_medium: 'Médio',
+  cls_challenging: 'Desafiador',
   cls_hard: 'Difícil',
   cls_very_hard: 'Muito difícil',
   cls_extremely_hard: 'Extremamente difícil',

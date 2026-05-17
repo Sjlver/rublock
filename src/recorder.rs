@@ -99,19 +99,46 @@ pub trait Recorder: Clone + Default {
     fn search_nodes(&self) -> u64 {
         0
     }
+
+    /// Number of *productive* propagation waves seen so far — steps that
+    /// removed at least one domain bit.  Empty steps (e.g. the leading
+    /// `on_step_start` a solver fires before its first seed pass, or a basic
+    /// solver's final no-op fixpoint iteration) are excluded so the count
+    /// matches what [`Explain::steps`] reports.  Default `0` for recorders
+    /// that don't track this.
+    fn propagation_waves(&self) -> u64 {
+        0
+    }
 }
 
 // ── SearchNodes ───────────────────────────────────────────────────────────────
 
-/// Minimal recorder: only counts search-tree nodes.
+/// Counters tracked by [`SearchNodes`].
+///
+/// `wave_dirty` is the latch that lets us count *productive* waves without
+/// inspecting every removal: cleared on each `on_step_start`, set on the first
+/// `on_bits_removed` that follows.  When the latch goes from `false` to `true`,
+/// `waves` is bumped — so empty steps (e.g. the leading `on_step_start` a
+/// solver fires before its first seed pass, or the final no-op fixpoint
+/// iteration of the basic solver) are silently skipped, matching `Explain`'s
+/// step counting.
+#[derive(Default, Clone, Copy)]
+struct SearchNodesData {
+    search_nodes: u64,
+    propagation_waves: u64,
+    wave_dirty: bool,
+}
+
+/// Minimal recorder: counts search-tree nodes and productive propagation waves.
 ///
 /// This is the default `Recorder` for every solver state.  It's the cheapest
-/// "real" recorder we ship — one `Cell<u64>` increment per branching node and
-/// nothing else.  Used by anything that just wants to solve (the main CLI
-/// path uses `FullStats` instead, but `gen_puzzle`, `compare`, the wasm
-/// `solve_puzzle` entry point, and the bench harness all use this).
+/// "real" recorder we ship — one `Cell` update per branching node and one per
+/// wave, with a single boolean check on each bit removal.  Used by anything
+/// that just wants to solve (the main CLI path uses `FullStats` instead, but
+/// `gen_puzzle`, `compare`, the wasm `solve_puzzle` / `classify_puzzle` entry
+/// points, and the bench harness all use this).
 #[derive(Clone, Default)]
-pub struct SearchNodes(Rc<Cell<u64>>);
+pub struct SearchNodes(Rc<Cell<SearchNodesData>>);
 
 impl SearchNodes {
     pub fn new() -> Self {
@@ -121,12 +148,45 @@ impl SearchNodes {
 
 impl Recorder for SearchNodes {
     #[inline]
+    fn on_bits_removed(
+        &self,
+        _row: usize,
+        _col: usize,
+        before: CellDomain,
+        after: CellDomain,
+        _rule: Rule,
+    ) {
+        if before == after {
+            return;
+        }
+        let mut s = self.0.get();
+        if !s.wave_dirty {
+            s.wave_dirty = true;
+            s.propagation_waves += 1;
+            self.0.set(s);
+        }
+    }
+
+    #[inline]
     fn on_search_node(&self) {
-        self.0.set(self.0.get() + 1);
+        let mut s = self.0.get();
+        s.search_nodes += 1;
+        self.0.set(s);
+    }
+
+    #[inline]
+    fn on_step_start(&self) {
+        let mut s = self.0.get();
+        s.wave_dirty = false;
+        self.0.set(s);
     }
 
     fn search_nodes(&self) -> u64 {
-        self.0.get()
+        self.0.get().search_nodes
+    }
+
+    fn propagation_waves(&self) -> u64 {
+        self.0.get().propagation_waves
     }
 }
 
@@ -140,12 +200,18 @@ impl Recorder for SearchNodes {
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Stats {
     pub search_nodes: u64,
+    pub propagation_waves: u64,
     pub bits_target_tuples: u64,
     pub bits_arc_consistency: u64,
     pub bits_singleton: u64,
     pub bits_hidden_single: u64,
     pub bits_black_consistency: u64,
     pub bits_backtracking: u64,
+    /// Latch matching the one in [`SearchNodesData`]: cleared on each
+    /// `on_step_start`, set on the first `on_bits_removed` that follows, so
+    /// we only count productive waves.  Internal; not part of the printed
+    /// summary.
+    wave_dirty: bool,
 }
 
 #[derive(Clone, Default)]
@@ -186,6 +252,10 @@ impl Recorder for FullStats {
             Rule::Backtracking => &mut s.bits_backtracking,
         };
         *field += removed;
+        if !s.wave_dirty {
+            s.wave_dirty = true;
+            s.propagation_waves += 1;
+        }
         self.0.set(s);
     }
 
@@ -196,14 +266,26 @@ impl Recorder for FullStats {
         self.0.set(s);
     }
 
+    #[inline]
+    fn on_step_start(&self) {
+        let mut s = self.0.get();
+        s.wave_dirty = false;
+        self.0.set(s);
+    }
+
     fn search_nodes(&self) -> u64 {
         self.0.get().search_nodes
+    }
+
+    fn propagation_waves(&self) -> u64 {
+        self.0.get().propagation_waves
     }
 }
 
 impl std::fmt::Display for Stats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "search nodes:       {}", self.search_nodes)?;
+        writeln!(f, "propagation waves:  {}", self.propagation_waves)?;
         writeln!(f, "bits removed:")?;
         writeln!(f, "  target tuples:     {}", self.bits_target_tuples)?;
         writeln!(f, "  arc-consistency:   {}", self.bits_arc_consistency)?;
@@ -321,6 +403,28 @@ mod tests {
     }
 
     #[test]
+    fn search_nodes_counts_productive_waves_only() {
+        let s = SearchNodes::new();
+        s.on_step_start(); // empty step — ignored
+        s.on_step_start();
+        s.on_bits_removed(0, 0, 0b110, 0b010, Rule::TargetTuples); // wave 1
+        s.on_bits_removed(0, 1, 0b110, 0b010, Rule::ArcConsistency); // same wave
+        s.on_step_start(); // boundary
+        s.on_bits_removed(1, 0, 0b111, 0b011, Rule::Singleton); // wave 2
+        s.on_step_start(); // boundary, then no events
+        s.on_step_start(); // still no events
+        assert_eq!(s.propagation_waves(), 2);
+    }
+
+    #[test]
+    fn search_nodes_ignores_no_op_bit_removals() {
+        let s = SearchNodes::new();
+        s.on_step_start();
+        s.on_bits_removed(0, 0, 0b110, 0b110, Rule::ArcConsistency); // no change
+        assert_eq!(s.propagation_waves(), 0);
+    }
+
+    #[test]
     fn full_stats_attributes_bits_to_rule() {
         let s = FullStats::new();
         s.on_bits_removed(0, 0, 0b1110, 0b0010, Rule::Singleton); // 2 bits
@@ -330,6 +434,19 @@ mod tests {
         assert_eq!(snap.bits_singleton, 2);
         assert_eq!(snap.bits_target_tuples, 1);
         assert_eq!(snap.bits_arc_consistency, 0);
+    }
+
+    #[test]
+    fn full_stats_counts_productive_waves_like_search_nodes() {
+        let s = FullStats::new();
+        s.on_step_start();
+        s.on_bits_removed(0, 0, 0b110, 0b010, Rule::TargetTuples); // wave 1
+        s.on_bits_removed(0, 1, 0b110, 0b010, Rule::ArcConsistency); // same wave
+        s.on_step_start(); // empty
+        s.on_step_start();
+        s.on_bits_removed(1, 0, 0b111, 0b011, Rule::Singleton); // wave 2
+        assert_eq!(s.propagation_waves(), 2);
+        assert_eq!(s.snapshot().propagation_waves, 2);
     }
 
     #[test]

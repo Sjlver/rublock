@@ -187,7 +187,9 @@ export const fr: Messages = {
   // Classification chip
   cls_no_solution: 'Aucune solution',
   cls_multiple: 'Plusieurs solutions',
-  cls_normal: 'Normal',
+  cls_easy: 'Facile',
+  cls_medium: 'Moyen',
+  cls_challenging: 'Délicat',
   cls_hard: 'Difficile',
   cls_very_hard: 'Très difficile',
   cls_extremely_hard: 'Extrêmement difficile',

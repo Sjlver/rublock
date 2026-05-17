@@ -24,20 +24,27 @@ solver statistics.
 ## `gen_puzzle` (`src/bin/gen_puzzle.rs`)
 
 Generates a random puzzle with a unique solution, optionally filtered to a
-difficulty window defined by the solver's backtracking node count.
+difficulty window defined by the solver's backtracking node count and/or
+productive propagation-wave count.
 
 ```
 cargo run --release --bin gen_puzzle -- \
   [--size=N] [--min-nodes=K] [--max-nodes=K] \
+  [--min-waves=W] [--max-waves=W] \
   [--threads=T] [--solver=basic|queue|black]
 ```
 
 **Strategy:** a pool of worker threads independently fill random grids via DFS,
-derive the targets, and run `solve()`. The first thread to find a puzzle in the
-node-count window wins; the others stop. A spinner shows progress.
+derive the targets, and run `solve()`. The first thread to find a puzzle whose
+node count *and* wave count both fall in their windows wins; the others stop.
+A spinner shows progress.
 
 **Special case `--max-nodes=1`:** skips `solve()` entirely — only puzzles
 solvable by propagation alone (no backtracking) are accepted. Much faster.
+`--min-waves` / `--max-waves` still apply in this mode, and are how you target
+the propagation-only difficulty buckets surfaced by the web UI ("Easy" /
+"Medium" / "Challenging") — see `web/src/state/classification.ts` for the
+per-size wave thresholds.
 
 Output includes the target string (ready to paste into `cargo run --`) and a
 shareable URL.

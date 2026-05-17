@@ -45,6 +45,7 @@ impl From<ClassifyVariant> for ClassifyVariantOut {
 struct ClassifyResp<'a> {
     variant: ClassifyVariantOut,
     search_nodes: u64,
+    propagation_waves: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     cells: Option<Vec<&'a [Cell]>>,
 }
@@ -265,6 +266,7 @@ fn classify_puzzle_n<const N: usize>(
     to_js(&ClassifyResp {
         variant: result.variant.into(),
         search_nodes: result.search_nodes,
+        propagation_waves: result.propagation_waves,
         cells: result.cells.as_ref().map(cells_out),
     })
 }

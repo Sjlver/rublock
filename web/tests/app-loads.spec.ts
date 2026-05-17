@@ -12,9 +12,11 @@ test('Play tab shows the difficulty chip after load', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
 
-  // Generated puzzles are always Normal — see classify_puzzle wiring in
-  // PlayTab.svelte. The chip lives in the page header's [role="status"].
-  await expect(page.locator('[role="status"]')).toHaveText('Normal');
+  // Generated puzzles are solvable by propagation alone (see classify_puzzle
+  // wiring in PlayTab.svelte and the `generate_puzzle_n` loop in src/wasm.rs),
+  // so the chip is one of the propagation-only difficulty labels. The chip
+  // lives in the page header's [role="status"].
+  await expect(page.locator('[role="status"]')).toHaveText(/^(Easy|Medium|Challenging)$/);
 });
 
 test('Play tab is active by default', async ({ page }) => {

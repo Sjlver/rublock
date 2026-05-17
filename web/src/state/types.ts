@@ -66,6 +66,10 @@ export type ClassifyVariant = 'unsolvable' | 'unique' | 'multiple';
 export interface ClassifiedPuzzle {
   variant: ClassifyVariant;
   search_nodes: number;
+  // Productive propagation waves — steps that removed at least one domain bit.
+  // Used as the finer-grained difficulty signal inside the propagation-only
+  // regime (when `search_nodes <= 1`). See issue #46.
+  propagation_waves: number;
   // Present for `unique` and `multiple`, omitted for `unsolvable`.
   cells?: CellValue[][];
 }
