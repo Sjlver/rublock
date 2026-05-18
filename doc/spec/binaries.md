@@ -70,8 +70,7 @@ determinate progress bar tracks samples collected vs. requested. As with
 `gen_puzzle`, `--max-nodes=1` switches to the propagation-only fast path.
 
 Output: total grids tried, min / max / mean wave count, a per-wave ASCII
-histogram, and percentiles (p5 / p10 / p25 / p33 / p50 / p66 / p75 / p90 /
-p95 / p99) using linear interpolation between ranks.
+histogram, and percentiles.
 
 ---
 

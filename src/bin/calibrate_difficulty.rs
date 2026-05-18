@@ -315,18 +315,19 @@ fn report(samples: &[u64], total_grids: u64, elapsed: Duration) {
     println!();
 
     // ── Histogram ─────────────────────────────────────────────────────────────
-    // One row per wave count between min and max (inclusive), so empty
+    // One row per wave count between min and hist_max (inclusive), so empty
     // buckets show up as visible gaps.  Bar widths scale to the densest row.
-    let mut counts: Vec<u64> = vec![0; (max + 1) as usize];
+    let hist_max = max.min(1000);
+    let mut counts: Vec<u64> = vec![0; (hist_max + 1) as usize];
     for &w in &sorted {
-        counts[w as usize] += 1;
+        counts[w.min(1000) as usize] += 1;
     }
     let max_count = counts.iter().copied().max().unwrap_or(0);
     let bar_width: u64 = 50;
 
     println!("Wave count histogram:");
     println!("  waves |  count | share");
-    for w in min..=max {
+    for w in min..=hist_max {
         let c = counts[w as usize];
         let share = c as f64 / n as f64;
         let bar_len = if max_count == 0 {
@@ -335,7 +336,18 @@ fn report(samples: &[u64], total_grids: u64, elapsed: Duration) {
             (c * bar_width / max_count) as usize
         };
         let bar = "#".repeat(bar_len);
-        println!("  {:>5} | {:>6} | {:>5.1}% {}", w, c, share * 100.0, bar);
+        let waves = if w == 1000 {
+            "1k+".to_string()
+        } else {
+            w.to_string()
+        };
+        println!(
+            "  {:>5} | {:>6} | {:>5.1}% {}",
+            waves,
+            c,
+            share * 100.0,
+            bar
+        );
     }
     println!();
 
@@ -344,6 +356,7 @@ fn report(samples: &[u64], total_grids: u64, elapsed: Duration) {
     // counts are integers, but reporting fractional percentiles makes it
     // obvious when the chosen rank falls on a bucket boundary.
     let pcts = [
+        1.0,
         5.0,
         10.0,
         25.0,
