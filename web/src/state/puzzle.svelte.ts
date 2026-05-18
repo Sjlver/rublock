@@ -14,6 +14,7 @@ import type {
   SolvedPuzzle,
 } from './types';
 import { noteDigitBit, NOTE_BLACK_BIT, NOTE_DIGITS_ONLY_BIT } from './types';
+import type { SupportedSize } from './storage.svelte';
 
 export function emptyCellNotes(size: number): CellNotes[][] {
   return Array.from({ length: size }, () => new Array<CellNotes>(size).fill(0));
@@ -186,7 +187,7 @@ export function newPuzzle(size: number): void {
  *  Slower than `newPuzzle` — the WASM side rejects candidates until one
  *  classifies to the requested bucket. */
 export function newPuzzleWithDifficulty(
-  size: number,
+  size: SupportedSize,
   difficulty: Exclude<Difficulty, 'invalid'>
 ): void {
   delete sizeStates[size];

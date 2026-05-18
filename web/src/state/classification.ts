@@ -3,6 +3,7 @@ import { classifyPuzzle } from '../wasm/api';
 import type { PuzzleConstraints } from '../wasm/api';
 import { puzzleKey } from './puzzle.svelte';
 import { t } from '../i18n/index.svelte';
+import { isSupportedSize, type SupportedSize } from './storage.svelte';
 
 export type ClassificationResult = ClassifiedPuzzle | { error: string };
 
@@ -15,36 +16,77 @@ export type Difficulty =
   | 'very-hard'
   | 'extremely-hard';
 
-// Per-size wave thresholds for the propagation-only regime (search_nodes <= 1).
-//
-// Picked from a 1000-sample calibration run per size for N=5..7 (productive
-// waves at the 33rd and 66th percentiles, so the three buckets are roughly
-// equal-sized within propagation-only puzzles). N=8 is extrapolated from the
-// N=5..7 trend — fully-propagation-solvable 8×8 puzzles are rare enough that
-// a fresh calibration sample would take hours. See issue #46. The table
-// covers the sizes the UI offers (5..=8); other sizes fall back to a
-// heuristic.
-const WAVE_THRESHOLDS: Record<number, { easy: number; medium: number }> = {
-  5: { easy: 4, medium: 5 },
-  6: { easy: 7, medium: 9 },
-  7: { easy: 11, medium: 13 },
-  8: { easy: 16, medium: 18 },
-};
+const U32_MAX = 0xffffffff;
 
-function propagationBucket(waves: number, size: number): 'easy' | 'medium' | 'challenging' {
-  // Fallback for sizes outside the calibrated table: rough linear scaling.
-  const t = WAVE_THRESHOLDS[size] ?? { easy: 2 * size - 6, medium: 2 * size - 3 };
-  if (waves <= t.easy) return 'easy';
-  if (waves <= t.medium) return 'medium';
-  return 'challenging';
-}
+const DIFFICULTY_THRESHOLDS = {
+  5: [
+    { difficulty: 'easy', minNodes: 1, maxNodes: 1, minWaves: 1, maxWaves: 3 },
+    { difficulty: 'medium', minNodes: 1, maxNodes: 1, minWaves: 4, maxWaves: 6 },
+    { difficulty: 'challenging', minNodes: 1, maxNodes: 1, minWaves: 7, maxWaves: U32_MAX },
+    { difficulty: 'hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 1, maxWaves: 10 },
+    { difficulty: 'very-hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 11, maxWaves: 17 },
+    {
+      difficulty: 'extremely-hard',
+      minNodes: 2,
+      maxNodes: U32_MAX,
+      minWaves: 18,
+      maxWaves: U32_MAX,
+    },
+  ],
+  6: [
+    { difficulty: 'easy', minNodes: 1, maxNodes: 1, minWaves: 1, maxWaves: 6 },
+    { difficulty: 'medium', minNodes: 1, maxNodes: 1, minWaves: 7, maxWaves: 9 },
+    { difficulty: 'challenging', minNodes: 1, maxNodes: 1, minWaves: 10, maxWaves: U32_MAX },
+    { difficulty: 'hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 1, maxWaves: 14 },
+    { difficulty: 'very-hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 15, maxWaves: 45 },
+    {
+      difficulty: 'extremely-hard',
+      minNodes: 2,
+      maxNodes: U32_MAX,
+      minWaves: 46,
+      maxWaves: U32_MAX,
+    },
+  ],
+  7: [
+    { difficulty: 'easy', minNodes: 1, maxNodes: 1, minWaves: 1, maxWaves: 8 },
+    { difficulty: 'medium', minNodes: 1, maxNodes: 1, minWaves: 9, maxWaves: 15 },
+    { difficulty: 'challenging', minNodes: 1, maxNodes: 1, minWaves: 16, maxWaves: U32_MAX },
+    { difficulty: 'hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 1, maxWaves: 18 },
+    { difficulty: 'very-hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 19, maxWaves: 350 },
+    {
+      difficulty: 'extremely-hard',
+      minNodes: 2,
+      maxNodes: U32_MAX,
+      minWaves: 351,
+      maxWaves: U32_MAX,
+    },
+  ],
+  8: [
+    { difficulty: 'easy', minNodes: 1, maxNodes: 1, minWaves: 1, maxWaves: 13 },
+    { difficulty: 'medium', minNodes: 1, maxNodes: 1, minWaves: 14, maxWaves: 22 },
+    { difficulty: 'challenging', minNodes: 1, maxNodes: 1, minWaves: 23, maxWaves: U32_MAX },
+    { difficulty: 'hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 1, maxWaves: 100 },
+    { difficulty: 'very-hard', minNodes: 2, maxNodes: U32_MAX, minWaves: 101, maxWaves: 10000 },
+    {
+      difficulty: 'extremely-hard',
+      minNodes: 2,
+      maxNodes: U32_MAX,
+      minWaves: 10001,
+      maxWaves: U32_MAX,
+    },
+  ],
+} as const;
 
-export function difficulty(c: ClassifiedPuzzle, size: number): Difficulty {
+export function difficulty(c: ClassifiedPuzzle, size: SupportedSize): Difficulty {
   if (c.variant !== 'unique') return 'invalid';
-  if (c.search_nodes <= 1) return propagationBucket(c.propagation_waves, size);
-  if (c.search_nodes <= size) return 'hard';
-  if (c.search_nodes > 100) return 'extremely-hard';
-  return 'very-hard';
+
+  for (const { difficulty, maxNodes, maxWaves } of DIFFICULTY_THRESHOLDS[size]) {
+    if (c.search_nodes <= maxNodes && c.propagation_waves <= maxWaves) {
+      return difficulty;
+    }
+  }
+
+  return 'invalid';
 }
 
 /** Difficulties the user can pick from the New-puzzle dropdown, in the order
@@ -59,30 +101,21 @@ export const SELECTABLE_DIFFICULTIES: Exclude<Difficulty, 'invalid'>[] = [
   'extremely-hard',
 ];
 
-const U32_MAX = 0xffffffff;
-
 /** Inverse of `difficulty()`: the (search_nodes, propagation_waves) windows
  *  that classify to each difficulty for a given puzzle size. Used by the
  *  difficulty dropdown to ask the WASM generator for a matching puzzle. */
 export function constraintsForDifficulty(
-  d: Exclude<Difficulty, 'invalid'>,
-  size: number
+  difficulty: Exclude<Difficulty, 'invalid'>,
+  size: SupportedSize
 ): PuzzleConstraints {
-  const wt = WAVE_THRESHOLDS[size] ?? { easy: 2 * size - 6, medium: 2 * size - 3 };
-  switch (d) {
-    case 'easy':
-      return { minNodes: 0, maxNodes: 1, minWaves: 0, maxWaves: wt.easy };
-    case 'medium':
-      return { minNodes: 0, maxNodes: 1, minWaves: wt.easy + 1, maxWaves: wt.medium };
-    case 'challenging':
-      return { minNodes: 0, maxNodes: 1, minWaves: wt.medium + 1, maxWaves: U32_MAX };
-    case 'hard':
-      return { minNodes: 2, maxNodes: size, minWaves: 0, maxWaves: U32_MAX };
-    case 'very-hard':
-      return { minNodes: size + 1, maxNodes: 100, minWaves: 0, maxWaves: U32_MAX };
-    case 'extremely-hard':
-      return { minNodes: 101, maxNodes: U32_MAX, minWaves: 0, maxWaves: U32_MAX };
+  for (const { difficulty: d, ...rest } of DIFFICULTY_THRESHOLDS[size]) {
+    if (d == difficulty) {
+      return rest;
+    }
   }
+
+  // unreachable
+  return { minNodes: 1, maxNodes: 1, minWaves: 0, maxWaves: U32_MAX };
 }
 
 /** Label for a difficulty bucket, regardless of any particular puzzle. */
@@ -110,7 +143,10 @@ export function classificationLabel(c: ClassificationResult | null, size: number
   if ('error' in c) return c.error;
   if (c.variant === 'unsolvable') return t('cls_no_solution');
   if (c.variant === 'multiple') return t('cls_multiple');
-  return difficultyLabel(difficulty(c, size));
+  if (isSupportedSize(size)) {
+    return difficultyLabel(difficulty(c, size));
+  }
+  return '';
 }
 
 export function classificationTone(

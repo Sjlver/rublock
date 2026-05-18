@@ -28,7 +28,7 @@ export interface SavedPlayState {
 
 const SUPPORTED_SIZES = new Set<SupportedSize>([5, 6, 7, 8]);
 
-function isSupportedSize(n: unknown): n is SupportedSize {
+export function isSupportedSize(n: unknown): n is SupportedSize {
   return typeof n === 'number' && SUPPORTED_SIZES.has(n as SupportedSize);
 }
 

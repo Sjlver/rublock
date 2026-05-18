@@ -34,6 +34,7 @@
   } from '../../state/classification';
   import { t } from '../../i18n/index.svelte';
   import { readHintDismissed, writeHintDismissed } from '../../state/storage';
+  import { isSupportedSize } from '../../state/storage.svelte';
 
   let showEmojiRain = $state(false);
   let hintDismissed = $state<boolean>(readHintDismissed());
@@ -177,9 +178,11 @@
     difficultyMenuOpen = false;
     if (!playState.puzzleData) return;
     status = t('play_status_generating');
+    const targetsLength = playState.puzzleData!.row_targets.length;
+    const size = isSupportedSize(targetsLength) ? targetsLength : 6;
     queueMicrotask(() => {
       try {
-        newPuzzleWithDifficulty(playState.puzzleData!.row_targets.length, d);
+        newPuzzleWithDifficulty(size, d);
       } finally {
         status = '';
       }
