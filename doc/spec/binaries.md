@@ -51,6 +51,30 @@ shareable URL.
 
 ---
 
+## `calibrate_difficulty` (`src/bin/calibrate_difficulty.rs`)
+
+Collects a sample of puzzles whose backtracking node count falls in
+`[--min-nodes, --max-nodes]`, then prints a histogram and percentile summary
+of their productive propagation-wave counts. Used to pick the per-size wave
+thresholds in `web/src/state/classification.ts`.
+
+```
+cargo run --release --bin calibrate_difficulty -- \
+  [--size=N] [--min-nodes=K] [--max-nodes=K] \
+  [--count=C] [--threads=T] [--solver=basic|queue|black]
+```
+
+Workers race like `gen_puzzle` but the main thread keeps the channel open and
+accumulates samples until `--count` matching puzzles have arrived. A
+determinate progress bar tracks samples collected vs. requested. As with
+`gen_puzzle`, `--max-nodes=1` switches to the propagation-only fast path.
+
+Output: total grids tried, min / max / mean wave count, a per-wave ASCII
+histogram, and percentiles (p5 / p10 / p25 / p33 / p50 / p66 / p75 / p90 /
+p95 / p99) using linear interpolation between ranks.
+
+---
+
 ## `enumerate` (`src/bin/enumerate.rs`)
 
 Counts the total number of valid Doplo puzzles (unique-solution) of a given
