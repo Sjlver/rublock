@@ -11,6 +11,7 @@
     checkCurrentPuzzle,
     clearSelection,
     newPuzzle,
+    newPuzzleWithDifficulty,
     moveSelection,
     onSolved,
     redoInput,
@@ -27,6 +28,9 @@
     classifyCached,
     classificationLabel,
     classificationTone,
+    difficultyLabel,
+    SELECTABLE_DIFFICULTIES,
+    type Difficulty,
   } from '../../state/classification';
   import { t } from '../../i18n/index.svelte';
   import { readHintDismissed, writeHintDismissed } from '../../state/storage';
@@ -57,10 +61,15 @@
       showEmojiRain = false;
       queueMicrotask(() => (showEmojiRain = true));
     });
-    const onKey = (event: KeyboardEvent) => handlePlayKeydown(event);
+    const onKey = (event: KeyboardEvent) => {
+      closeMenuOnEscape(event);
+      handlePlayKeydown(event);
+    };
     document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', closeMenuOnOutsideClick);
     return () => {
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', closeMenuOnOutsideClick);
       offSolved();
     };
   });
@@ -158,6 +167,38 @@
     });
   }
 
+  let difficultyMenuOpen = $state(false);
+
+  function toggleDifficultyMenu(): void {
+    difficultyMenuOpen = !difficultyMenuOpen;
+  }
+
+  function handleNewPuzzleWithDifficulty(d: Exclude<Difficulty, 'invalid'>): void {
+    difficultyMenuOpen = false;
+    if (!playState.puzzleData) return;
+    status = t('play_status_generating');
+    queueMicrotask(() => {
+      try {
+        newPuzzleWithDifficulty(playState.puzzleData!.row_targets.length, d);
+      } finally {
+        status = '';
+      }
+    });
+  }
+
+  function closeMenuOnOutsideClick(event: MouseEvent): void {
+    if (!difficultyMenuOpen) return;
+    const target = event.target as Element | null;
+    if (!target?.closest('.split-btn-wrap')) difficultyMenuOpen = false;
+  }
+
+  function closeMenuOnEscape(event: KeyboardEvent): void {
+    if (difficultyMenuOpen && event.key === 'Escape') {
+      event.preventDefault();
+      difficultyMenuOpen = false;
+    }
+  }
+
   function dismissHint(): void {
     hintDismissed = true;
     writeHintDismissed(true);
@@ -199,30 +240,68 @@
         </button>
       {/each}
     </div>
-    <button
-      type="button"
-      style="flex:1; height:36px; border-radius:12px; border:1px solid var(--line-2);
-             background:var(--card); color:var(--ink); font-size:13px; font-weight:600;
-             display:inline-flex; align-items:center; justify-content:center; gap:6px;
-             cursor:pointer; font-family:inherit;"
-      onclick={handleNewPuzzle}
-    >
-      <!-- Refresh icon -->
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.7"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M20 8a8 8 0 10-1 9.5" />
-        <path d="M20 4v4h-4" />
-      </svg>
-      {t('play_new_puzzle')}
-    </button>
+    <div class="split-btn-wrap" style="flex:1;">
+      <div class="split-btn">
+        <button
+          type="button"
+          class="split-btn-main"
+          onclick={handleNewPuzzle}
+          aria-label={t('play_new_puzzle')}
+        >
+          <!-- Refresh icon -->
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M20 8a8 8 0 10-1 9.5" />
+            <path d="M20 4v4h-4" />
+          </svg>
+          {t('play_new_puzzle')}
+        </button>
+        <button
+          type="button"
+          class="split-btn-toggle"
+          onclick={toggleDifficultyMenu}
+          aria-haspopup="menu"
+          aria-expanded={difficultyMenuOpen}
+          aria-label={t('play_new_puzzle_difficulty_aria')}
+        >
+          <!-- Chevron-down icon -->
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      </div>
+      {#if difficultyMenuOpen}
+        <div class="split-btn-menu" role="menu">
+          {#each SELECTABLE_DIFFICULTIES as d (d)}
+            <button
+              type="button"
+              role="menuitem"
+              class="split-btn-menu-item"
+              onclick={() => handleNewPuzzleWithDifficulty(d)}
+            >
+              {difficultyLabel(d)}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- Board -->

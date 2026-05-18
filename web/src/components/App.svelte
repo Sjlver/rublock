@@ -25,6 +25,7 @@
   import { trackEvent } from '../analytics';
   import { currentLocale, tf } from '../i18n/index.svelte';
   import type { PuzzleData } from '../state/types';
+  import { classifyCached, classificationLabel } from '../state/classification';
 
   const PUZZLES_PER_BATCH = 6;
   const promoUrl = `${window.location.origin}${window.location.pathname}`;
@@ -49,8 +50,14 @@
   let persistReady = $state(false);
   let printBusy = $state(false);
 
-  type PrintGroup = { puzzles: PuzzleData[] };
+  type PrintPuzzle = { data: PuzzleData; difficulty: string };
+  type PrintGroup = { puzzles: PrintPuzzle[] };
   const printGroups = $state<PrintGroup[]>([]);
+
+  function makePrintPuzzle(data: PuzzleData): PrintPuzzle {
+    const size = data.row_targets.length;
+    return { data, difficulty: classificationLabel(classifyCached(data), size) };
+  }
 
   // Install the persistence effect during component init. It subscribes to
   // playState/sizeStates immediately but only writes once `persistReady`
@@ -101,7 +108,7 @@
     let generated = 0;
     while (generated < total) {
       const pageSize = Math.min(PUZZLES_PER_BATCH, total - generated);
-      const puzzles = Array.from({ length: pageSize }, () => generatePuzzle(size));
+      const puzzles = Array.from({ length: pageSize }, () => makePrintPuzzle(generatePuzzle(size)));
       printGroups.push({ puzzles });
       generated += pageSize;
       if (generated < total) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -141,8 +148,11 @@
 <div id="print-output" aria-hidden="true">
   {#each printGroups as group}
     <div class="page-group">
-      {#each group.puzzles as puzzle}
-        <PuzzleGrid {puzzle} />
+      {#each group.puzzles as p}
+        <div class="print-puzzle">
+          <PuzzleGrid puzzle={p.data} />
+          <div class="print-difficulty">{p.difficulty}</div>
+        </div>
       {/each}
       <div class="promo">{promo}</div>
     </div>

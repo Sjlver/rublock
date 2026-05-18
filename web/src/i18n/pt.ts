@@ -20,6 +20,7 @@ export const pt: Messages = {
   // Play tab
   play_title: 'Jogar',
   play_new_puzzle: 'Novo puzzle',
+  play_new_puzzle_difficulty_aria: 'Escolher dificuldade',
   play_undo: 'Anular',
   play_redo: 'Refazer',
   play_check: 'Verificar',

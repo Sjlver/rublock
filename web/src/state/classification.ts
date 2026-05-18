@@ -1,5 +1,6 @@
 import type { ClassifiedPuzzle, PuzzleData } from './types';
 import { classifyPuzzle } from '../wasm/api';
+import type { PuzzleConstraints } from '../wasm/api';
 import { puzzleKey } from './puzzle.svelte';
 import { t } from '../i18n/index.svelte';
 
@@ -46,12 +47,47 @@ export function difficulty(c: ClassifiedPuzzle, size: number): Difficulty {
   return 'very-hard';
 }
 
-export function classificationLabel(c: ClassificationResult | null, size: number): string {
-  if (!c) return '';
-  if ('error' in c) return c.error;
-  if (c.variant === 'unsolvable') return t('cls_no_solution');
-  if (c.variant === 'multiple') return t('cls_multiple');
-  switch (difficulty(c, size)) {
+/** Difficulties the user can pick from the New-puzzle dropdown, in the order
+ *  they appear (easiest first). `invalid` is omitted — it's a classification
+ *  outcome, not something to generate. */
+export const SELECTABLE_DIFFICULTIES: Exclude<Difficulty, 'invalid'>[] = [
+  'easy',
+  'medium',
+  'challenging',
+  'hard',
+  'very-hard',
+  'extremely-hard',
+];
+
+const U32_MAX = 0xffffffff;
+
+/** Inverse of `difficulty()`: the (search_nodes, propagation_waves) windows
+ *  that classify to each difficulty for a given puzzle size. Used by the
+ *  difficulty dropdown to ask the WASM generator for a matching puzzle. */
+export function constraintsForDifficulty(
+  d: Exclude<Difficulty, 'invalid'>,
+  size: number
+): PuzzleConstraints {
+  const wt = WAVE_THRESHOLDS[size] ?? { easy: 2 * size - 6, medium: 2 * size - 3 };
+  switch (d) {
+    case 'easy':
+      return { minNodes: 0, maxNodes: 1, minWaves: 0, maxWaves: wt.easy };
+    case 'medium':
+      return { minNodes: 0, maxNodes: 1, minWaves: wt.easy + 1, maxWaves: wt.medium };
+    case 'challenging':
+      return { minNodes: 0, maxNodes: 1, minWaves: wt.medium + 1, maxWaves: U32_MAX };
+    case 'hard':
+      return { minNodes: 2, maxNodes: size, minWaves: 0, maxWaves: U32_MAX };
+    case 'very-hard':
+      return { minNodes: size + 1, maxNodes: 100, minWaves: 0, maxWaves: U32_MAX };
+    case 'extremely-hard':
+      return { minNodes: 101, maxNodes: U32_MAX, minWaves: 0, maxWaves: U32_MAX };
+  }
+}
+
+/** Label for a difficulty bucket, regardless of any particular puzzle. */
+export function difficultyLabel(d: Difficulty): string {
+  switch (d) {
     case 'easy':
       return t('cls_easy');
     case 'medium':
@@ -67,6 +103,14 @@ export function classificationLabel(c: ClassificationResult | null, size: number
     default:
       return '';
   }
+}
+
+export function classificationLabel(c: ClassificationResult | null, size: number): string {
+  if (!c) return '';
+  if ('error' in c) return c.error;
+  if (c.variant === 'unsolvable') return t('cls_no_solution');
+  if (c.variant === 'multiple') return t('cls_multiple');
+  return difficultyLabel(difficulty(c, size));
 }
 
 export function classificationTone(

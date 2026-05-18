@@ -19,6 +19,7 @@ export const fr: Messages = {
   // Play tab
   play_title: 'Jouer',
   play_new_puzzle: 'Nouveau puzzle',
+  play_new_puzzle_difficulty_aria: 'Choisir la difficulté',
   play_undo: 'Annuler',
   play_redo: 'Rétablir',
   play_check: 'Vérifier',

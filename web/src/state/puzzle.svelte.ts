@@ -1,5 +1,6 @@
 import { SvelteSet } from 'svelte/reactivity';
-import { generatePuzzle, solvePuzzle } from '../wasm/api';
+import { generatePuzzle, generatePuzzleWithConstraints, solvePuzzle } from '../wasm/api';
+import { constraintsForDifficulty, type Difficulty } from './classification';
 import { trackEvent } from '../analytics';
 import { showToast } from './toast.svelte';
 import { t, tf } from '../i18n/index.svelte';
@@ -179,6 +180,18 @@ export function newPuzzle(size: number): void {
   delete sizeStates[size];
   setPuzzle(generatePuzzle(size));
   trackEvent(`rublock/play/generate/${size}`);
+}
+
+/** Like `newPuzzle`, but constrained to a specific difficulty bucket.
+ *  Slower than `newPuzzle` — the WASM side rejects candidates until one
+ *  classifies to the requested bucket. */
+export function newPuzzleWithDifficulty(
+  size: number,
+  difficulty: Exclude<Difficulty, 'invalid'>
+): void {
+  delete sizeStates[size];
+  setPuzzle(generatePuzzleWithConstraints(size, constraintsForDifficulty(difficulty, size)));
+  trackEvent(`rublock/play/generate/${size}/${difficulty}`);
 }
 
 function clearWrongCell(row: number, col: number): void {

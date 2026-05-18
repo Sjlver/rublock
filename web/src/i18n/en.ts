@@ -37,6 +37,7 @@ export const en = {
   // Play tab
   play_title: 'Play',
   play_new_puzzle: 'New puzzle',
+  play_new_puzzle_difficulty_aria: 'Choose difficulty',
   play_undo: 'Undo',
   play_redo: 'Redo',
   play_check: 'Check',

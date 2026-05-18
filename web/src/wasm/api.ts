@@ -1,5 +1,6 @@
 import init, {
   generate_puzzle,
+  generate_puzzle_with_constraints,
   solve_puzzle,
   explain_puzzle,
   classify_puzzle,
@@ -68,6 +69,33 @@ function call<T>(fn: () => T): T {
 
 export function generatePuzzle(size: number): PuzzleData {
   return call(() => generate_puzzle(size) as PuzzleData);
+}
+
+export interface PuzzleConstraints {
+  minNodes: number;
+  maxNodes: number;
+  minWaves: number;
+  maxWaves: number;
+}
+
+/** Generate a puzzle whose classification falls inside `constraints`.
+ *  Synchronous and may block — used for difficulty-targeted generation
+ *  off the New-puzzle dropdown. `maxNodes`/`maxWaves` of `0xFFFFFFFF`
+ *  mean "unbounded". */
+export function generatePuzzleWithConstraints(
+  size: number,
+  constraints: PuzzleConstraints
+): PuzzleData {
+  return call(
+    () =>
+      generate_puzzle_with_constraints(
+        size,
+        constraints.minNodes,
+        constraints.maxNodes,
+        constraints.minWaves,
+        constraints.maxWaves
+      ) as PuzzleData
+  );
 }
 
 export function solvePuzzle(data: PuzzleData): SolvedPuzzle {

@@ -167,6 +167,31 @@ pub fn generate_puzzle(size: u32) -> Result<JsValue, JsValue> {
     }
 }
 
+/// Generate a puzzle whose classification (search-node and propagation-wave
+/// counts) falls inside the given inclusive windows. The Play tab's
+/// difficulty dropdown maps each label (Easy … Extremely hard) to a window
+/// and calls this; `u32::MAX` means "no upper bound".
+///
+/// The fast path in `generate_puzzle` only ever emits propagation-only
+/// puzzles (it stops at the first random grid where `propagate()` finishes),
+/// so the harder buckets need the full classify-and-filter loop here.
+#[wasm_bindgen]
+pub fn generate_puzzle_with_constraints(
+    size: u32,
+    min_nodes: u32,
+    max_nodes: u32,
+    min_waves: u32,
+    max_waves: u32,
+) -> Result<JsValue, JsValue> {
+    match size {
+        5 => generate_constrained_n::<5>(min_nodes, max_nodes, min_waves, max_waves),
+        6 => generate_constrained_n::<6>(min_nodes, max_nodes, min_waves, max_waves),
+        7 => generate_constrained_n::<7>(min_nodes, max_nodes, min_waves, max_waves),
+        8 => generate_constrained_n::<8>(min_nodes, max_nodes, min_waves, max_waves),
+        _ => Err(js_err("size must be 5–8")),
+    }
+}
+
 #[wasm_bindgen]
 pub fn explain_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsValue, JsValue> {
     if row_targets.len() != col_targets.len() {
@@ -212,6 +237,42 @@ pub fn classify_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsV
         7 => classify_puzzle_n::<7>(row_targets, col_targets),
         8 => classify_puzzle_n::<8>(row_targets, col_targets),
         _ => Err(js_err("size must be 5–8")),
+    }
+}
+
+fn generate_constrained_n<const N: usize>(
+    min_nodes: u32,
+    max_nodes: u32,
+    min_waves: u32,
+    max_waves: u32,
+) -> Result<JsValue, JsValue> {
+    let min_nodes = min_nodes as u64;
+    let max_nodes = max_nodes as u64;
+    let min_waves = min_waves as u64;
+    let max_waves = max_waves as u64;
+    let mut rng = rand::rng();
+    loop {
+        let mut cells = [[Cell::Empty; N]; N];
+        let Some(grid) = dfs::<N>(&mut cells, 0, &mut rng) else {
+            continue;
+        };
+        let (row_targets, col_targets) = grid.compute_targets();
+        let puzzle = Puzzle::new(row_targets, col_targets);
+        let result = classify::classify::<N>(puzzle);
+        if !matches!(result.variant, ClassifyVariant::Unique) {
+            continue;
+        }
+        if result.search_nodes < min_nodes
+            || result.search_nodes > max_nodes
+            || result.propagation_waves < min_waves
+            || result.propagation_waves > max_waves
+        {
+            continue;
+        }
+        return to_js(&PuzzleResp {
+            row_targets: &row_targets,
+            col_targets: &col_targets,
+        });
     }
 }
 

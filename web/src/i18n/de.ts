@@ -19,6 +19,7 @@ export const de: Messages = {
   // Play tab
   play_title: 'Spielen',
   play_new_puzzle: 'Neues Puzzle',
+  play_new_puzzle_difficulty_aria: 'Schwierigkeit wählen',
   play_undo: 'Zurück',
   play_redo: 'Vor',
   play_check: 'Prüfen',
