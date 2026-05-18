@@ -8,7 +8,13 @@ declare module './pkg/rublock.js' {
   export default function init(
     moduleOrPath?: string | URL | Request | Response | BufferSource | WebAssembly.Module
   ): Promise<unknown>;
-  export function generate_puzzle(size: number): unknown;
+  export function generate_puzzle(
+    size: number,
+    minNodes: number,
+    maxNodes: number,
+    minWaves: number,
+    maxWaves: number
+  ): unknown;
   export function solve_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): unknown;
   export function explain_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): unknown;
   export function classify_puzzle(rowTargets: Uint8Array, colTargets: Uint8Array): unknown;

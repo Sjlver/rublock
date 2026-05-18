@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 use crate::black_solver::BlackSolverState;
 use crate::classify::{self, ClassifyVariant};
 use crate::grid::{Cell, Grid};
-use crate::recorder::{Explain, Rule, Step};
+use crate::recorder::{Explain, Recorder, Rule, Step};
 use crate::solver::{Puzzle, SolveOutcome, Solver};
 
 // ── Response shapes (mirror web/src/state/types.ts) ──────────────────────────
@@ -156,27 +156,16 @@ fn try_puzzle<const N: usize>(
 
 // ── Exports ─────────────────────────────────────────────────────────────────
 
-#[wasm_bindgen]
-pub fn generate_puzzle(size: u32) -> Result<JsValue, JsValue> {
-    match size {
-        5 => generate_puzzle_n::<5>(),
-        6 => generate_puzzle_n::<6>(),
-        7 => generate_puzzle_n::<7>(),
-        8 => generate_puzzle_n::<8>(),
-        _ => Err(js_err("size must be 5–8")),
-    }
-}
-
 /// Generate a puzzle whose classification (search-node and propagation-wave
-/// counts) falls inside the given inclusive windows. The Play tab's
-/// difficulty dropdown maps each label (Easy … Extremely hard) to a window
-/// and calls this; `u32::MAX` means "no upper bound".
+/// counts) falls inside the given inclusive windows. `u32::MAX` means "no
+/// upper bound". The JS side calls this both for the difficulty dropdown
+/// (narrow windows) and for "any puzzle" generation (windows wide open).
 ///
-/// The fast path in `generate_puzzle` only ever emits propagation-only
-/// puzzles (it stops at the first random grid where `propagate()` finishes),
-/// so the harder buckets need the full classify-and-filter loop here.
+/// When `max_nodes == 1` the loop uses a propagation-only fast path that
+/// skips backtracking — the easy/medium/challenging buckets and the
+/// unconstrained case all hit it.
 #[wasm_bindgen]
-pub fn generate_puzzle_with_constraints(
+pub fn generate_puzzle(
     size: u32,
     min_nodes: u32,
     max_nodes: u32,
@@ -184,10 +173,10 @@ pub fn generate_puzzle_with_constraints(
     max_waves: u32,
 ) -> Result<JsValue, JsValue> {
     match size {
-        5 => generate_constrained_n::<5>(min_nodes, max_nodes, min_waves, max_waves),
-        6 => generate_constrained_n::<6>(min_nodes, max_nodes, min_waves, max_waves),
-        7 => generate_constrained_n::<7>(min_nodes, max_nodes, min_waves, max_waves),
-        8 => generate_constrained_n::<8>(min_nodes, max_nodes, min_waves, max_waves),
+        5 => generate_puzzle_n::<5>(min_nodes, max_nodes, min_waves, max_waves),
+        6 => generate_puzzle_n::<6>(min_nodes, max_nodes, min_waves, max_waves),
+        7 => generate_puzzle_n::<7>(min_nodes, max_nodes, min_waves, max_waves),
+        8 => generate_puzzle_n::<8>(min_nodes, max_nodes, min_waves, max_waves),
         _ => Err(js_err("size must be 5–8")),
     }
 }
@@ -240,7 +229,7 @@ pub fn classify_puzzle(row_targets: Vec<u8>, col_targets: Vec<u8>) -> Result<JsV
     }
 }
 
-fn generate_constrained_n<const N: usize>(
+fn generate_puzzle_n<const N: usize>(
     min_nodes: u32,
     max_nodes: u32,
     min_waves: u32,
@@ -258,14 +247,29 @@ fn generate_constrained_n<const N: usize>(
         };
         let (row_targets, col_targets) = grid.compute_targets();
         let puzzle = Puzzle::new(row_targets, col_targets);
-        let result = classify::classify::<N>(puzzle);
-        if !matches!(result.variant, ClassifyVariant::Unique) {
-            continue;
-        }
-        if result.search_nodes < min_nodes
-            || result.search_nodes > max_nodes
-            || result.propagation_waves < min_waves
-            || result.propagation_waves > max_waves
+
+        let (search_nodes, propagation_waves) = if max_nodes == 1 {
+            // Propagation alone narrows each cell to one bit deterministically,
+            // so a solved state here is necessarily the unique solution — no
+            // need for the multi-solution check the slow path runs.
+            let mut state = BlackSolverState::<N>::new(puzzle);
+            state.propagate();
+            if !state.is_solved() {
+                continue;
+            }
+            (1, state.recorder().propagation_waves())
+        } else {
+            let result = classify::classify::<N>(puzzle);
+            if !matches!(result.variant, ClassifyVariant::Unique) {
+                continue;
+            }
+            (result.search_nodes, result.propagation_waves)
+        };
+
+        if search_nodes < min_nodes
+            || search_nodes > max_nodes
+            || propagation_waves < min_waves
+            || propagation_waves > max_waves
         {
             continue;
         }
@@ -273,26 +277,6 @@ fn generate_constrained_n<const N: usize>(
             row_targets: &row_targets,
             col_targets: &col_targets,
         });
-    }
-}
-
-fn generate_puzzle_n<const N: usize>() -> Result<JsValue, JsValue> {
-    let mut rng = rand::rng();
-    loop {
-        let mut cells = [[Cell::Empty; N]; N];
-        let Some(grid) = dfs::<N>(&mut cells, 0, &mut rng) else {
-            continue;
-        };
-        let (row_targets, col_targets) = grid.compute_targets();
-        let puzzle = Puzzle::new(row_targets, col_targets);
-        let mut st = BlackSolverState::<N>::new(puzzle);
-        st.propagate();
-        if st.is_solved() {
-            return to_js(&PuzzleResp {
-                row_targets: &row_targets,
-                col_targets: &col_targets,
-            });
-        }
     }
 }
 

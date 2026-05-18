@@ -1,10 +1,11 @@
 import init, {
   generate_puzzle,
-  generate_puzzle_with_constraints,
   solve_puzzle,
   explain_puzzle,
   classify_puzzle,
 } from './pkg/rublock.js';
+
+const U32_MAX = 0xffffffff;
 // `?url` returns the bundled URL of the .wasm asset. We pass it explicitly to
 // `init()` instead of relying on `import.meta.url`, so Vite hashes and ships
 // the file like any other asset.
@@ -68,7 +69,7 @@ function call<T>(fn: () => T): T {
 }
 
 export function generatePuzzle(size: number): PuzzleData {
-  return call(() => generate_puzzle(size) as PuzzleData);
+  return call(() => generate_puzzle(size, 1, 1, 0, U32_MAX) as PuzzleData);
 }
 
 export interface PuzzleConstraints {
@@ -88,7 +89,7 @@ export function generatePuzzleWithConstraints(
 ): PuzzleData {
   return call(
     () =>
-      generate_puzzle_with_constraints(
+      generate_puzzle(
         size,
         constraints.minNodes,
         constraints.maxNodes,
