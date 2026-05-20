@@ -367,6 +367,165 @@ fn collect_pool_dyn(
     }
 }
 
+// ── Citations ─────────────────────────────────────────────────────────────────
+
+/// 39 citations, one per puzzle page. Each entry is (text, source).
+const CITATIONS: [(&str, &str); 39] = [
+    (
+        "Durch Stolpern kommt man bisweilen weiter, man muss nur nicht fallen und liegenbleiben.",
+        "Johann Wolfgang von Goethe",
+    ),
+    (
+        "Ich möchte lieber alles verlieren und dich finden, Gott, als alles gewinnen und dich nicht finden.",
+        "Augustin",
+    ),
+    (
+        "Viele würden gern ein einfacheres Leben führen, wenn der Weg dorthin nicht so kompliziert wäre.",
+        "Justus Jonas",
+    ),
+    (
+        "Der ist kein freier Mensch, der sich nicht auch einmal dem Nichtstun hingeben kann.",
+        "Cicero",
+    ),
+    (
+        "Vielleicht gibt es schönere Zeiten, aber dies ist die unsere.",
+        "Jean Paul Sartre",
+    ),
+    (
+        "Wenn durch einen Menschen ein wenig mehr Liebe und Güte, ein wenig mehr Licht und Wahrheit in der Welt war, dann hat das Leben einen Sinn gehabt.",
+        "Alfred Delp",
+    ),
+    (
+        "Liebe den Herrn, deinen Gott, von ganzem Herzen, mit ganzem Willen, mit deiner ganzen Kraft und deinem ganzen Verstand! Und: Liebe deinen Nächsten wie dich selbst!",
+        "Lukas 10, 27",
+    ),
+    (
+        "Kümmere dich nicht um den Beifall von Leuten, die du nicht kennst oder die du verachtest.",
+        "Leo Nikolajewitsch Tolstoj",
+    ),
+    (
+        "Wenn alles wirklich so wäre, wie wir es wollten, würden die Leute sich beschweren, daß nichts mehr so ist, wie es einmal war.",
+        "Pierre Dac",
+    ),
+    (
+        "It is better to be a young June-bug than an old bird of paradise.",
+        "Mark Twain",
+    ),
+    (
+        "I know I have not found the answers to all of my questions. The answers I have found only serve to raise a whole set of new questions. In some ways I am as confused as ever, but I believe that I am confused on a higher level and about more important things.",
+        "Earl C. Kelley (1951)",
+    ),
+    (
+        "Nicht weil es schwer ist, wagen wir es nicht, sondern weil wir es nicht wagen, ist es schwer.",
+        "Seneca, Epistulae Morales ad Lucilium, Brief CIV, 26",
+    ),
+    (
+        "Courage is not the absence of fear, but the triumph over it.",
+        "Nelson Mandela",
+    ),
+    (
+        "Do what you can, with what you have, where you are.",
+        "Theodore Roosevelt",
+    ),
+    (
+        "Es ist nicht genug zu wissen, man muss auch anwenden. Es ist nicht genug zu wollen, man muss auch tun.",
+        "Johann Wolfgang von Goethe",
+    ),
+    (
+        "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
+        "Will Durant",
+    ),
+    (
+        "The greatest glory in living lies not in never falling, but in rising every time we fall.",
+        "Nelson Mandela",
+    ),
+    (
+        "Two roads diverged in a wood, and I — I took the one less traveled by, and that has made all the difference.",
+        "Robert Frost, The Road Not Taken (1916)",
+    ),
+    (
+        "Phantasie ist wichtiger als Wissen, denn Wissen ist begrenzt.",
+        "Albert Einstein",
+    ),
+    (
+        "Not all those who wander are lost.",
+        "J.R.R. Tolkien, The Fellowship of the Ring (1954)",
+    ),
+    (
+        "Happiness is not something ready-made. It comes from your own actions.",
+        "Dalai Lama XIV",
+    ),
+    (
+        "It's not what happens to you, but how you react to it that matters.",
+        "Epiktet, Enchiridion",
+    ),
+    (
+        "The unexamined life is not worth living.",
+        "Sokrates (überliefert durch Platon, Apologie)",
+    ),
+    (
+        "Be yourself; everyone else is already taken.",
+        "Oscar Wilde",
+    ),
+    ("Try to be a rainbow in someone's cloud.", "Maya Angelou"),
+    (
+        "Spread love everywhere you go. Let no one ever come to you without leaving happier.",
+        "Mutter Teresa",
+    ),
+    (
+        "Wir leben alle unter dem gleichen Himmel, aber wir haben nicht alle denselben Horizont.",
+        "Konrad Adenauer",
+    ),
+    (
+        "Es sind die Begegnungen mit den Menschen, die das Leben lebenswert machen.",
+        "Guy de Maupassant",
+    ),
+    (
+        "Tell me, what is it you plan to do with your one wild and precious life?",
+        "Mary Oliver, House of Light (1990)",
+    ),
+    (
+        "The purpose of life is to live it, to taste experience to the utmost, to reach out eagerly and without fear for newer and richer experience.",
+        "Eleanor Roosevelt, You Learn by Living (1960)",
+    ),
+    (
+        "You have brains in your head. You have feet in your shoes. You can steer yourself any direction you choose.",
+        "Dr. Seuss, Oh, the Places You'll Go! (1990)",
+    ),
+    (
+        "It always seems impossible until it's done.",
+        "Nelson Mandela",
+    ),
+    (
+        "The future belongs to those who believe in the beauty of their dreams.",
+        "Eleanor Roosevelt",
+    ),
+    (
+        "You miss 100% of the shots you don't take.",
+        "Wayne Gretzky",
+    ),
+    (
+        "You can be the ripest, juiciest peach in the world, and there's still going to be somebody who hates peaches.",
+        "Dita Von Teese",
+    ),
+    (
+        "In the depth of winter, I finally learned that within me there lay an invincible summer.",
+        "Albert Camus, Retour à Tipasa, in: L'Été (1954)",
+    ),
+    (
+        "Ich möchte Sie bitten, lieber Herr, Geduld zu haben gegen alles Ungelöste in Ihrem Herzen und zu versuchen, die Fragen selbst lieb zu haben.",
+        "Rainer Maria Rilke, Briefe an einen jungen Dichter (1903)",
+    ),
+    (
+        "For all that has been — Thanks! To all that shall be — Yes!",
+        "Dag Hammarskjöld, Markings (Vägmärken, 1963)",
+    ),
+    (
+        "Despite everything, life is full of beauty and meaning.",
+        "Etty Hillesum, Tagebücher (1941–1943)",
+    ),
+];
+
 // ── HTML rendering ────────────────────────────────────────────────────────────
 
 const BOOKLET_CSS: &str = r#"
@@ -497,11 +656,26 @@ html, body {
 
 .puzzle-footer {
   width: 100%;
+  border-top: 0.3pt solid #c9bda0;
+  padding-top: 2.5mm;
   text-align: center;
+}
+
+.citation-text {
   font-family: 'Playfair Display', serif;
-  font-size: 11pt;
   font-style: italic;
+  font-size: 8pt;
+  color: #2a2418;
+  line-height: 1.5;
+  margin-bottom: 1.5mm;
+}
+
+.citation-source {
+  font-family: 'Inter', sans-serif;
+  font-style: italic;
+  font-size: 7.5pt;
   color: #8a7d63;
+  letter-spacing: 0.02em;
 }
 
 /* ── Grid ── */
@@ -602,28 +776,37 @@ fn render_title_page() -> String {
     )
 }
 
-fn render_puzzle_page(index: usize, total: usize, puzzle: &BookletPuzzle) -> String {
+fn render_puzzle_page(
+    index: usize,
+    total: usize,
+    puzzle: &BookletPuzzle,
+    citation: (&str, &str),
+) -> String {
     let grid_html = render_grid_html(puzzle.size, &puzzle.row_targets, &puzzle.col_targets, None);
+    let (cite_text, cite_source) = citation;
     format!(
         r#"
 <section class="page puzzle-page">
   <header class="puzzle-meta">
     <span class="num">Nr.&nbsp;{index}&thinsp;/&thinsp;{total}</span>
-    <span class="difficulty">{diff}</span>
+    <span class="difficulty">{diff}&nbsp;&middot;&nbsp;{size}&times;{size}</span>
   </header>
   <div class="puzzle-stage">
     {grid_html}
   </div>
   <footer class="puzzle-footer">
-    Gr&ouml;&szlig;e {size}&times;{size}
+    <div class="citation-text">{cite_text}</div>
+    <div class="citation-source">&mdash; <em>{cite_source}</em></div>
   </footer>
 </section>
 "#,
         index = index,
         total = total,
         diff = puzzle.difficulty.label_de(),
-        grid_html = grid_html,
         size = puzzle.size,
+        grid_html = grid_html,
+        cite_text = cite_text,
+        cite_source = cite_source,
     )
 }
 
@@ -646,7 +829,7 @@ fn render_booklet_html(puzzles: &[BookletPuzzle]) -> String {
     out.push_str(&render_title_page());
     let total = puzzles.len();
     for (i, p) in puzzles.iter().enumerate() {
-        out.push_str(&render_puzzle_page(i + 1, total, p));
+        out.push_str(&render_puzzle_page(i + 1, total, p, CITATIONS[i]));
     }
     out.push_str("</body>\n</html>\n");
     out
