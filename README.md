@@ -83,3 +83,7 @@ mise run fmt        # cargo fmt + prettier — good as a pre-commit step
 ```
 
 If you'd rather drive npm directly: build the wasm, copy `pkg/rublock_bg.wasm` and `pkg/rublock.js` into `web/src/wasm/pkg/`, then run `npm install && npm run build` in `web/`. The full sequence is in `.github/workflows/deploy.yml`.
+
+## Funding
+
+Rublock shows a single privacy-respecting ad after each solved puzzle, served by [EthicalAds](https://www.ethicalads.io/) — no cookies, no fingerprinting, no third-party trackers. The ad is gated behind the build-time env var `VITE_ETHICALADS_PUBLISHER_ID`; if unset, no ad container or loader script ships. See [`PRIVACY.md`](./PRIVACY.md) for the full data story.

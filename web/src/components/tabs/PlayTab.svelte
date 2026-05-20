@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import AdSlot from '../AdSlot.svelte';
   import PuzzleGrid from '../PuzzleGrid.svelte';
   import InputBar from '../InputBar.svelte';
   import EmojiRain from '../EmojiRain.svelte';
@@ -37,6 +38,9 @@
   import { isSupportedSize } from '../../state/storage.svelte';
 
   let showEmojiRain = $state(false);
+  // Latches on solve and resets on new puzzle / size switch. Drives the
+  // post-solve AdSlot, which needs to persist past the 5s emoji rain.
+  let solvedThisGame = $state(false);
   let hintDismissed = $state<boolean>(readHintDismissed());
 
   let status = $state('');
@@ -61,6 +65,7 @@
     const offSolved = onSolved(() => {
       showEmojiRain = false;
       queueMicrotask(() => (showEmojiRain = true));
+      solvedThisGame = true;
     });
     const onKey = (event: KeyboardEvent) => {
       closeMenuOnEscape(event);
@@ -156,6 +161,7 @@
   function handleSizeClick(s: number): void {
     status = t('play_status_switching');
     switchToSize(s);
+    solvedThisGame = false;
     status = '';
   }
 
@@ -164,6 +170,7 @@
     status = t('play_status_generating');
     queueMicrotask(() => {
       newPuzzle(playState.puzzleData!.row_targets.length);
+      solvedThisGame = false;
       status = '';
     });
   }
@@ -183,6 +190,7 @@
     queueMicrotask(() => {
       try {
         newPuzzleWithDifficulty(size, d);
+        solvedThisGame = false;
       } finally {
         status = '';
       }
@@ -464,6 +472,10 @@
       onPlaceValue={(v) => applyUserValue(v)}
       onErase={() => applyUserNote(null)}
     />
+  {/if}
+
+  {#if solvedThisGame}
+    <AdSlot />
   {/if}
 </div>
 
