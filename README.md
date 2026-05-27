@@ -83,3 +83,7 @@ mise run fmt        # cargo fmt + prettier — good as a pre-commit step
 ```
 
 If you'd rather drive npm directly: build the wasm, copy `pkg/rublock_bg.wasm` and `pkg/rublock.js` into `web/src/wasm/pkg/`, then run `npm install && npm run build` in `web/`. The full sequence is in `.github/workflows/deploy.yml`.
+
+## Funding
+
+rublock is free and ad-free. Once in a while — after a _prime-numbered_ solve (your 2nd, 3rd, 5th, 7th… puzzle, so it starts occasional and grows rarer) — a small card invites you to support development on [Liberapay](https://liberapay.com/Sjlver/) or Ko-fi. It's a plain link: no third-party ad scripts and no trackers. See [`PRIVACY.md`](./PRIVACY.md) for the full data story.

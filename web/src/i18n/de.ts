@@ -206,6 +206,15 @@ export const de: Messages = {
   share_title: 'Doplo-Puzzle',
   share_text: 'Probier dieses Doplo-Puzzle:',
 
+  // Support CTA (post-solve)
+  support_copy_1: 'Macht dir rublock Spaß? Unterstütze die Entwicklung.',
+  support_copy_2: 'rublock ist kostenlos und werbefrei — hilf mit, dass das so bleibt.',
+  support_copy_3: 'Magst du diese Puzzles? Trag etwas bei, damit es weitergeht.',
+  support_copy_4: 'Von einer einzelnen Person entwickelt. Eine kleine Spende hilft sehr.',
+  support_copy_5: 'Wenn rublock deinen Tag verschönert hat, denk ans Unterstützen.',
+  support_button: 'Auf {platform} unterstützen',
+  support_dismiss_aria: 'Schließen',
+
   // Wasm errors
   err_row_targets_length: 'Anzahl Zeilen-Zielwerte passt nicht zur Puzzle-Größe.',
   err_col_targets_length: 'Anzahl Spalten-Zielwerte passt nicht zur Puzzle-Größe.',
