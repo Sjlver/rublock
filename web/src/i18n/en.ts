@@ -14,6 +14,7 @@
 //   cls_*       Classification chip labels
 //   toast_*     Transient toasts
 //   share_*     Web Share / clipboard
+//   support_*   Post-solve "support the project" CTA (copy + button + dismiss)
 //   aria_*      Aria-labels for buttons that have only an icon
 //   err_*       Errors, including translated wasm errors
 //
@@ -223,6 +224,16 @@ export const en = {
   // Web Share API
   share_title: 'Doplo puzzle',
   share_text: 'Try this Doplo puzzle:',
+
+  // Support CTA (post-solve) — five rotating calls-to-action. {platform} is a
+  // brand name (Liberapay / Ko-fi) and stays untranslated.
+  support_copy_1: 'Enjoying rublock? Support its development.',
+  support_copy_2: 'rublock is free and ad-free — help keep it that way.',
+  support_copy_3: 'Like these puzzles? Chip in to keep them coming.',
+  support_copy_4: 'Made by one developer. A small gift goes a long way.',
+  support_copy_5: 'If rublock brightened your day, consider supporting it.',
+  support_button: 'Support on {platform}',
+  support_dismiss_aria: 'Dismiss',
 
   // Wasm errors (mapped from raw Rust strings in web/src/wasm/api.ts)
   err_row_targets_length: 'Row targets length does not match the puzzle size.',

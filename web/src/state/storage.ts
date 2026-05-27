@@ -14,6 +14,8 @@
 export const KEY_PLAY_STATE = 'rublock-play-state';
 export const KEY_LOCALE = 'rublock-locale';
 export const KEY_HINT_DISMISSED = 'rublock-hint-dismissed';
+export const KEY_SOLVE_COUNT = 'rublock-solve-count';
+export const KEY_SUPPORT_SHOWN = 'rublock-support-shown';
 
 let writesDisabled = false;
 let warnedOnce = false;
@@ -70,4 +72,35 @@ export function readHintDismissed(): boolean {
 export function writeHintDismissed(value: boolean): void {
   if (value) safeWrite(KEY_HINT_DISMISSED, '1');
   else safeRemove(KEY_HINT_DISMISSED);
+}
+
+// ---------- Post-solve support CTA counters ----------
+//
+// Two small non-negative integers. `solve-count` is the lifetime number of
+// puzzles solved and drives the prime-number gate that decides when to show the
+// support card; `support-shown` is how many times the card has been shown and
+// drives the platform/copy rotation. Both persist so the cadence and the
+// rotation continue across sessions instead of resetting each visit.
+
+function readCount(key: string): number {
+  const raw = safeRead(key);
+  if (raw === null) return 0;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+export function readSolveCount(): number {
+  return readCount(KEY_SOLVE_COUNT);
+}
+
+export function writeSolveCount(value: number): void {
+  safeWrite(KEY_SOLVE_COUNT, String(value));
+}
+
+export function readSupportShown(): number {
+  return readCount(KEY_SUPPORT_SHOWN);
+}
+
+export function writeSupportShown(value: number): void {
+  safeWrite(KEY_SUPPORT_SHOWN, String(value));
 }

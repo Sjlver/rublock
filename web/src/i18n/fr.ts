@@ -208,6 +208,15 @@ export const fr: Messages = {
   share_title: 'Puzzle Doplo',
   share_text: 'Essaie ce puzzle Doplo :',
 
+  // Support CTA (post-solve)
+  support_copy_1: 'rublock te plaît ? Soutiens son développement.',
+  support_copy_2: 'rublock est gratuit et sans publicité — aide à le garder ainsi.',
+  support_copy_3: "Tu aimes ces puzzles ? Contribue pour qu'ils continuent.",
+  support_copy_4: 'Créé par une seule personne. Un petit geste fait beaucoup.',
+  support_copy_5: 'Si rublock a égayé ta journée, pense à le soutenir.',
+  support_button: 'Soutenir sur {platform}',
+  support_dismiss_aria: 'Fermer',
+
   // Wasm errors
   err_row_targets_length: 'Le nombre de cibles de ligne ne correspond pas à la taille du puzzle.',
   err_col_targets_length: 'Le nombre de cibles de colonne ne correspond pas à la taille du puzzle.',

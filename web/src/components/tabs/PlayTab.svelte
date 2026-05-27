@@ -3,6 +3,7 @@
   import PuzzleGrid from '../PuzzleGrid.svelte';
   import InputBar from '../InputBar.svelte';
   import EmojiRain from '../EmojiRain.svelte';
+  import SupportCard from '../SupportCard.svelte';
   import PageHeader from '../PageHeader.svelte';
   import {
     playState,
@@ -35,8 +36,13 @@
   import { t } from '../../i18n/index.svelte';
   import { readHintDismissed, writeHintDismissed } from '../../state/storage';
   import { isSupportedSize } from '../../state/storage.svelte';
+  import { isPrime, recordSolve, nextSupportPrompt, type SupportPrompt } from '../../state/support';
 
   let showEmojiRain = $state(false);
+  // Post-solve "support the project" CTA. Set to a prompt only on a
+  // prime-numbered solve (see state/support.ts), and reset whenever a fresh
+  // puzzle starts so the card belongs to exactly one solved board.
+  let supportPrompt = $state<SupportPrompt | null>(null);
   let hintDismissed = $state<boolean>(readHintDismissed());
 
   let status = $state('');
@@ -61,6 +67,8 @@
     const offSolved = onSolved(() => {
       showEmojiRain = false;
       queueMicrotask(() => (showEmojiRain = true));
+      const solveCount = recordSolve();
+      supportPrompt = isPrime(solveCount) ? nextSupportPrompt() : null;
     });
     const onKey = (event: KeyboardEvent) => {
       closeMenuOnEscape(event);
@@ -156,6 +164,7 @@
   function handleSizeClick(s: number): void {
     status = t('play_status_switching');
     switchToSize(s);
+    supportPrompt = null;
     status = '';
   }
 
@@ -164,6 +173,7 @@
     status = t('play_status_generating');
     queueMicrotask(() => {
       newPuzzle(playState.puzzleData!.row_targets.length);
+      supportPrompt = null;
       status = '';
     });
   }
@@ -183,6 +193,7 @@
     queueMicrotask(() => {
       try {
         newPuzzleWithDifficulty(size, d);
+        supportPrompt = null;
       } finally {
         status = '';
       }
@@ -464,6 +475,12 @@
       onPlaceValue={(v) => applyUserValue(v)}
       onErase={() => applyUserNote(null)}
     />
+  {/if}
+
+  {#if supportPrompt}
+    {#key supportPrompt}
+      <SupportCard prompt={supportPrompt} onDismiss={() => (supportPrompt = null)} />
+    {/key}
   {/if}
 </div>
 
