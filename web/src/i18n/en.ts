@@ -228,8 +228,8 @@ export const en = {
   // Support CTA (post-solve) — five rotating calls-to-action per channel.
   // {platform} is a brand name (Liberapay / Ko-fi) and stays untranslated.
   support_copy_1: 'Enjoying rublock? Support its development.',
-  support_copy_2: 'rublock is free and ad-free — help keep it that way.',
-  support_copy_3: 'Like these puzzles? Chip in to keep them coming.',
+  support_copy_2: 'rublock is free and ad-free — worth supporting?',
+  support_copy_3: 'Like these puzzles? Show your appreciation.',
   support_copy_4: 'Made by one developer. A small gift goes a long way.',
   support_copy_5: 'If rublock brightened your day, consider supporting it.',
   support_button: 'Support on {platform}',

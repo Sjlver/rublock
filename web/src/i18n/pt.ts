@@ -209,8 +209,8 @@ export const pt: Messages = {
 
   // Support CTA (post-solve)
   support_copy_1: 'Gostas do rublock? Apoia o seu desenvolvimento.',
-  support_copy_2: 'O rublock é gratuito e sem anúncios — ajuda a mantê-lo assim.',
-  support_copy_3: 'Gostas destes puzzles? Contribui para que continuem.',
+  support_copy_2: 'O rublock é gratuito e sem anúncios — merece o teu apoio?',
+  support_copy_3: 'Gostas destes puzzles? Mostra o teu apreço.',
   support_copy_4: 'Feito por uma só pessoa. Um pequeno gesto ajuda muito.',
   support_copy_5: 'Se o rublock alegrou o teu dia, considera apoiá-lo.',
   support_button: 'Apoiar no {platform}',
