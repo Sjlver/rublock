@@ -214,6 +214,17 @@ export const de: Messages = {
   support_copy_5: 'Wenn rublock deinen Tag verschönert hat, denk ans Unterstützen.',
   support_button: 'Auf {platform} unterstützen',
   support_dismiss_aria: 'Schließen',
+  support_heading: 'Gut gemacht!',
+  support_share_copy_1: 'Kennst du jemanden, der Logikrätsel liebt? Schick ihm dieses hier.',
+  support_share_copy_2:
+    'Rätseln macht zu zweit mehr Spaß. Fordere jemanden mit diesem Puzzle heraus.',
+  support_share_copy_3:
+    'rublock lebt von Mundpropaganda. Teile es mit einer Freundin oder einem Freund!',
+  support_share_copy_4: 'Glaubst du, jemand löst das schneller? Schick es weiter.',
+  support_share_copy_5:
+    'Hat es Spaß gemacht? Am meisten hilfst du rublock, wenn du es weitererzählst.',
+  support_share_button: 'Mit Freunden teilen',
+  support_not_now: 'Nicht jetzt',
 
   // Wasm errors
   err_row_targets_length: 'Anzahl Zeilen-Zielwerte passt nicht zur Puzzle-Größe.',

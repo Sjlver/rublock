@@ -1,0 +1,153 @@
+<!doctype html>
+<!-- Source for public/og-image.png. Regenerate with `node scripts/og-image.mjs`. -->
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=block"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-page: oklch(96% 0.004 80);
+        --card: #ffffff;
+        --ink: oklch(20% 0.01 280);
+        --ink-2: oklch(38% 0.01 280);
+        --line: oklch(91% 0.005 280);
+        --line-2: oklch(86% 0.006 280);
+        --tint: oklch(96.5% 0.012 285);
+        --accent: oklch(48% 0.18 277);
+        --accent-soft: oklch(94% 0.04 277);
+        --accent-soft-ink: oklch(38% 0.16 277);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        font-family: Inter, 'Liberation Sans', sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 85% 20%, var(--accent-soft) 0, transparent 55%), var(--bg-page);
+        display: flex;
+        align-items: center;
+        gap: 64px;
+        padding: 0 80px;
+      }
+      .text {
+        flex: 1;
+      }
+      .badge {
+        display: inline-block;
+        padding: 8px 18px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-soft-ink);
+        font-weight: 600;
+        font-size: 24px;
+        margin-bottom: 28px;
+      }
+      h1 {
+        font-size: 104px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+      .tagline {
+        margin-top: 24px;
+        font-size: 36px;
+        font-weight: 600;
+        line-height: 1.25;
+        color: var(--ink-2);
+        letter-spacing: -0.01em;
+      }
+      .facts {
+        margin-top: 36px;
+        font-size: 24px;
+        font-weight: 500;
+        color: var(--ink-2);
+        opacity: 0.8;
+      }
+      .board {
+        border-radius: 24px;
+        overflow: hidden;
+        background: var(--card);
+        box-shadow:
+          0 0 0 2px var(--line-2),
+          0 24px 60px -20px rgba(20, 20, 60, 0.35);
+        transform: rotate(-3deg);
+      }
+      table {
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        width: 62px;
+        height: 62px;
+        text-align: center;
+        font-size: 28px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      th {
+        background: var(--tint);
+        font-weight: 800;
+      }
+      td {
+        border-right: 2px solid var(--line);
+        border-bottom: 2px solid var(--line);
+      }
+      td.black {
+        background: var(--ink);
+      }
+      td.selected {
+        outline: 4px solid var(--accent);
+        outline-offset: -4px;
+        background: var(--accent-soft);
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="text">
+      <div class="badge">Free · no ads · no sign-up</div>
+      <h1>rublock</h1>
+      <p class="tagline">Doplo logic puzzles,<br />right in your browser.</p>
+      <p class="facts">Play · create · print</p>
+    </div>
+    <div class="board"><table id="grid"></table></div>
+    <script>
+      // The 6×6 fixture from tests/support-card.spec.ts (`?p=7047430a4100`),
+      // partly filled in so it reads as a puzzle in progress.
+      const rows = [7, 0, 4, 7, 4, 3];
+      const cols = [0, 10, 4, 1, 0, 0];
+      const grid = [
+        ['3', 'B', '1', '2', '4', 'B'],
+        ['4', '1', '2', '3', 'B', 'B'],
+        ['1', '2', 'B', '4', 'B', '3'],
+        ['B', '3', '4', 'B', '', ''],
+        ['B', '', '', '', '', ''],
+        ['', 'B', '', '', '', ''],
+      ];
+      const table = document.getElementById('grid');
+      table.insertRow().innerHTML = '<th></th>' + cols.map((c) => `<th>${c}</th>`).join('');
+      grid.forEach((cells, r) => {
+        const tr = table.insertRow();
+        tr.innerHTML =
+          `<th>${rows[r]}</th>` +
+          cells
+            .map((v, c) => {
+              if (v === 'B') return '<td class="black"></td>';
+              const sel = r === 3 && c === 4 ? ' class="selected"' : '';
+              return `<td${sel}>${v}</td>`;
+            })
+            .join('');
+      });
+    </script>
+  </body>
+</html>

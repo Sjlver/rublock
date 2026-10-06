@@ -86,4 +86,4 @@ If you'd rather drive npm directly: build the wasm, copy `pkg/rublock_bg.wasm` a
 
 ## Funding
 
-rublock is free and ad-free. Once in a while — after a _prime-numbered_ solve (your 2nd, 3rd, 5th, 7th… puzzle, so it starts occasional and grows rarer) — a small card invites you to support development on [Liberapay](https://liberapay.com/Sjlver/) or Ko-fi. It's a plain link: no third-party ad scripts and no trackers. See [`PRIVACY.md`](./PRIVACY.md) for the full data story.
+rublock is free and ad-free. Once in a while — after a _prime-numbered_ solve (your 2nd, 3rd, 5th, 7th… puzzle, so it starts occasional and grows rarer) — a card invites you to share rublock with a friend or to support development on [Liberapay](https://liberapay.com/Sjlver/) or Ko-fi. It's a plain link: no third-party ad scripts and no trackers. See [`PRIVACY.md`](./PRIVACY.md) for the full data story.

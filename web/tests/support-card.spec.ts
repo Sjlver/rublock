@@ -22,6 +22,9 @@ const SOLUTION: ReadonlyArray<ReadonlyArray<string>> = [
 ];
 
 const KEY_SOLVE_COUNT = 'rublock-solve-count';
+const KEY_SUPPORT_SHOWN = 'rublock-support-shown';
+// The card waits for the emoji rain to clear before fading in.
+const APPEAR_TIMEOUT = 8000;
 
 async function waitForReady(page: Page) {
   await expect(page.locator('.app-shell table.puzzle')).toBeVisible();
@@ -29,11 +32,15 @@ async function waitForReady(page: Page) {
 
 // Seed the lifetime solve count so the *next* solve lands on a chosen value.
 // Runs before the app boots on the upcoming navigation.
-async function seedSolveCount(page: Page, value: number) {
+async function seedCount(page: Page, key: string, value: number) {
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, String(value)), {
-    key: KEY_SOLVE_COUNT,
+    key,
     value,
   });
+}
+
+async function seedSolveCount(page: Page, value: number) {
+  await seedCount(page, KEY_SOLVE_COUNT, value);
 }
 
 async function solveCurrentPuzzle(page: Page) {
@@ -55,9 +62,9 @@ test('the support card appears on a prime-numbered solve', async ({ page }) => {
   await solveCurrentPuzzle(page);
 
   const card = page.locator('[data-support-card]');
-  await expect(card).toBeVisible();
+  await expect(card).toBeVisible({ timeout: APPEAR_TIMEOUT });
   // The first card ever shown is deterministic: rotation index 0 → Liberapay.
-  await expect(card).toHaveAttribute('data-support-platform', 'liberapay');
+  await expect(card).toHaveAttribute('data-support-channel', 'liberapay');
   // The CTA links to one of the two configured donation platforms.
   await expect(card.locator('a[href]')).toHaveAttribute(
     'href',
@@ -71,6 +78,8 @@ test('no support card on a non-prime solve', async ({ page }) => {
   await waitForReady(page);
   await solveCurrentPuzzle(page);
 
+  // Wait past the reveal delay so a late card would have shown up.
+  await page.waitForTimeout(4000);
   await expect(page.locator('[data-support-card]')).toHaveCount(0);
 });
 
@@ -81,7 +90,38 @@ test('the support card can be dismissed', async ({ page }) => {
   await solveCurrentPuzzle(page);
 
   const card = page.locator('[data-support-card]');
-  await expect(card).toBeVisible();
+  await expect(card).toBeVisible({ timeout: APPEAR_TIMEOUT });
   await card.locator('.support-dismiss').click();
   await expect(card).toHaveCount(0);
+});
+
+test('the support card can be dismissed with Escape', async ({ page }) => {
+  await seedSolveCount(page, 1);
+  await page.goto(`/?p=${PUZZLE}`);
+  await waitForReady(page);
+  await solveCurrentPuzzle(page);
+
+  const card = page.locator('[data-support-card]');
+  await expect(card).toBeVisible({ timeout: APPEAR_TIMEOUT });
+  await page.keyboard.press('Escape');
+  await expect(card).toHaveCount(0);
+});
+
+test('the share variant copies the puzzle link', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await seedSolveCount(page, 1);
+  await seedCount(page, KEY_SUPPORT_SHOWN, 2); // rotation index 2 → share
+  await page.goto(`/?p=${PUZZLE}`);
+  await waitForReady(page);
+  await solveCurrentPuzzle(page);
+
+  const card = page.locator('[data-support-card]');
+  await expect(card).toBeVisible({ timeout: APPEAR_TIMEOUT });
+  await expect(card).toHaveAttribute('data-support-channel', 'share');
+  await card.locator('.support-action').click();
+
+  await expect(card).toHaveCount(0);
+  await expect(page.locator('[role="status"]')).toContainText('Link copied to clipboard');
+  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboardText).toContain(`?p=${PUZZLE}`);
 });

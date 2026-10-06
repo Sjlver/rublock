@@ -215,6 +215,14 @@ export const pt: Messages = {
   support_copy_5: 'Se o rublock alegrou o teu dia, considera apoiá-lo.',
   support_button: 'Apoiar no {platform}',
   support_dismiss_aria: 'Fechar',
+  support_heading: 'Muito bem!',
+  support_share_copy_1: 'Conheces alguém que adora puzzles de lógica? Envia-lhe este.',
+  support_share_copy_2: 'Os puzzles são melhores com amigos. Desafia alguém a resolver este.',
+  support_share_copy_3: 'O rublock cresce de boca em boca. Partilha-o com um amigo!',
+  support_share_copy_4: 'Achas que um amigo resolveria isto mais depressa? Envia-lho.',
+  support_share_copy_5: 'Gostaste? A melhor forma de ajudar o rublock é falar dele a um amigo.',
+  support_share_button: 'Partilhar com um amigo',
+  support_not_now: 'Agora não',
 
   // Wasm errors
   err_row_targets_length: 'O número de alvos de linha não corresponde ao tamanho do puzzle.',

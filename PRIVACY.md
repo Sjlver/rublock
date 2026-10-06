@@ -22,10 +22,11 @@ counts rather than per-user trails.
 ## Supporting the project
 
 Rublock is free and shows no ads. Once in a while, after you solve a puzzle, a
-small card invites you to support development on
-[Liberapay](https://liberapay.com/) or [Ko-fi](https://ko-fi.com/). Following
-one of those links takes you to that platform, whose own privacy policy then
-applies. We don't embed their scripts or trackers — the card is just a link.
+card invites you to share the puzzle with a friend or to support development on
+[Liberapay](https://liberapay.com/) or [Ko-fi](https://ko-fi.com/). Sharing uses
+your device's share sheet or clipboard; nothing is sent to us. Following a
+donation link takes you to that platform, whose own privacy policy then applies.
+We don't embed their scripts or trackers — the card is just a link.
 
 ## Questions
 

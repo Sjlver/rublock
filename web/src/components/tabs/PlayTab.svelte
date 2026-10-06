@@ -43,6 +43,9 @@
   // prime-numbered solve (see state/support.ts), and reset whenever a fresh
   // puzzle starts so the card belongs to exactly one solved board.
   let supportPrompt = $state<SupportPrompt | null>(null);
+  let supportTimer: number | undefined;
+  // Long enough for most of the emoji rain to have fallen past the card.
+  const SUPPORT_DELAY_MS = 2500;
   let hintDismissed = $state<boolean>(readHintDismissed());
 
   let status = $state('');
@@ -67,8 +70,13 @@
     const offSolved = onSolved(() => {
       showEmojiRain = false;
       queueMicrotask(() => (showEmojiRain = true));
-      const solveCount = recordSolve();
-      supportPrompt = isPrime(solveCount) ? nextSupportPrompt() : null;
+      clearSupport();
+      if (isPrime(recordSolve())) {
+        supportTimer = window.setTimeout(
+          () => (supportPrompt = nextSupportPrompt()),
+          SUPPORT_DELAY_MS
+        );
+      }
     });
     const onKey = (event: KeyboardEvent) => {
       closeMenuOnEscape(event);
@@ -80,8 +88,14 @@
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', closeMenuOnOutsideClick);
       offSolved();
+      clearSupport();
     };
   });
+
+  function clearSupport(): void {
+    clearTimeout(supportTimer);
+    supportPrompt = null;
+  }
 
   function isKeyboardInputTarget(target: EventTarget | null): boolean {
     return (
@@ -91,7 +105,7 @@
   }
 
   function handlePlayKeydown(event: KeyboardEvent): void {
-    if (!playState.puzzleData || isKeyboardInputTarget(event.target)) return;
+    if (!playState.puzzleData || supportPrompt || isKeyboardInputTarget(event.target)) return;
 
     const key = event.key.toLowerCase();
     const moves: Record<string, [number, number]> = {
@@ -164,7 +178,7 @@
   function handleSizeClick(s: number): void {
     status = t('play_status_switching');
     switchToSize(s);
-    supportPrompt = null;
+    clearSupport();
     status = '';
   }
 
@@ -173,7 +187,7 @@
     status = t('play_status_generating');
     queueMicrotask(() => {
       newPuzzle(playState.puzzleData!.row_targets.length);
-      supportPrompt = null;
+      clearSupport();
       status = '';
     });
   }
@@ -193,7 +207,7 @@
     queueMicrotask(() => {
       try {
         newPuzzleWithDifficulty(size, d);
-        supportPrompt = null;
+        clearSupport();
       } finally {
         status = '';
       }
@@ -479,7 +493,11 @@
 
   {#if supportPrompt}
     {#key supportPrompt}
-      <SupportCard prompt={supportPrompt} onDismiss={() => (supportPrompt = null)} />
+      <SupportCard
+        prompt={supportPrompt}
+        onShare={shareCurrentPuzzle}
+        onDismiss={() => (supportPrompt = null)}
+      />
     {/key}
   {/if}
 </div>
