@@ -121,15 +121,26 @@ test('keyboard B key marks selected cell as black', async ({ page }) => {
   await expect(firstCell).toHaveClass(/black/);
 });
 
-test('clicking the same cell twice toggles into notes mode', async ({ page }) => {
+test('clicking the same cell twice keeps value mode', async ({ page }) => {
   await page.goto('/');
   await waitForReady(page);
 
   const firstCell = firstCellLocator(page);
-  await firstCell.click(); // select
-  await firstCell.click(); // toggle mode
+  await firstCell.click();
+  await firstCell.click();
 
-  // The cell gains the notes-mode class and the keyboard mode badge appears.
+  await expect(firstCell).not.toHaveClass(/notes-mode/);
+  await expect(page.locator('.mode-badge')).toHaveCount(0);
+});
+
+test('Space toggles into notes mode', async ({ page }) => {
+  await page.goto('/');
+  await waitForReady(page);
+
+  const firstCell = firstCellLocator(page);
+  await firstCell.click();
+  await page.keyboard.press(' ');
+
   await expect(firstCell).toHaveClass(/notes-mode/);
   await expect(page.locator('.mode-badge')).toContainText('Notes');
 });

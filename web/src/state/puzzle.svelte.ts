@@ -306,12 +306,7 @@ export function toggleInputMode(): void {
 }
 
 export function selectCell(row: number, col: number): void {
-  const prev = playState.selectedCell;
-  if (!prev || prev.row !== row || prev.col !== col) {
-    playState.selectedCell = { row, col };
-  } else {
-    playState.inputMode = playState.inputMode === 'value' ? 'notes' : 'value';
-  }
+  playState.selectedCell = { row, col };
 }
 
 export function clearSelection(): void {
