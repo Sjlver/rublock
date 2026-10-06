@@ -2,6 +2,7 @@ import { mount } from 'svelte';
 import App from './components/App.svelte';
 import { installErrorOverlay } from './error-overlay';
 import { initLocale } from './i18n/index.svelte';
+import '@fontsource-variable/inter/wght.css';
 import './styles/global.css';
 import './styles/puzzle.css';
 

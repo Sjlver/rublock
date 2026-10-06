@@ -1,5 +1,5 @@
 // Renders scripts/og-image.html to public/og-image.png (1200×630, the size
-// OpenGraph / Twitter cards expect). Needs network access for the web font.
+// OpenGraph / Twitter cards expect).
 import { chromium } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
