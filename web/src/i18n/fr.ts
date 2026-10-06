@@ -81,7 +81,7 @@ export const fr: Messages = {
     'Les nombres {*entre*} les deux cases noires doivent additionner la cible affichée. Une cible de {*0*} signifie que les deux cases noires sont adjacentes.',
   howto_example_heading: 'Exemple pas à pas',
   howto_example_intro:
-    'Voici un nouveau puzzle 5 × 5. Les chiffres utilisés sont 1, 2 et 3. Par où commencer ?',
+    'Voici un nouveau puzzle 5 × 5. Les chiffres utilisés sont 1, 2 et 3. Par où commencer ?',
   howto_step1_heading: 'Étape 1 — La cible 6 de la ligne est la somme maximale possible',
   howto_step1_body:
     'Chiffres 1 + 2 + 3 = {*6*}. Cible 6 signifie que tous les chiffres se trouvent entre les deux cases noires, donc les cases noires vont aux extrémités : colonne 1 et colonne 5.',
@@ -130,7 +130,7 @@ export const fr: Messages = {
   wt_intro1:
     'Regarde le solveur progresser sur le puzzle actuel. Chaque grille ci-dessous est une {*vague*} — chaque changement dans une vague découle uniquement de ce qui était connu avant elle.',
   wt_intro2:
-    "Les cases commencent avec tous les chiffres (petits nombres) plus un {*x*} pour « pourrait être noire ». Au fil des éliminations, les notes rétrécissent. Quand il ne reste qu'une option, la case est remplie. Les cases qui ont changé dans une vague sont surlignées en jaune.",
+    "Les cases commencent avec tous les chiffres (petits nombres) plus un {*x*} pour « pourrait être noire ». Au fil des éliminations, les notes rétrécissent. Quand il ne reste qu'une option, la case est remplie. Les cases qui ont changé dans une vague sont surlignées en jaune.",
   wt_start: 'Début',
   wt_start_sub: "Chaque case peut encore contenir n'importe quel chiffre ou être noire.",
   wt_wave: 'Vague {n}',
@@ -196,7 +196,7 @@ export const fr: Messages = {
   cls_extremely_hard: 'Extrêmement difficile',
 
   // Toasts
-  toast_solved: 'Puzzle résolu ! 🎉',
+  toast_solved: 'Puzzle résolu ! 🎉',
   toast_check_empty: 'Remplis quelques cases, puis vérifie-les.',
   toast_check_all_correct: 'Toutes les cases remplies sont correctes.',
   toast_one_wrong: 'Une case incorrecte.',
@@ -209,19 +209,19 @@ export const fr: Messages = {
   share_text: 'Essaie ce puzzle Doplo :',
 
   // Support CTA (post-solve)
-  support_copy_1: 'rublock te plaît ? Soutiens son développement.',
-  support_copy_2: 'rublock est gratuit et sans publicité — ça vaut bien un petit soutien ?',
-  support_copy_3: 'Tu aimes ces puzzles ? Montre ta reconnaissance.',
+  support_copy_1: 'rublock te plaît ? Soutiens son développement.',
+  support_copy_2: 'rublock est gratuit et sans publicité — ça vaut bien un petit soutien ?',
+  support_copy_3: 'Tu aimes ces puzzles ? Montre ta reconnaissance.',
   support_copy_4: 'Créé par une seule personne. Un petit geste fait beaucoup.',
   support_copy_5: 'Si rublock a égayé ta journée, pense à le soutenir.',
   support_button: 'Soutenir sur {platform}',
   support_dismiss_aria: 'Fermer',
-  support_heading: 'Bien joué !',
-  support_share_copy_1: "Tu connais quelqu'un qui adore les casse-têtes ? Envoie-lui celui-ci.",
+  support_heading: 'Bien joué !',
+  support_share_copy_1: "Tu connais quelqu'un qui adore les casse-têtes ? Envoie-lui celui-ci.",
   support_share_copy_2: "Les puzzles, c'est mieux entre amis. Défie quelqu'un avec celui-ci.",
-  support_share_copy_3: 'rublock grandit grâce au bouche-à-oreille. Partage-le avec un ami !',
-  support_share_copy_4: 'Un ami le résoudrait plus vite ? Envoie-le-lui.',
-  support_share_copy_5: "Ça t'a plu ? Le meilleur moyen d'aider rublock, c'est d'en parler.",
+  support_share_copy_3: 'rublock grandit grâce au bouche-à-oreille. Partage-le avec un ami !',
+  support_share_copy_4: 'Un ami le résoudrait plus vite ? Envoie-le-lui.',
+  support_share_copy_5: "Ça t'a plu ? Le meilleur moyen d'aider rublock, c'est d'en parler.",
   support_share_button: 'Partager avec un ami',
   support_not_now: 'Plus tard',
 
